@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"github.com/submariner-io/admiral/pkg/federate"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,6 +35,7 @@ type federator struct {
 	startInformerOnce      sync.Once
 	clusterWatchers        []*clusterWatcher
 	stopChan               <-chan struct{}
+	scheme                 *runtime.Scheme
 }
 
 // New creates a new Federator instance.
@@ -46,6 +49,7 @@ func New(kubeFedConfig *rest.Config, stopChan <-chan struct{}) (federate.Federat
 		clusterMap:    make(map[string]*rest.Config),
 		kubeFedClient: kubeFedClient,
 		stopChan:      stopChan,
+		scheme:        scheme.Scheme,
 	}
 
 	listerWatcher, err := newKubeFedClusterListerWatcher(kubeFedConfig)
