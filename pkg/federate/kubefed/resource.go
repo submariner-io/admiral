@@ -12,6 +12,6 @@ func (f *federator) Distribute(resource runtime.Object, clusterIDs []string) err
 	panic("not implemented")
 }
 
-func (f *federator) Delete(resoure runtime.Object) error {
+func (f *federator) Delete(resource runtime.Object) error {
 	panic("not implemented")
 }

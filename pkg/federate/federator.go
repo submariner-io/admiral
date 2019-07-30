@@ -37,5 +37,5 @@ type Federator interface {
 	// Delete stops distributing the given resource and deletes it from all clusters to which it was distributed.
 	// The actual deletion may occur asynchronously in which any returned error only indicates that the request
 	// failed.
-	Delete(resoure runtime.Object) error
+	Delete(resource runtime.Object) error
 }
