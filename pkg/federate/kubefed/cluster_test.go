@@ -48,8 +48,8 @@ func testAddingWatch() {
 	})
 
 	It("Should notify ClusterEventHandler of existing KubeFedCluster items", func() {
-		federator := newFederator(newInformer(watch.NewFake(), *newKubeFedCluster("east"),
-			*newKubeFedCluster("west")), stopChan)
+		federator := newFederator(watch.NewFake(), stopChan, *newKubeFedCluster("east"),
+			*newKubeFedCluster("west"))
 
 		handler1 := newtTestClusterEventHandler("1")
 		err := federator.WatchClusters(handler1)
@@ -80,7 +80,7 @@ func testOnKubeFedClusterChanges() {
 
 	It("Should notify ClusterEventHandler of appropriate change events", func() {
 		fakeWatcher := watch.NewFake()
-		federator := newFederator(newInformer(fakeWatcher), stopChan)
+		federator := newFederator(fakeWatcher, stopChan)
 
 		handler := newtTestClusterEventHandler("")
 		err := federator.WatchClusters(handler)
@@ -187,32 +187,26 @@ func newKubeFedCluster(name string) *fedv1.KubeFedCluster {
 	}
 }
 
-func newInformer(watcher watch.Interface, initialKubeFedClusters ...fedv1.KubeFedCluster) cache.SharedIndexInformer {
-	return cache.NewSharedIndexInformer(
-		&cache.ListWatch{
-			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return &fedv1.KubeFedClusterList{
-					ListMeta: metav1.ListMeta{ResourceVersion: "1"},
-					Items:    initialKubeFedClusters,
-				}, nil
-			},
-			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return watcher, nil
-			},
-		},
-		&fedv1.KubeFedCluster{},
-		0,
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-	)
-}
-
-func newFederator(informer cache.SharedIndexInformer, stopChan <-chan struct{}) *federator {
-	return &federator{
-		clusterMap:             make(map[string]*rest.Config),
-		kubeFedClient:          clientFake.NewFakeClient(newSecret()),
-		kubeFedClusterInformer: informer,
-		stopChan:               stopChan,
+func newFederator(watcher watch.Interface, stopChan <-chan struct{}, initialKubeFedClusters ...fedv1.KubeFedCluster) *federator {
+	federator := &federator{
+		clusterMap:    make(map[string]*rest.Config),
+		kubeFedClient: clientFake.NewFakeClient(newSecret()),
+		stopChan:      stopChan,
 	}
+
+	federator.initKubeFedClusterInformer(&cache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			return &fedv1.KubeFedClusterList{
+				ListMeta: metav1.ListMeta{ResourceVersion: "1"},
+				Items:    initialKubeFedClusters,
+			}, nil
+		},
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			return watcher, nil
+		},
+	})
+
+	return federator
 }
 
 func newSecret() *corev1.Secret {

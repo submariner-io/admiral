@@ -29,8 +29,6 @@ const (
 
 func (f *federator) WatchClusters(handler federate.ClusterEventHandler) error {
 	f.startInformerOnce.Do(func() {
-		f.kubeFedClusterInformer.AddEventHandler(f)
-
 		go func() {
 			f.kubeFedClusterInformer.Run(f.stopChan)
 			klog.Info("KubeFedCluster informer stopped")
@@ -197,7 +195,14 @@ func (f *federator) buildFederatedClusterConfig(kubeFedCluster *fedv1.KubeFedClu
 	return kubeConfig, nil
 }
 
-func newKubeFedClusterInformer(kubeFedConfig *rest.Config) (cache.SharedIndexInformer, error) {
+func (f *federator) initKubeFedClusterInformer(listerWatcher cache.ListerWatcher) {
+	// Providing 0 duration to an informer indicates that resync should be delayed as long as possible
+	resyncPeriod := 0 * time.Second
+	_, informer := cache.NewInformer(listerWatcher, &fedv1.KubeFedCluster{}, resyncPeriod, f)
+	f.kubeFedClusterInformer = informer
+}
+
+func newKubeFedClusterListerWatcher(kubeFedConfig *rest.Config) (cache.ListerWatcher, error) {
 	var obj runtime.Object = &fedv1.KubeFedCluster{}
 
 	gvk, err := apiutil.GVKForObject(obj, scheme.Scheme)
@@ -222,36 +227,19 @@ func newKubeFedClusterInformer(kubeFedConfig *rest.Config) (cache.SharedIndexInf
 		return nil, fmt.Errorf("error creating RESTClient for %#v: %v", gvk, err)
 	}
 
-	klog.V(3).Infof("Got RESTClient: %#v", client)
-
-	return cache.NewSharedIndexInformer(
-		&cache.ListWatch{
-			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				var timeout time.Duration
-				if options.TimeoutSeconds != nil {
-					timeout = time.Duration(*options.TimeoutSeconds) * time.Second
-				}
-
-				result := &fedv1.KubeFedClusterList{}
-				err := client.Get().Namespace(kubeFedNamespace).Resource(mapping.Resource.Resource).
-					VersionedParams(&options, scheme.ParameterCodec).Timeout(timeout).Do().Into(result)
-				return result, err
-			},
-			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				var timeout time.Duration
-				if options.TimeoutSeconds != nil {
-					timeout = time.Duration(*options.TimeoutSeconds) * time.Second
-				}
-
-				options.Watch = true
-				return client.Get().Namespace(kubeFedNamespace).Resource(mapping.Resource.Resource).
-					VersionedParams(&options, scheme.ParameterCodec).Timeout(timeout).Watch()
-			},
+	return &cache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			result := &fedv1.KubeFedClusterList{}
+			err := client.Get().Namespace(kubeFedNamespace).Resource(mapping.Resource.Resource).
+				VersionedParams(&options, scheme.ParameterCodec).Do().Into(result)
+			return result, err
 		},
-		obj,
-		0, // Providing 0 duration to an informer indicates that resync should be delayed as long as possible
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-	), nil
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			options.Watch = true
+			return client.Get().Namespace(kubeFedNamespace).Resource(mapping.Resource.Resource).
+				VersionedParams(&options, scheme.ParameterCodec).Watch()
+		},
+	}, nil
 }
 
 func (c *clusterWatcher) onAdd(clusterID string, kubeConfig *rest.Config) {

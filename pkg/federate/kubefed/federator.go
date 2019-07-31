@@ -32,7 +32,7 @@ type federator struct {
 	sync.Mutex
 	clusterMap             map[string]*rest.Config
 	kubeFedClient          client.Client
-	kubeFedClusterInformer cache.SharedIndexInformer
+	kubeFedClusterInformer cache.Controller
 	startInformerOnce      sync.Once
 	clusterWatchers        []*clusterWatcher
 	stopChan               <-chan struct{}
@@ -42,18 +42,20 @@ type federator struct {
 func New(kubeFedConfig *rest.Config, stopChan <-chan struct{}) (federate.Federator, error) {
 	kubeFedClient, err := client.New(kubeFedConfig, client.Options{})
 	if err != nil {
-		return nil, fmt.Errorf("Error building kubernetes clientset: %v", err)
+		return nil, fmt.Errorf("error building kubernetes clientset: %v", err)
 	}
 
-	kubeFedClusterInformer, err := newKubeFedClusterInformer(kubeFedConfig)
+	federator := &federator{
+		clusterMap:    make(map[string]*rest.Config),
+		kubeFedClient: kubeFedClient,
+		stopChan:      stopChan,
+	}
+
+	listerWatcher, err := newKubeFedClusterListerWatcher(kubeFedConfig)
 	if err != nil {
-		return nil, fmt.Errorf("Error creating KubeFedCluster informer: %v", err)
+		return nil, fmt.Errorf("error creating KubeFedCluster ListerWatcher: %v", err)
 	}
 
-	return &federator{
-		clusterMap:             make(map[string]*rest.Config),
-		kubeFedClient:          kubeFedClient,
-		kubeFedClusterInformer: kubeFedClusterInformer,
-		stopChan:               stopChan,
-	}, nil
+	federator.initKubeFedClusterInformer(listerWatcher)
+	return federator, nil
 }
