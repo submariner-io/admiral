@@ -22,8 +22,10 @@ import (
 )
 
 const (
-	tokenKey = "token"
-
+	// The size of the event queue buffer for each ClusterEventHandler. This is largely a heuristic - we want a
+	// value reasonably large enough to avoid blocking the sender on bursts (eg when notifying of initial clusters
+	// on ClusterEventHandler registration) but not too large to risk running out of memory due to a slow handler.
+	defaultEventQueueBufferSize = 5000
 	defaultEnqueueTimerInterval = time.Second * 10
 )
 
@@ -37,23 +39,20 @@ func (f *federator) WatchClusters(handler federate.ClusterEventHandler) error {
 		klog.Info("Started KubeFedCluster informer")
 	})
 
-	var handlerString string
-	if stringer, ok := handler.(fmt.Stringer); ok {
-		handlerString = stringer.String()
-	} else {
-		handlerString = reflect.TypeOf(handler).String()
+	f.Lock()
+	defer f.Unlock()
+
+	// Use the clusterMap size if > the defaultEventQueueBufferSize
+	eventQueueBufferSize := len(f.clusterMap)
+	if eventQueueBufferSize < defaultEventQueueBufferSize {
+		eventQueueBufferSize = defaultEventQueueBufferSize
 	}
 
 	clusterWatcher := &clusterWatcher{
-		eventQueue:           make(chan func(), 1000),
-		enqueueTimerInterval: defaultEnqueueTimerInterval,
-		stopChan:             f.stopChan,
-		handler:              handler,
-		handlerString:        handlerString,
+		eventQueue: make(chan func(), eventQueueBufferSize),
+		stopChan:   f.stopChan,
+		handler:    handler,
 	}
-
-	f.Lock()
-	defer f.Unlock()
 
 	f.clusterWatchers = append(f.clusterWatchers, clusterWatcher)
 
@@ -63,7 +62,7 @@ func (f *federator) WatchClusters(handler federate.ClusterEventHandler) error {
 		clusterWatcher.onAdd(clusterID, kubeConfig)
 	}
 
-	klog.Infof("Federator added ClusterEventHandler \"%s\"", handlerString)
+	klog.Infof("Federator added ClusterEventHandler \"%s\"", toString(handler))
 
 	return nil
 }
@@ -165,7 +164,8 @@ func (f *federator) OnUpdate(oldObj, newObj interface{}) {
 }
 
 func (f *federator) buildFederatedClusterConfig(kubeFedCluster *fedv1.KubeFedCluster) (*rest.Config, error) {
-	if kubeFedCluster.Spec.APIEndpoint == "" {
+	apiEndpoint := kubeFedCluster.Spec.APIEndpoint
+	if apiEndpoint == "" {
 		return nil, fmt.Errorf("the API endpoint is empty")
 	}
 
@@ -179,12 +179,12 @@ func (f *federator) buildFederatedClusterConfig(kubeFedCluster *fedv1.KubeFedClu
 		return nil, fmt.Errorf("error getting Secret \"%s\": %v", secretName, err)
 	}
 
-	token, tokenFound := secret.Data[tokenKey]
+	token, tokenFound := secret.Data[corev1.ServiceAccountTokenKey]
 	if !tokenFound || len(token) == 0 {
-		return nil, fmt.Errorf("the secret %#v is missing a non-empty value for %q", secret, tokenKey)
+		return nil, fmt.Errorf("the secret %#v is missing a non-empty value for %q", secret, corev1.ServiceAccountTokenKey)
 	}
 
-	kubeConfig, err := clientcmd.BuildConfigFromFlags(kubeFedCluster.Spec.APIEndpoint, "")
+	kubeConfig, err := clientcmd.BuildConfigFromFlags(apiEndpoint, "")
 	if err != nil {
 		return nil, err
 	}
@@ -245,22 +245,22 @@ func newKubeFedClusterListerWatcher(kubeFedConfig *rest.Config) (cache.ListerWat
 func (c *clusterWatcher) onAdd(clusterID string, kubeConfig *rest.Config) {
 	c.enqueueEvent(func() {
 		c.handler.OnAdd(clusterID, kubeConfig)
-	}, clusterID, "Add")
+	}, clusterID, "Add", defaultEnqueueTimerInterval)
 }
 
 func (c *clusterWatcher) onUpdate(clusterID string, kubeConfig *rest.Config) {
 	c.enqueueEvent(func() {
 		c.handler.OnUpdate(clusterID, kubeConfig)
-	}, clusterID, "Update")
+	}, clusterID, "Update", defaultEnqueueTimerInterval)
 }
 
 func (c *clusterWatcher) onRemove(clusterID string) {
 	c.enqueueEvent(func() {
 		c.handler.OnRemove(clusterID)
-	}, clusterID, "Remove")
+	}, clusterID, "Remove", defaultEnqueueTimerInterval)
 }
 
-func (c *clusterWatcher) enqueueEvent(event func(), clusterID string, eventType string) {
+func (c *clusterWatcher) enqueueEvent(event func(), clusterID string, eventType string, enqueueTimerInterval time.Duration) {
 	// First try to enqueue immediately to avoid the overhead of creating a Ticker for the common case.
 	select {
 	case c.eventQueue <- event:
@@ -268,23 +268,25 @@ func (c *clusterWatcher) enqueueEvent(event func(), clusterID string, eventType 
 	default:
 	}
 
-	klog.V(2).Infof("Watcher for ClusterEventHandler \"%s\" eventQueue is full - starting timer loop", c.handlerString)
+	handlerString := toString(c.handler)
+
+	klog.V(2).Infof("Watcher for ClusterEventHandler \"%s\" eventQueue is full - starting timer loop", handlerString)
 
 	// Next we loop indefinitely trying to enqueue and preriodically log a warning.
 
 	startTime := time.Now()
-	ticker := time.NewTicker(c.enqueueTimerInterval)
+	ticker := time.NewTicker(enqueueTimerInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case c.eventQueue <- event:
 			klog.Infof("Watcher for ClusterEventHandler \"%s\" successfully enqueued %s event for cluster \"%s\" after %fs",
-				c.handlerString, eventType, clusterID, time.Duration(time.Now().UnixNano()-startTime.UnixNano()).Seconds())
+				handlerString, eventType, clusterID, time.Duration(time.Now().UnixNano()-startTime.UnixNano()).Seconds())
 			return
 		case <-ticker.C:
 			klog.Warningf("Watcher for ClusterEventHandler \"%s\" timed out after %fs trying to enqueue %s event for cluster \"%s\"",
-				c.handlerString, c.enqueueTimerInterval.Seconds(), eventType, clusterID)
+				handlerString, enqueueTimerInterval.Seconds(), eventType, clusterID)
 		case <-c.stopChan:
 			return
 		}
@@ -297,8 +299,16 @@ func (c *clusterWatcher) eventLoop() {
 		case event := <-c.eventQueue:
 			event()
 		case <-c.stopChan:
-			klog.V(2).Infof("ClusterEventHandler \"%s\" eventLoop stopped", c.handlerString)
+			klog.V(2).Infof("ClusterEventHandler \"%s\" eventLoop stopped", toString(c.handler))
 			return
 		}
 	}
+}
+
+func toString(obj interface{}) string {
+	if stringer, ok := obj.(fmt.Stringer); ok {
+		return stringer.String()
+	}
+
+	return reflect.TypeOf(obj).String()
 }

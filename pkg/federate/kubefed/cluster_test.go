@@ -32,9 +32,9 @@ const (
 var _ = Describe("Kubefed Cluster", func() {
 	klog.InitFlags(nil)
 
-	Describe("Adding a watch", testAddingWatch)
-	Describe("When KubeFedCluster items are added, updated, removed", testOnKubeFedClusterChanges)
-	Describe("clusterWatcher", testClusterWatcher)
+	When("Adding a watch", testAddingWatch)
+	When("KubeFedCluster items are added, updated, removed", testOnKubeFedClusterChanges)
+	Describe("enqueueEvent", testEnqueueEvent)
 })
 
 func testAddingWatch() {
@@ -51,20 +51,17 @@ func testAddingWatch() {
 		federator := newFederator(watch.NewFake(), stopChan, *newKubeFedCluster("east"),
 			*newKubeFedCluster("west"))
 
-		handler1 := newtTestClusterEventHandler("1")
+		handler1 := newTestClusterEventHandler("1")
 		err := federator.WatchClusters(handler1)
 		Expect(err).ToNot(HaveOccurred())
 
-		Eventually(handler1.events, 5).Should(Receive(Or(Equal(added("east")), Equal(added("west")))))
-		Eventually(handler1.events, 5).Should(Receive(Or(Equal(added("east")), Equal(added("west")))))
-		Consistently(handler1.events).ShouldNot(Receive())
+		handler1.verifyAddEvents("east", "west")
 
-		handler2 := newtTestClusterEventHandler("2")
+		handler2 := newTestClusterEventHandler("2")
 		err = federator.WatchClusters(handler2)
 		Expect(err).ToNot(HaveOccurred())
 
-		Eventually(handler2.events, 5).Should(Receive(Or(Equal(added("east")), Equal(added("west")))))
-		Eventually(handler2.events, 5).Should(Receive(Or(Equal(added("east")), Equal(added("west")))))
+		handler2.verifyAddEvents("east", "west")
 	})
 }
 
@@ -82,7 +79,7 @@ func testOnKubeFedClusterChanges() {
 		fakeWatcher := watch.NewFake()
 		federator := newFederator(fakeWatcher, stopChan)
 
-		handler := newtTestClusterEventHandler("")
+		handler := newTestClusterEventHandler("")
 		err := federator.WatchClusters(handler)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -133,26 +130,25 @@ func testOnKubeFedClusterChanges() {
 	})
 }
 
-func testClusterWatcher() {
+func testEnqueueEvent() {
 	var stopChan chan struct{}
 	var watcher *clusterWatcher
 	BeforeEach(func() {
 		stopChan = make(chan struct{})
 		watcher = &clusterWatcher{
-			eventQueue:           make(chan func()),
-			enqueueTimerInterval: time.Duration(time.Millisecond * 100),
-			stopChan:             stopChan,
-			handlerString:        "test-handler",
+			handler:    newTestClusterEventHandler(""),
+			eventQueue: make(chan func()),
+			stopChan:   stopChan,
 		}
 	})
 
-	Context("When enqueueEvent is called with the eventQueue blocked", func() {
+	When("called with the eventQueue blocked", func() {
 		It("Should send the event and return when the eventQueue is unblocked", func() {
 			enqueueEventStarting := make(chan struct{})
 			enqueueEventDone := make(chan struct{})
 			go func() {
 				enqueueEventStarting <- struct{}{}
-				watcher.enqueueEvent(func() {}, "east", "Add")
+				watcher.enqueueEvent(func() {}, "east", "Add", time.Millisecond*100)
 				enqueueEventDone <- struct{}{}
 			}()
 
@@ -167,7 +163,7 @@ func testClusterWatcher() {
 		It("Should return when the stopChan receives an event", func() {
 			enqueueEventDone := make(chan struct{})
 			go func() {
-				watcher.enqueueEvent(func() {}, "east", "Add")
+				watcher.enqueueEvent(func() {}, "east", "Add", time.Millisecond*100)
 				enqueueEventDone <- struct{}{}
 			}()
 
@@ -215,11 +211,11 @@ func newSecret() *corev1.Secret {
 			Name:      secretName,
 			Namespace: kubeFedNamespace,
 		},
-		Data: map[string][]byte{tokenKey: []byte{1, 2}},
+		Data: map[string][]byte{corev1.ServiceAccountTokenKey: []byte{1, 2}},
 	}
 }
 
-func newtTestClusterEventHandler(id string) *testClusterEventHandler {
+func newTestClusterEventHandler(id string) *testClusterEventHandler {
 	return &testClusterEventHandler{
 		id:     id,
 		events: make(chan interface{}, 10),
@@ -239,6 +235,23 @@ func (t *testClusterEventHandler) OnUpdate(clusterID string, kubeConfig *rest.Co
 func (t *testClusterEventHandler) OnRemove(clusterID string) {
 	klog.Infof("testClusterEventHandler %s OnRemove for cluster %s", t.id, clusterID)
 	t.events <- removed(clusterID)
+}
+
+func (t *testClusterEventHandler) verifyAddEvents(expectedClusters ...string) {
+	expected := make(map[interface{}]bool)
+	for _, c := range expectedClusters {
+		expected[added(c)] = true
+	}
+
+	var event interface{}
+	for i := 0; i < len(expectedClusters); i++ {
+		Eventually(t.events, 5).Should(Receive(&event))
+		Expect(expected).Should(HaveKey(event), "Received unexpected event: %v", event)
+		delete(expected, event)
+	}
+
+	Expect(expected).To(BeEmpty())
+	Consistently(t.events).ShouldNot(Receive())
 }
 
 func (t *testClusterEventHandler) String() string {

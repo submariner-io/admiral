@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/submariner-io/admiral/pkg/federate"
 	"k8s.io/client-go/rest"
@@ -21,11 +20,9 @@ func init() {
 }
 
 type clusterWatcher struct {
-	eventQueue           chan func()
-	enqueueTimerInterval time.Duration
-	stopChan             <-chan struct{}
-	handler              federate.ClusterEventHandler
-	handlerString        string
+	eventQueue chan func()
+	stopChan   <-chan struct{}
+	handler    federate.ClusterEventHandler
 }
 
 type federator struct {
