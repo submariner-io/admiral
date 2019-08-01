@@ -21,8 +21,15 @@ type updated string
 type removed string
 
 type testClusterEventHandler struct {
-	id     string
 	events chan interface{}
+}
+
+type testClusterEventHandler1 struct {
+	testClusterEventHandler
+}
+
+type testClusterEventHandler2 struct {
+	testClusterEventHandler
 }
 
 const (
@@ -33,7 +40,7 @@ var _ = Describe("Kubefed Cluster", func() {
 	klog.InitFlags(nil)
 
 	When("Adding a watch", testAddingWatch)
-	When("KubeFedCluster items are added, updated, removed", testOnKubeFedClusterChanges)
+	Describe("KubeFedCluster event notifications", testKubeFedClusterNotifications)
 	Describe("enqueueEvent", testEnqueueEvent)
 })
 
@@ -51,13 +58,13 @@ func testAddingWatch() {
 		federator := newFederator(watch.NewFake(), stopChan, *newKubeFedCluster("east"),
 			*newKubeFedCluster("west"))
 
-		handler1 := newTestClusterEventHandler("1")
+		handler1 := &testClusterEventHandler1{*newTestClusterEventHandler()}
 		err := federator.WatchClusters(handler1)
 		Expect(err).ToNot(HaveOccurred())
 
 		handler1.verifyAddEvents("east", "west")
 
-		handler2 := newTestClusterEventHandler("2")
+		handler2 := &testClusterEventHandler2{*newTestClusterEventHandler()}
 		err = federator.WatchClusters(handler2)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -65,68 +72,126 @@ func testAddingWatch() {
 	})
 }
 
-func testOnKubeFedClusterChanges() {
+func testOnAdd(fakeWatcher *watch.FakeWatcher, handler *testClusterEventHandler) *fedv1.KubeFedCluster {
+	addedKubeFedCluster := newKubeFedCluster("east")
+	fakeWatcher.Add(addedKubeFedCluster)
+
+	var event interface{}
+	Eventually(handler.events, 5).Should(Receive(&event))
+	Expect(event).Should(Equal(added("east")))
+	Consistently(handler.events).ShouldNot(Receive())
+
+	return addedKubeFedCluster
+}
+
+func testOnRemove(fakeWatcher *watch.FakeWatcher, handler *testClusterEventHandler) {
+	addedKubeFedCluster := testOnAdd(fakeWatcher, handler)
+
+	fakeWatcher.Delete(addedKubeFedCluster)
+
+	var event interface{}
+	Eventually(handler.events, 5).Should(Receive(&event))
+	Expect(event).Should(Equal(removed("east")))
+	Consistently(handler.events).ShouldNot(Receive())
+}
+
+func testKubeFedClusterNotifications() {
 	var stopChan chan struct{}
+	var fakeWatcher *watch.FakeWatcher
+	var federator *federator
+	var handler *testClusterEventHandler
+	var event interface{}
 	BeforeEach(func() {
 		stopChan = make(chan struct{})
+		fakeWatcher = watch.NewFake()
+		federator = newFederator(fakeWatcher, stopChan)
+		handler = newTestClusterEventHandler()
+
+		err := federator.WatchClusters(handler)
+		Expect(err).ToNot(HaveOccurred())
+		Consistently(handler.events).ShouldNot(Receive())
 	})
 
 	AfterEach(func() {
 		close(stopChan)
 	})
 
-	It("Should notify ClusterEventHandler of appropriate change events", func() {
-		fakeWatcher := watch.NewFake()
-		federator := newFederator(fakeWatcher, stopChan)
+	When("a KubeFedCluster is added", func() {
+		It("should notify the ClusterEventHandler once of OnAdd", func() {
+			testOnAdd(fakeWatcher, handler)
+		})
+	})
 
-		handler := newTestClusterEventHandler("")
-		err := federator.WatchClusters(handler)
-		Expect(err).ToNot(HaveOccurred())
+	When("a KubeFedCluster is deleted", func() {
+		It("should notify the ClusterEventHandler once of OnRemove", func() {
+			testOnRemove(fakeWatcher, handler)
+		})
+	})
 
-		Consistently(handler.events).ShouldNot(Receive())
+	When("a KubeFedCluster is modified", func() {
+		It("should notify the ClusterEventHandler once of OnUpdate", func() {
+			addedKubeFedCluster := testOnAdd(fakeWatcher, handler)
 
-		By("Add, modify, delete KubeFedCluster \"east\" - expect events in order")
+			updatedKubeFedCluster := addedKubeFedCluster.DeepCopy()
+			updatedKubeFedCluster.Spec.CABundle = []byte{0, 1}
 
-		addedKubeFedCluster := newKubeFedCluster("east")
-		updatedKubeFedCluster := addedKubeFedCluster.DeepCopy()
-		updatedKubeFedCluster.Spec.CABundle = []byte{0, 1}
+			fakeWatcher.Modify(updatedKubeFedCluster)
 
-		fakeWatcher.Add(addedKubeFedCluster)
-		fakeWatcher.Modify(updatedKubeFedCluster)
-		fakeWatcher.Delete(updatedKubeFedCluster)
+			Eventually(handler.events, 5).Should(Receive(&event))
+			Expect(event).Should(Equal(updated("east")))
+			Consistently(handler.events).ShouldNot(Receive())
+		})
+	})
 
-		var event interface{}
-		Eventually(handler.events, 5).Should(Receive(&event))
-		Expect(event).Should(Equal(added("east")))
+	When("a KubeFedCluster is added, modified, and removed", func() {
+		It("should notify the ClusterEventHandler of OnAdd, OnUpdate, and OnRemove in order", func() {
+			addedKubeFedCluster := newKubeFedCluster("east")
+			updatedKubeFedCluster := addedKubeFedCluster.DeepCopy()
+			updatedKubeFedCluster.Spec.CABundle = []byte{0, 1}
 
-		Eventually(handler.events, 5).Should(Receive(&event))
-		Expect(event).Should(Equal(updated("east")))
+			fakeWatcher.Add(addedKubeFedCluster)
+			fakeWatcher.Modify(updatedKubeFedCluster)
+			fakeWatcher.Delete(updatedKubeFedCluster)
 
-		Eventually(handler.events, 5).Should(Receive(&event))
-		Expect(event).Should(Equal(removed("east")))
+			Eventually(handler.events, 5).Should(Receive(&event))
+			Expect(event).Should(Equal(added("east")))
 
-		Consistently(handler.events).ShouldNot(Receive())
+			Eventually(handler.events, 5).Should(Receive(&event))
+			Expect(event).Should(Equal(updated("east")))
 
-		By("Add KubeFedCluster \"east\" again - expect OnAdd event")
+			Eventually(handler.events, 5).Should(Receive(&event))
+			Expect(event).Should(Equal(removed("east")))
 
-		fakeWatcher.Add(addedKubeFedCluster)
+			Consistently(handler.events).ShouldNot(Receive())
+		})
+	})
 
-		Eventually(handler.events, 5).Should(Receive(&event))
-		Expect(event).Should(Equal(added("east")))
+	When("a KubeFedCluster is re-added after being deleted", func() {
+		It("should notify the ClusterEventHandler of OnAdd", func() {
+			testOnRemove(fakeWatcher, handler)
+			testOnAdd(fakeWatcher, handler)
+		})
+	})
 
-		By("Add KubeFedCluster \"east\" again - expect no OnAdd event")
+	When("a KubeFedCluster is re-added after being added", func() {
+		It("should not notify the ClusterEventHandler of OnAdd", func() {
+			testOnAdd(fakeWatcher, handler)
 
-		fakeWatcher.Add(addedKubeFedCluster)
+			fakeWatcher.Add(newKubeFedCluster("east"))
+			Consistently(handler.events, time.Millisecond*300).ShouldNot(Receive())
+		})
+	})
 
-		Consistently(handler.events, time.Millisecond*300).ShouldNot(Receive())
+	When("a KubeFedCluster is modified with no change to the KubeFedClusterSpec", func() {
+		It("should not notify the ClusterEventHandler of OnUpdate", func() {
+			addedKubeFedCluster := testOnAdd(fakeWatcher, handler)
 
-		By("Modify KubeFedCluster \"east\" with no change to the KubeFedClusterSpec - expect no OnUpdate event")
+			updatedKubeFedCluster := addedKubeFedCluster.DeepCopy()
+			updatedKubeFedCluster.Status = fedv1.KubeFedClusterStatus{Region: "east"}
 
-		updatedKubeFedCluster = addedKubeFedCluster.DeepCopy()
-		updatedKubeFedCluster.Status = fedv1.KubeFedClusterStatus{Region: "east"}
-		fakeWatcher.Modify(updatedKubeFedCluster)
-
-		Consistently(handler.events, time.Millisecond*300).ShouldNot(Receive())
+			fakeWatcher.Modify(updatedKubeFedCluster)
+			Consistently(handler.events, time.Millisecond*300).ShouldNot(Receive())
+		})
 	})
 }
 
@@ -136,7 +201,7 @@ func testEnqueueEvent() {
 	BeforeEach(func() {
 		stopChan = make(chan struct{})
 		watcher = &clusterWatcher{
-			handler:    newTestClusterEventHandler(""),
+			handler:    newTestClusterEventHandler(),
 			eventQueue: make(chan func()),
 			stopChan:   stopChan,
 		}
@@ -215,25 +280,22 @@ func newSecret() *corev1.Secret {
 	}
 }
 
-func newTestClusterEventHandler(id string) *testClusterEventHandler {
-	return &testClusterEventHandler{
-		id:     id,
-		events: make(chan interface{}, 10),
-	}
+func newTestClusterEventHandler() *testClusterEventHandler {
+	return &testClusterEventHandler{events: make(chan interface{}, 10)}
 }
 
 func (t *testClusterEventHandler) OnAdd(clusterID string, kubeConfig *rest.Config) {
-	klog.Infof("testClusterEventHandler %s OnAdd for cluster %s", t.id, clusterID)
+	klog.Infof("testClusterEventHandler OnAdd for cluster %s", clusterID)
 	t.events <- added(clusterID)
 }
 
 func (t *testClusterEventHandler) OnUpdate(clusterID string, kubeConfig *rest.Config) {
-	klog.Infof("testClusterEventHandler %s OnUpdate for cluster %s", t.id, clusterID)
+	klog.Infof("testClusterEventHandler OnUpdate for cluster %s", clusterID)
 	t.events <- updated(clusterID)
 }
 
 func (t *testClusterEventHandler) OnRemove(clusterID string) {
-	klog.Infof("testClusterEventHandler %s OnRemove for cluster %s", t.id, clusterID)
+	klog.Infof("testClusterEventHandler OnRemove for cluster %s", clusterID)
 	t.events <- removed(clusterID)
 }
 
@@ -252,8 +314,4 @@ func (t *testClusterEventHandler) verifyAddEvents(expectedClusters ...string) {
 
 	Expect(expected).To(BeEmpty())
 	Consistently(t.events).ShouldNot(Receive())
-}
-
-func (t *testClusterEventHandler) String() string {
-	return "testClusterEventHandler " + t.id
 }

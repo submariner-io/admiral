@@ -62,7 +62,7 @@ func (f *federator) WatchClusters(handler federate.ClusterEventHandler) error {
 		clusterWatcher.onAdd(clusterID, kubeConfig)
 	}
 
-	klog.Infof("Federator added ClusterEventHandler \"%s\"", toString(handler))
+	klog.Infof("Federator added ClusterEventHandler \"%T\"", handler)
 
 	return nil
 }
@@ -135,6 +135,9 @@ func (f *federator) OnUpdate(oldObj, newObj interface{}) {
 	oldCluster := oldObj.(*fedv1.KubeFedCluster)
 	newCluster := newObj.(*fedv1.KubeFedCluster)
 
+	// KubeFedCluster has other fields/structs like KubeFedClusterStatus that may be updated periodically
+	// (eg LastProbeTime). We're only interested in changes to the KubeFedClusterSpec which contains the
+	// cluster's connection info so check if the old and new Specs differ before proceeding.
 	if reflect.DeepEqual(oldCluster.Spec, newCluster.Spec) {
 		klog.V(2).Infof("KubeFedClusterSpecs are equal - not updating")
 		return
@@ -268,9 +271,7 @@ func (c *clusterWatcher) enqueueEvent(event func(), clusterID string, eventType 
 	default:
 	}
 
-	handlerString := toString(c.handler)
-
-	klog.V(2).Infof("Watcher for ClusterEventHandler \"%s\" eventQueue is full - starting timer loop", handlerString)
+	klog.V(2).Infof("Watcher for ClusterEventHandler \"%T\" eventQueue is full - starting timer loop", c.handler)
 
 	// Next we loop indefinitely trying to enqueue and preriodically log a warning.
 
@@ -281,12 +282,12 @@ func (c *clusterWatcher) enqueueEvent(event func(), clusterID string, eventType 
 	for {
 		select {
 		case c.eventQueue <- event:
-			klog.Infof("Watcher for ClusterEventHandler \"%s\" successfully enqueued %s event for cluster \"%s\" after %fs",
-				handlerString, eventType, clusterID, time.Duration(time.Now().UnixNano()-startTime.UnixNano()).Seconds())
+			klog.Infof("Watcher for ClusterEventHandler \"%T\" successfully enqueued %s event for cluster \"%s\" after %fs",
+				c.handler, eventType, clusterID, time.Duration(time.Now().UnixNano()-startTime.UnixNano()).Seconds())
 			return
 		case <-ticker.C:
-			klog.Warningf("Watcher for ClusterEventHandler \"%s\" timed out after %fs trying to enqueue %s event for cluster \"%s\"",
-				handlerString, enqueueTimerInterval.Seconds(), eventType, clusterID)
+			klog.Warningf("Watcher for ClusterEventHandler \"%T\" timed out after %fs trying to enqueue %s event for cluster \"%s\"",
+				c.handler, enqueueTimerInterval.Seconds(), eventType, clusterID)
 		case <-c.stopChan:
 			return
 		}
@@ -299,16 +300,8 @@ func (c *clusterWatcher) eventLoop() {
 		case event := <-c.eventQueue:
 			event()
 		case <-c.stopChan:
-			klog.V(2).Infof("ClusterEventHandler \"%s\" eventLoop stopped", toString(c.handler))
+			klog.V(2).Infof("ClusterEventHandler \"%T\" eventLoop stopped", c.handler)
 			return
 		}
 	}
-}
-
-func toString(obj interface{}) string {
-	if stringer, ok := obj.(fmt.Stringer); ok {
-		return stringer.String()
-	}
-
-	return reflect.TypeOf(obj).String()
 }
