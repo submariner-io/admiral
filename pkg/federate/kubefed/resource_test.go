@@ -30,6 +30,7 @@ func (fake *fakeClientWithUpdateError) Update(ctx context.Context, obj runtime.O
 
 var _ = Describe("Federator", func() {
 	Describe("function Distribute", testDistribute)
+	Describe("function Delete", testDelete)
 	Describe("helper function createFederatedResource", testCreateFederatedResource)
 })
 
@@ -40,7 +41,7 @@ func testCreateFederatedResource() {
 	)
 
 	BeforeEach(func() {
-		resource = newPod("test-pod", "nginx")
+		resource = newPod("test-pod")
 		scheme = runtime.NewScheme()
 	})
 
@@ -154,7 +155,7 @@ func testDistribute() {
 	)
 
 	BeforeEach(func() {
-		resource = newPod("test-pod", "nginx")
+		resource = newPod("test-pod")
 		scheme = runtime.NewScheme()
 	})
 
@@ -196,7 +197,7 @@ func testDistribute() {
 
 			BeforeEach(func() {
 				initObjs = append(initObjs, fedResource)
-				resource = newPod("test-pod", expectedImage)
+				resource = newPodWithImage("test-pod", expectedImage)
 			})
 
 			It("should update the resource", func() {
@@ -292,7 +293,11 @@ func testDistribute() {
 	})
 }
 
-func newPod(name string, imageName string) *corev1.Pod {
+func newPod(name string) *corev1.Pod {
+	return newPodWithImage(name, "nginx")
+}
+
+func newPodWithImage(name string, imageName string) *corev1.Pod {
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{Kind: "Pod"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -369,4 +374,49 @@ func getResourceFromAPI(kubeFedClient client.Client, resource *unstructured.Unst
 		fedResource,
 	)
 	return fedResource, err
+}
+
+func testDelete() {
+	var (
+		resource    *corev1.Pod
+		fedResource *unstructured.Unstructured
+		f           *federator
+		err         error
+	)
+
+	BeforeEach(func() {
+		f = &federator{
+			scheme: runtime.NewScheme(),
+		}
+
+		corev1.AddToScheme(f.scheme)
+		resource = newPod("test-pod")
+		fedResource, err = createFederatedResource(f.scheme, resource)
+		Expect(err).ToNot(HaveOccurred())
+		f.kubeFedClient = fake.NewFakeClientWithScheme(f.scheme, fedResource)
+	})
+
+	JustBeforeEach(func() {
+		err = f.Delete(resource)
+	})
+
+	When("The resource is succesfully deleted", func() {
+		It("Should throw no error", func() {
+			Expect(err).ToNot(HaveOccurred())
+		})
+		It("Should remove the resource from the client", func() {
+			_, err := getResourceFromAPI(f.kubeFedClient, fedResource)
+			Expect(kuberrors.IsNotFound(err)).To(BeTrue())
+		})
+	})
+
+	When("The resource doesn't exist", func() {
+		BeforeEach(func() {
+			resource = newPod("other-pod")
+		})
+
+		It("Should fail with NotFound", func() {
+			Expect(kuberrors.IsNotFound(err)).To(BeTrue())
+		})
+	})
 }

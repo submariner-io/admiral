@@ -97,6 +97,7 @@ k8s.io/apiextensions-apiserver v0.0.0-20181213153335-0fe22c71c476 h1:Ws9zfxsgV19
 k8s.io/apiextensions-apiserver v0.0.0-20181213153335-0fe22c71c476/go.mod h1:IxkesAMoaCRoLrPJdZNZUQp9NfZnzqaVzLhb2VEQzXE=
 k8s.io/apimachinery v0.0.0-20190629003722-e20a3a656cff h1:xDwHiDiMvjKW1AJRktBdhLmP/qTMyZouurIR4J4Kdis=
 k8s.io/apimachinery v0.0.0-20190629003722-e20a3a656cff/go.mod h1:ccL7Eh7zubPUSh9A3USN90/OzHNSVN6zxzde07TDCL0=
+k8s.io/apimachinery v0.0.0-20190802060556-6fa4771c83b3 h1:ov3gR/oGSdOkfEetREkvyrTMbEUDAADeF9WMoihPv0w=
 k8s.io/client-go v0.0.0-20190521190702-177766529176 h1:gI8ZMlH24D7c30GMAbiwG8hK9l80yvqiiBLaDbRS/Gc=
 k8s.io/client-go v0.0.0-20190521190702-177766529176/go.mod h1:7vJpHMYJwNQCWgzmNV+VYUl1zCObLyodBc8nIyt8L5s=
 k8s.io/klog v0.0.0-20181108234604-8139d8cb77af h1:s6rm8OxBbyDNSRkpyAd5OL4icUdBICVw9+mFADa+t5E=

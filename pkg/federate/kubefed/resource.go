@@ -54,7 +54,12 @@ func (f *federator) Distribute(resource runtime.Object, clusterNames ...string) 
 }
 
 func (f *federator) Delete(resource runtime.Object) error {
-	panic("not implemented")
+	fedResource, err := createFederatedResource(f.scheme, resource)
+	if err != nil {
+		return err
+	}
+
+	return f.kubeFedClient.Delete(context.TODO(), fedResource)
 }
 
 func createFederatedResource(scheme *runtime.Scheme, resource runtime.Object) (*unstructured.Unstructured, error) {
