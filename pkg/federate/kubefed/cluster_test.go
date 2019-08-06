@@ -55,7 +55,7 @@ func testAddingWatch() {
 	})
 
 	It("Should notify ClusterEventHandler of existing KubeFedCluster items", func() {
-		federator := newFederator(watch.NewFake(), stopChan, *newKubeFedCluster("east"),
+		federator := newFederatorWithWatcher(watch.NewFake(), stopChan, *newKubeFedCluster("east"),
 			*newKubeFedCluster("west"))
 
 		handler1 := &testClusterEventHandler1{*newTestClusterEventHandler()}
@@ -104,7 +104,7 @@ func testKubeFedClusterNotifications() {
 	BeforeEach(func() {
 		stopChan = make(chan struct{})
 		fakeWatcher = watch.NewFake()
-		federator = newFederator(fakeWatcher, stopChan)
+		federator = newFederatorWithWatcher(fakeWatcher, stopChan)
 		handler = newTestClusterEventHandler()
 
 		err := federator.WatchClusters(handler)
@@ -248,7 +248,7 @@ func newKubeFedCluster(name string) *fedv1.KubeFedCluster {
 	}
 }
 
-func newFederator(watcher watch.Interface, stopChan <-chan struct{}, initialKubeFedClusters ...fedv1.KubeFedCluster) *federator {
+func newFederatorWithWatcher(watcher watch.Interface, stopChan <-chan struct{}, initialKubeFedClusters ...fedv1.KubeFedCluster) *federator {
 	federator := &federator{
 		clusterMap:    make(map[string]*rest.Config),
 		kubeFedClient: clientFake.NewFakeClient(newSecret()),
