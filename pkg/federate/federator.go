@@ -29,10 +29,12 @@ type Federator interface {
 	// The actual distribution may occur asynchronously in which case any returned error only indicates that the request
 	// failed.
 	//
+	// If clusterNames is not passed, the resource will be distributed to all clusters
+	//
 	// If the resource was previously distributed and the given resource differs, each previous cluster will receive the
 	// updated resource. If previously distributed and the given list of clusters differs, the resource will be
 	// distributed to any new clusters in the updated list and deleted from previous clusters not in the updated list.
-	Distribute(resource runtime.Object, clusterIDs []string) error
+	Distribute(resource runtime.Object, clusterNames ...string) error
 
 	// Delete stops distributing the given resource and deletes it from all clusters to which it was distributed.
 	// The actual deletion may occur asynchronously in which any returned error only indicates that the request
