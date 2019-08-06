@@ -8,7 +8,7 @@ const (
 //	federatedKindPrefix string = "Federated"
 )
 
-func (f *federator) Distribute(resource runtime.Object, clusterIDs []string) error {
+func (f *federator) Distribute(resource runtime.Object, clusterNames ...string) error {
 	panic("not implemented")
 }
 
