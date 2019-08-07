@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -21,45 +22,56 @@ import (
 	"sigs.k8s.io/kubefed/pkg/client/generic/scheme"
 )
 
-const (
-	// The size of the event queue buffer for each ClusterEventHandler. This is largely a heuristic - we want a
-	// value reasonably large enough to avoid blocking the sender on bursts (eg when notifying of initial clusters
-	// on ClusterEventHandler registration) but not too large to risk running out of memory due to a slow handler.
-	defaultEventQueueBufferSize = 5000
-	defaultEnqueueTimerInterval = time.Second * 10
-)
+type clusterEvent interface {
+	run(handler federate.ClusterEventHandler)
+}
+
+type clusterAdded struct {
+	clusterID  string
+	kubeConfig *rest.Config
+}
+
+type clusterUpdated struct {
+	clusterID  string
+	kubeConfig *rest.Config
+}
+
+type clusterRemoved struct {
+	clusterID string
+}
 
 func (f *federator) WatchClusters(handler federate.ClusterEventHandler) error {
 	f.startInformerOnce.Do(func() {
 		go func() {
 			f.kubeFedClusterInformer.Run(f.stopChan)
 			klog.Info("KubeFedCluster informer stopped")
+
+			// Note: we need to lock here to protect access to clusterWatchers
+			f.Lock()
+			defer f.Unlock()
+
+			for _, clusterWatcher := range f.clusterWatchers {
+				clusterWatcher.eventQueue.ShutDown()
+			}
 		}()
 
 		klog.Info("Started KubeFedCluster informer")
 	})
 
-	f.Lock()
-	defer f.Unlock()
-
-	// Use the clusterMap size if > the defaultEventQueueBufferSize
-	eventQueueBufferSize := len(f.clusterMap)
-	if eventQueueBufferSize < defaultEventQueueBufferSize {
-		eventQueueBufferSize = defaultEventQueueBufferSize
-	}
-
 	clusterWatcher := &clusterWatcher{
-		eventQueue: make(chan func(), eventQueueBufferSize),
-		stopChan:   f.stopChan,
+		eventQueue: workqueue.NewNamed(fmt.Sprintf("clusterWatcher for %T", handler)),
 		handler:    handler,
 	}
+
+	f.Lock()
+	defer f.Unlock()
 
 	f.clusterWatchers = append(f.clusterWatchers, clusterWatcher)
 
 	go clusterWatcher.eventLoop()
 
 	for clusterID, kubeConfig := range f.clusterMap {
-		clusterWatcher.onAdd(clusterID, kubeConfig)
+		clusterWatcher.enqueue(&clusterAdded{clusterID, kubeConfig})
 	}
 
 	klog.Infof("Federator added ClusterEventHandler \"%T\"", handler)
@@ -90,8 +102,9 @@ func (f *federator) OnAdd(obj interface{}) {
 
 	f.clusterMap[kubeFedCluster.Name] = kubeConfig
 
+	event := &clusterAdded{kubeFedCluster.Name, kubeConfig}
 	for _, clusterWatcher := range f.clusterWatchers {
-		clusterWatcher.onAdd(kubeFedCluster.Name, kubeConfig)
+		clusterWatcher.enqueue(event)
 	}
 }
 
@@ -124,8 +137,9 @@ func (f *federator) OnDelete(obj interface{}) {
 
 	delete(f.clusterMap, kubeFedCluster.Name)
 
+	event := &clusterRemoved{kubeFedCluster.Name}
 	for _, clusterWatcher := range f.clusterWatchers {
-		clusterWatcher.onRemove(kubeFedCluster.Name)
+		clusterWatcher.enqueue(event)
 	}
 }
 
@@ -161,8 +175,9 @@ func (f *federator) OnUpdate(oldObj, newObj interface{}) {
 
 	f.clusterMap[newCluster.Name] = kubeConfig
 
+	event := &clusterUpdated{newCluster.Name, kubeConfig}
 	for _, clusterWatcher := range f.clusterWatchers {
-		clusterWatcher.onUpdate(newCluster.Name, kubeConfig)
+		clusterWatcher.enqueue(event)
 	}
 }
 
@@ -245,63 +260,31 @@ func newKubeFedClusterListerWatcher(kubeFedConfig *rest.Config) (cache.ListerWat
 	}, nil
 }
 
-func (c *clusterWatcher) onAdd(clusterID string, kubeConfig *rest.Config) {
-	c.enqueueEvent(func() {
-		c.handler.OnAdd(clusterID, kubeConfig)
-	}, clusterID, "Add", defaultEnqueueTimerInterval)
-}
-
-func (c *clusterWatcher) onUpdate(clusterID string, kubeConfig *rest.Config) {
-	c.enqueueEvent(func() {
-		c.handler.OnUpdate(clusterID, kubeConfig)
-	}, clusterID, "Update", defaultEnqueueTimerInterval)
-}
-
-func (c *clusterWatcher) onRemove(clusterID string) {
-	c.enqueueEvent(func() {
-		c.handler.OnRemove(clusterID)
-	}, clusterID, "Remove", defaultEnqueueTimerInterval)
-}
-
-func (c *clusterWatcher) enqueueEvent(event func(), clusterID string, eventType string, enqueueTimerInterval time.Duration) {
-	// First try to enqueue immediately to avoid the overhead of creating a Ticker for the common case.
-	select {
-	case c.eventQueue <- event:
-		return
-	default:
-	}
-
-	klog.V(2).Infof("Watcher for ClusterEventHandler \"%T\" eventQueue is full - starting timer loop", c.handler)
-
-	// Next we loop indefinitely trying to enqueue and preriodically log a warning.
-
-	startTime := time.Now()
-	ticker := time.NewTicker(enqueueTimerInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case c.eventQueue <- event:
-			klog.Infof("Watcher for ClusterEventHandler \"%T\" successfully enqueued %s event for cluster \"%s\" after %fs",
-				c.handler, eventType, clusterID, time.Duration(time.Now().UnixNano()-startTime.UnixNano()).Seconds())
-			return
-		case <-ticker.C:
-			klog.Warningf("Watcher for ClusterEventHandler \"%T\" timed out after %fs trying to enqueue %s event for cluster \"%s\"",
-				c.handler, enqueueTimerInterval.Seconds(), eventType, clusterID)
-		case <-c.stopChan:
-			return
-		}
-	}
+func (c *clusterWatcher) enqueue(event clusterEvent) {
+	c.eventQueue.Add(event)
 }
 
 func (c *clusterWatcher) eventLoop() {
 	for {
-		select {
-		case event := <-c.eventQueue:
-			event()
-		case <-c.stopChan:
+		event, shutdown := c.eventQueue.Get()
+		if shutdown {
 			klog.V(2).Infof("ClusterEventHandler \"%T\" eventLoop stopped", c.handler)
 			return
 		}
+
+		event.(clusterEvent).run(c.handler)
+		c.eventQueue.Done(event)
 	}
+}
+
+func (c *clusterAdded) run(handler federate.ClusterEventHandler) {
+	handler.OnAdd(c.clusterID, c.kubeConfig)
+}
+
+func (c *clusterUpdated) run(handler federate.ClusterEventHandler) {
+	handler.OnUpdate(c.clusterID, c.kubeConfig)
+}
+
+func (c *clusterRemoved) run(handler federate.ClusterEventHandler) {
+	handler.OnRemove(c.clusterID)
 }

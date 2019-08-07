@@ -8,6 +8,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/federate"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -20,8 +21,7 @@ func init() {
 }
 
 type clusterWatcher struct {
-	eventQueue chan func()
-	stopChan   <-chan struct{}
+	eventQueue workqueue.Interface
 	handler    federate.ClusterEventHandler
 }
 
