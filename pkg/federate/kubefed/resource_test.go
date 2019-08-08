@@ -293,6 +293,59 @@ func testDistribute() {
 	})
 }
 
+func testDelete() {
+	var (
+		resource *corev1.Pod
+		f        *federator
+		err      error
+	)
+
+	BeforeEach(func() {
+		scheme := runtime.NewScheme()
+		f = newFederatorWithScheme(scheme, fake.NewFakeClientWithScheme(scheme))
+		resource = newPod("test-pod")
+	})
+
+	JustBeforeEach(func() {
+		err = f.Delete(resource)
+	})
+
+	When("the resource type scheme has NOT been added to the type registry", func() {
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	When("the resource type scheme has been added to the type registry", func() {
+		BeforeEach(func() {
+			corev1.AddToScheme(f.scheme)
+		})
+
+		When("the resource doesn't exist", func() {
+			It("should fail with NotFound", func() {
+				Expect(kuberrors.IsNotFound(err)).To(BeTrue())
+			})
+		})
+
+		When("the resource is succesfully deleted", func() {
+			BeforeEach(func() {
+				err = f.Distribute(resource)
+			})
+
+			It("should return no error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should have removed the resource from the datastore", func() {
+				fedResource, err := createFederatedResource(f.scheme, resource)
+				Expect(err).ToNot(HaveOccurred())
+				_, err = getResourceFromAPI(f.kubeFedClient, fedResource)
+				Expect(kuberrors.IsNotFound(err)).To(BeTrue())
+			})
+		})
+	})
+}
+
 func newPod(name string) *corev1.Pod {
 	return newPodWithImage(name, "nginx")
 }
@@ -374,49 +427,4 @@ func getResourceFromAPI(kubeFedClient client.Client, resource *unstructured.Unst
 		fedResource,
 	)
 	return fedResource, err
-}
-
-func testDelete() {
-	var (
-		resource    *corev1.Pod
-		fedResource *unstructured.Unstructured
-		f           *federator
-		err         error
-	)
-
-	BeforeEach(func() {
-		f = &federator{
-			scheme: runtime.NewScheme(),
-		}
-
-		corev1.AddToScheme(f.scheme)
-		resource = newPod("test-pod")
-		fedResource, err = createFederatedResource(f.scheme, resource)
-		Expect(err).ToNot(HaveOccurred())
-		f.kubeFedClient = fake.NewFakeClientWithScheme(f.scheme, fedResource)
-	})
-
-	JustBeforeEach(func() {
-		err = f.Delete(resource)
-	})
-
-	When("The resource is succesfully deleted", func() {
-		It("Should throw no error", func() {
-			Expect(err).ToNot(HaveOccurred())
-		})
-		It("Should remove the resource from the client", func() {
-			_, err := getResourceFromAPI(f.kubeFedClient, fedResource)
-			Expect(kuberrors.IsNotFound(err)).To(BeTrue())
-		})
-	})
-
-	When("The resource doesn't exist", func() {
-		BeforeEach(func() {
-			resource = newPod("other-pod")
-		})
-
-		It("Should fail with NotFound", func() {
-			Expect(kuberrors.IsNotFound(err)).To(BeTrue())
-		})
-	})
 }
