@@ -40,8 +40,8 @@ var _ = Describe("Kubefed Cluster", func() {
 	klog.InitFlags(nil)
 
 	When("Adding a watch", testAddingWatch)
+	When("Closing the stop channel", testClose)
 	Describe("KubeFedCluster event notifications", testKubeFedClusterNotifications)
-	Describe("enqueueEvent", testEnqueueEvent)
 })
 
 func testAddingWatch() {
@@ -69,6 +69,23 @@ func testAddingWatch() {
 		Expect(err).ToNot(HaveOccurred())
 
 		handler2.verifyAddEvents("east", "west")
+	})
+}
+
+func testClose() {
+	It("Should shutdown the ClusterEventHandler's work queue", func() {
+		stopChan := make(chan struct{})
+		federator := newFederatorWithWatcher(watch.NewFake(), stopChan)
+
+		handler := &testClusterEventHandler1{*newTestClusterEventHandler()}
+		err := federator.WatchClusters(handler)
+		Expect(err).ToNot(HaveOccurred())
+
+		queue := federator.clusterWatchers[0].eventQueue
+
+		close(stopChan)
+
+		Eventually(queue.ShuttingDown).Should(BeTrue())
 	})
 }
 
@@ -191,49 +208,6 @@ func testKubeFedClusterNotifications() {
 
 			fakeWatcher.Modify(updatedKubeFedCluster)
 			Consistently(handler.events, time.Millisecond*300).ShouldNot(Receive())
-		})
-	})
-}
-
-func testEnqueueEvent() {
-	var stopChan chan struct{}
-	var watcher *clusterWatcher
-	BeforeEach(func() {
-		stopChan = make(chan struct{})
-		watcher = &clusterWatcher{
-			handler:    newTestClusterEventHandler(),
-			eventQueue: make(chan func()),
-			stopChan:   stopChan,
-		}
-	})
-
-	When("called with the eventQueue blocked", func() {
-		It("Should send the event and return when the eventQueue is unblocked", func() {
-			enqueueEventStarting := make(chan struct{})
-			enqueueEventDone := make(chan struct{})
-			go func() {
-				enqueueEventStarting <- struct{}{}
-				watcher.enqueueEvent(func() {}, "east", "Add", time.Millisecond*100)
-				enqueueEventDone <- struct{}{}
-			}()
-
-			Eventually(enqueueEventStarting, 5).Should(Receive(), "enqueueEvent goroutine did not start")
-
-			time.Sleep(time.Millisecond * 500)
-
-			Eventually(watcher.eventQueue, 3).Should(Receive(), "Event was not sent")
-			Eventually(enqueueEventDone, 3).Should(Receive(), "enqueueEvent did not complete")
-		})
-
-		It("Should return when the stopChan receives an event", func() {
-			enqueueEventDone := make(chan struct{})
-			go func() {
-				watcher.enqueueEvent(func() {}, "east", "Add", time.Millisecond*100)
-				enqueueEventDone <- struct{}{}
-			}()
-
-			close(stopChan)
-			Eventually(enqueueEventDone, 3).Should(Receive(), "enqueueEvent did not complete")
 		})
 	})
 }
