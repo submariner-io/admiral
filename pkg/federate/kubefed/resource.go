@@ -4,26 +4,30 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/klog"
 	ctlutil "sigs.k8s.io/kubefed/pkg/controller/util"
 	kubefedopt "sigs.k8s.io/kubefed/pkg/kubefedctl/options"
 )
 
 const (
 	federatedKindPrefix         = "Federated"
-	errorUnstructuredConversion = "Error converting to unstructured.Unstructured: %v"
-	errorSettingFederatedFields = "Error setting fields necessary for federating: %v"
-	errorUpdateResource         = "Error updating the resource, assuming it does not exist and creating new one: %v"
-	errorCreateResource         = "Error creating the resource: %v"
+	errorSettingFederatedFields = "error setting fields necessary for federating: %v"
 )
 
 var systemMetadataFields = []string{"selfLink", "uid", "resourceVersion", "generation", "creationTimestamp", "deletionTimestamp", "deletionGracePeriodSeconds"}
 
+type UnstructuredConversionError struct {
+	err      error
+	resource runtime.Object
+}
+
+var _ error = &UnstructuredConversionError{}
+
 func (f *federator) Distribute(resource runtime.Object, clusterNames ...string) error {
-	fedResource, err := f.createFederatedResource(resource)
+	fedResource, err := createFederatedResource(f.scheme, resource)
 	if err != nil {
 		return err
 	}
@@ -32,7 +36,6 @@ func (f *federator) Distribute(resource runtime.Object, clusterNames ...string) 
 		unstructured.RemoveNestedField(fedResource.Object, ctlutil.SpecField, ctlutil.PlacementField)
 		err = ctlutil.SetClusterNames(fedResource, clusterNames)
 		if err != nil {
-			// Path not covered by unit tests because it's trivial behavior yet complex to test
 			return fmt.Errorf(errorSettingFederatedFields, err)
 		}
 	}
@@ -43,26 +46,22 @@ func (f *federator) Distribute(resource runtime.Object, clusterNames ...string) 
 		return nil
 	}
 
-	klog.Infof(errorUpdateResource, err)
-
-	err = f.kubeFedClient.Create(context.TODO(), fedResource)
-	if err != nil {
-		// Path not covered by unit tests because it's trivial behavior yet complex to test
-		return fmt.Errorf(errorCreateResource, err)
+	if !errors.IsNotFound(err) {
+		return err
 	}
 
-	return nil
+	return f.kubeFedClient.Create(context.TODO(), fedResource)
 }
 
 func (f *federator) Delete(resource runtime.Object) error {
 	panic("not implemented")
 }
 
-func (f *federator) createFederatedResource(resource runtime.Object) (*unstructured.Unstructured, error) {
+func createFederatedResource(scheme *runtime.Scheme, resource runtime.Object) (*unstructured.Unstructured, error) {
 	targetResource := &unstructured.Unstructured{}
-	err := f.scheme.Convert(resource, targetResource, nil)
+	err := scheme.Convert(resource, targetResource, nil)
 	if err != nil {
-		return nil, fmt.Errorf(errorUnstructuredConversion, err)
+		return nil, &UnstructuredConversionError{err, resource}
 	}
 
 	fedResource := &unstructured.Unstructured{}
@@ -74,12 +73,10 @@ func (f *federator) createFederatedResource(resource runtime.Object) (*unstructu
 
 	err = unstructured.SetNestedField(fedResource.Object, targetResource.Object, ctlutil.SpecField, ctlutil.TemplateField)
 	if err != nil {
-		// Path not covered by unit tests because it's trivial behavior yet complex to test
 		return nil, fmt.Errorf(errorSettingFederatedFields, err)
 	}
 	err = unstructured.SetNestedStringMap(fedResource.Object, map[string]string{}, ctlutil.SpecField, ctlutil.PlacementField, ctlutil.ClusterSelectorField, ctlutil.MatchLabelsField)
 	if err != nil {
-		// Path not covered by unit tests because it's trivial behavior yet complex to test
 		return nil, fmt.Errorf(errorSettingFederatedFields, err)
 	}
 
@@ -90,6 +87,7 @@ func setBasicMetaFields(resource, base *unstructured.Unstructured) {
 	fedKind := federatedKindPrefix + base.GetKind()
 	resource.SetKind(fedKind)
 
+	// TODO(mpeterson): Modify to get the type config and generalize this usage
 	gv := schema.GroupVersion{
 		Group:   kubefedopt.DefaultFederatedGroup,
 		Version: kubefedopt.DefaultFederatedVersion,
@@ -111,4 +109,12 @@ func removeUnwantedFields(resource *unstructured.Unstructured) {
 	unstructured.RemoveNestedField(resource.Object, "apiVersion")
 	unstructured.RemoveNestedField(resource.Object, "kind")
 	unstructured.RemoveNestedField(resource.Object, "status")
+}
+
+func (err *UnstructuredConversionError) Error() string {
+	return fmt.Sprintf(
+		"error converting to unstructured.Unstructured: %v\n(RES=%#v)",
+		err.err,
+		err.resource,
+	)
 }
