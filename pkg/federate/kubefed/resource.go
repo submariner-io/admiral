@@ -71,10 +71,13 @@ func createFederatedResource(scheme *runtime.Scheme, resource runtime.Object) (*
 	// kubefedfed.RemoveUnwantedFields(targetResource)
 	removeUnwantedFields(targetResource)
 
+	// Adding the template field and including the targetResource's object as its content.
 	err = unstructured.SetNestedField(fedResource.Object, targetResource.Object, ctlutil.SpecField, ctlutil.TemplateField)
 	if err != nil {
 		return nil, fmt.Errorf(errorSettingFederatedFields, err)
 	}
+	// Adding an empty selector for the Placement field's MatchLabel. An empty selector means
+	// all clusters.
 	err = unstructured.SetNestedStringMap(fedResource.Object, map[string]string{}, ctlutil.SpecField, ctlutil.PlacementField, ctlutil.ClusterSelectorField, ctlutil.MatchLabelsField)
 	if err != nil {
 		return nil, fmt.Errorf(errorSettingFederatedFields, err)
@@ -98,6 +101,10 @@ func setBasicMetaFields(resource, base *unstructured.Unstructured) {
 	resource.SetNamespace(base.GetNamespace())
 }
 
+// This function removes metadata information that is being added by a running Kubernetes API
+// and that effectively exists only on objects retrieved from the API. This metadata is thus
+// only of interest for the objects living in the API but not for a new object that we will
+// create such in our use case.
 func removeUnwantedFields(resource *unstructured.Unstructured) {
 	for _, field := range systemMetadataFields {
 		unstructured.RemoveNestedField(resource.Object, "metadata", field)

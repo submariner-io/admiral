@@ -18,6 +18,7 @@ import (
 )
 
 type fakeClientWithUpdateError struct {
+	client.Client
 	msg string
 }
 
@@ -27,24 +28,6 @@ func (fake *fakeClientWithUpdateError) Update(ctx context.Context, obj runtime.O
 	return errors.New(fake.msg)
 }
 
-func (fake *fakeClientWithUpdateError) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
-	return nil
-}
-
-func (fake *fakeClientWithUpdateError) List(ctx context.Context, opts *client.ListOptions, list runtime.Object) error {
-	return nil
-}
-
-func (fake *fakeClientWithUpdateError) Create(ctx context.Context, obj runtime.Object) error {
-	return nil
-}
-
-func (fake *fakeClientWithUpdateError) Delete(ctx context.Context, obj runtime.Object, opts ...client.DeleteOptionFunc) error {
-	return nil
-}
-
-func (fake *fakeClientWithUpdateError) Status() client.StatusWriter { return nil }
-
 var _ = Describe("Federator", func() {
 	Describe("function Distribute", testDistribute)
 	Describe("helper function createFederatedResource", testCreateFederatedResource)
@@ -53,7 +36,6 @@ var _ = Describe("Federator", func() {
 func testCreateFederatedResource() {
 	var (
 		resource *corev1.Pod
-		expected *unstructured.Unstructured
 		scheme   *runtime.Scheme
 	)
 
@@ -64,7 +46,6 @@ func testCreateFederatedResource() {
 
 	AfterEach(func() {
 		resource = nil
-		expected = nil
 		scheme = nil
 	})
 
@@ -78,7 +59,7 @@ func testCreateFederatedResource() {
 			})
 
 			It("should return a null expected", func() {
-				expected, _ = createFederatedResource(scheme, resource)
+				expected, _ := createFederatedResource(scheme, resource)
 				Expect(expected).To(BeNil())
 			})
 		})
@@ -91,60 +72,60 @@ func testCreateFederatedResource() {
 		})
 
 		It("should not modify the input resource but copy it", func() {
-			expected, _ = createFederatedResource(scheme, resource)
-			Expect(resource).ToNot(BeIdenticalTo(expected))
-		})
-
-		It("should return no error on success", func() {
-			_, err := createFederatedResource(scheme, resource)
-			Expect(err).ToNot(HaveOccurred())
+			expected, _ := createFederatedResource(scheme, resource)
+			Expect(expected).ToNot(BeIdenticalTo(resource))
 		})
 
 		It("the returned resource's Kind should be of Federated<kind>", func() {
-			expected, _ = createFederatedResource(scheme, resource)
+			expected, err := createFederatedResource(scheme, resource)
+			Expect(err).ToNot(HaveOccurred())
 			expectedKind := federatedKindPrefix + resource.GroupVersionKind().Kind
 			Expect(expected.GroupVersionKind().Kind).
 				To(Equal(expectedKind))
 		})
 
 		It("the returned resource's Group should be the default KubeFed FederatedGroup", func() {
-			expected, _ = createFederatedResource(scheme, resource)
+			expected, err := createFederatedResource(scheme, resource)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(expected.GroupVersionKind().Group).
 				To(Equal(kubefedopt.DefaultFederatedGroup))
 		})
 
 		It("the returned resource's Version should be the default KubeFed FederatedVersion", func() {
-			expected, _ = createFederatedResource(scheme, resource)
+			expected, err := createFederatedResource(scheme, resource)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(expected.GroupVersionKind().Version).
 				To(Equal(kubefedopt.DefaultFederatedVersion))
 		})
 
 		It("the returned resource's name should be the same as the input's object", func() {
-			expected, _ = createFederatedResource(scheme, resource)
+			expected, err := createFederatedResource(scheme, resource)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(expected.GetName()).
 				To(Equal(resource.GetName()))
 		})
 
 		It("the returned resource's template should be the input's unstructured", func() {
 			// This test implicitly tests that the nested hierarchy of fields exists
-			expected, _ = createFederatedResource(scheme, resource)
+			expected, err := createFederatedResource(scheme, resource)
+			Expect(err).ToNot(HaveOccurred())
 
-			mapObj, found, err := getTemplateField(expected)
 			targetResource := &unstructured.Unstructured{}
 
-			convErr := scheme.Convert(resource, targetResource, nil)
-			Expect(convErr).ToNot(HaveOccurred())
-			removeUnwantedFields(targetResource)
+			err = scheme.Convert(resource, targetResource, nil)
+			Expect(err).ToNot(HaveOccurred())
 
+			mapObj, found, err := getTemplateField(expected)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(found).To(BeTrue(), "Hierarchy of fields missing!")
 			Expect(mapObj["spec"]).To(BeEquivalentTo(targetResource.Object["spec"]))
-			Expect(mapObj["metadata"]).To(BeEquivalentTo(targetResource.Object["metadata"]))
+			Expect(mapObj["metadata"]).To(BeEmpty())
 		})
 
 		It("the returned resource's placement should be an empty matcher", func() {
 			// This test implicitly tests that the nested hierarchy of fields exists
-			expected, _ = createFederatedResource(scheme, resource)
+			expected, err := createFederatedResource(scheme, resource)
+			Expect(err).ToNot(HaveOccurred())
 
 			mapObj, found, err := getMatchLabelsField(expected)
 			Expect(err).ToNot(HaveOccurred())
@@ -153,7 +134,8 @@ func testCreateFederatedResource() {
 		})
 
 		It("the returned resource's namespace should be the input's namespace", func() {
-			expected, _ = createFederatedResource(scheme, resource)
+			expected, err := createFederatedResource(scheme, resource)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(expected.GetNamespace()).
 				To(Equal(resource.GetNamespace()))
 		})
@@ -221,10 +203,12 @@ func testDistribute() {
 				_ = f.Distribute(resource, clusterNames...)
 				fedPod, err := getResourceFromAPI(f.kubeFedClient, fedResource)
 				Expect(err).ToNot(HaveOccurred())
-				fedPodObj, _, err := getTemplateField(fedPod)
+				fedPodObj, found, err := getTemplateField(fedPod)
 				Expect(err).ToNot(HaveOccurred())
-				expectObj, _, err := getTemplateField(fedResource)
+				Expect(found).To(BeTrue(), "Hierarchy of fields missing!")
+				expectObj, found, err := getTemplateField(fedResource)
 				Expect(err).ToNot(HaveOccurred())
+				Expect(found).To(BeTrue(), "Hierarchy of fields missing!")
 
 				Expect(fedPodObj["spec"]).ToNot(BeEquivalentTo(expectObj["spec"]))
 
@@ -239,7 +223,7 @@ func testDistribute() {
 
 		When("on update the Kube API returns an error that is not a NotFound", func() {
 			BeforeEach(func() {
-				clientPatcher = &fakeClientWithUpdateError{"test error"}
+				clientPatcher = &fakeClientWithUpdateError{fake.NewFakeClient(), "test error"}
 			})
 
 			It("should return an error and not create the resource", func() {
@@ -274,10 +258,9 @@ func testDistribute() {
 				Expect(err).ToNot(HaveOccurred())
 
 				mapObj, found, err := getClustersField(fedPod)
-				fedClusterNames := unpackClusterNames(mapObj)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(found).To(BeTrue(), "Hierarchy of fields missing!")
-				Expect(fedClusterNames).To(BeEquivalentTo(clusterNames))
+				Expect(unpackClusterNames(mapObj)).To(BeEquivalentTo(clusterNames))
 			})
 
 			It("the returned resource's placement should not contain an empty matcher", func() {
