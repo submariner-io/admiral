@@ -117,7 +117,7 @@ func testCreateFederatedResource() {
 
 			mapObj, found, err := getTemplateField(expected)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(found).To(BeTrue(), "Hierarchy of fields missing!")
+			Expect(found).To(BeTrue(), "Hierarchy of the Template field missing!")
 			Expect(mapObj["spec"]).To(BeEquivalentTo(targetResource.Object["spec"]))
 			Expect(mapObj["metadata"]).To(BeEmpty())
 		})
@@ -129,7 +129,7 @@ func testCreateFederatedResource() {
 
 			mapObj, found, err := getMatchLabelsField(expected)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(found).To(BeTrue(), "Hierarchy of fields missing!")
+			Expect(found).To(BeTrue(), "Hierarchy of the MatchLabels field missing!")
 			Expect(mapObj).To(BeEmpty())
 		})
 
@@ -205,10 +205,10 @@ func testDistribute() {
 				Expect(err).ToNot(HaveOccurred())
 				fedPodObj, found, err := getTemplateField(fedPod)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(found).To(BeTrue(), "Hierarchy of fields missing!")
+				Expect(found).To(BeTrue(), "Hierarchy of the Template field missing!")
 				expectObj, found, err := getTemplateField(fedResource)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(found).To(BeTrue(), "Hierarchy of fields missing!")
+				Expect(found).To(BeTrue(), "Hierarchy of the Template field missing!")
 
 				Expect(fedPodObj["spec"]).ToNot(BeEquivalentTo(expectObj["spec"]))
 
@@ -259,7 +259,7 @@ func testDistribute() {
 
 				mapObj, found, err := getClustersField(fedPod)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(found).To(BeTrue(), "Hierarchy of fields missing!")
+				Expect(found).To(BeTrue(), "Hierarchy of the Cluster field missing!")
 				Expect(unpackClusterNames(mapObj)).To(BeEquivalentTo(clusterNames))
 			})
 
@@ -271,7 +271,7 @@ func testDistribute() {
 
 				mapObj, found, err := getMatchLabelsField(fedPod)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(found).ToNot(BeTrue(), "Hierarchy of fields is present!")
+				Expect(found).ToNot(BeTrue(), "Hierarchy of the MatchLabels field is present!")
 				Expect(mapObj).To(BeEmpty())
 			})
 		})
@@ -285,7 +285,7 @@ func testDistribute() {
 
 				mapObj, found, err := getMatchLabelsField(fedPod)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(found).To(BeTrue(), "Hierarchy of fields missing!")
+				Expect(found).To(BeTrue(), "Hierarchy of the MatchLabels field missing!")
 				Expect(mapObj).To(BeEmpty())
 			})
 		})
