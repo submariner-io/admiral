@@ -32,7 +32,7 @@ require (
 	gopkg.in/inf.v0 v0.0.0-20150911125757-3887ee99ecf0 // indirect
 	gopkg.in/yaml.v2 v2.2.2 // indirect
 	k8s.io/api v0.0.0-20190222213804-5cb15d344471
-	k8s.io/apiextensions-apiserver v0.0.0-20181213153335-0fe22c71c476
+	k8s.io/apiextensions-apiserver v0.0.0-20181213153335-0fe22c71c476 // indirect
 	k8s.io/apimachinery v0.0.0-20190629003722-e20a3a656cff
 	k8s.io/client-go v0.0.0-20190521190702-177766529176
 	k8s.io/klog v0.0.0-20181108234604-8139d8cb77af
