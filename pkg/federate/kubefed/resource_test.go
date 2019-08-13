@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	kuberrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -238,6 +239,7 @@ func testDistribute() {
 				// Sanity check
 				_, err := getResourceFromAPI(f.kubeFedClient, fedResource)
 				Expect(err).To(HaveOccurred())
+				expectNotFound(err)
 
 				_ = f.Distribute(resource, clusterNames...)
 				fedPod, err := getResourceFromAPI(f.kubeFedClient, fedResource)
@@ -323,7 +325,7 @@ func testDelete() {
 
 		When("the resource doesn't exist", func() {
 			It("should fail with NotFound", func() {
-				Expect(kuberrors.IsNotFound(err)).To(BeTrue())
+				expectNotFound(err)
 			})
 		})
 
@@ -340,7 +342,7 @@ func testDelete() {
 				fedResource, err := createFederatedResource(f.scheme, resource)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = getResourceFromAPI(f.kubeFedClient, fedResource)
-				Expect(kuberrors.IsNotFound(err)).To(BeTrue())
+				expectNotFound(err)
 			})
 		})
 	})
@@ -427,4 +429,8 @@ func getResourceFromAPI(kubeFedClient client.Client, resource *unstructured.Unst
 		fedResource,
 	)
 	return fedResource, err
+}
+
+func expectNotFound(err error) {
+	Expect(kuberrors.IsNotFound(err)).To(BeTrue())
 }
