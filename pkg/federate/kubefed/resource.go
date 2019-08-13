@@ -24,8 +24,6 @@ type UnstructuredConversionError struct {
 	resource runtime.Object
 }
 
-var _ error = &UnstructuredConversionError{}
-
 func (f *federator) Distribute(resource runtime.Object, clusterNames ...string) error {
 	fedResource, err := createFederatedResource(f.scheme, resource)
 	if err != nil {
@@ -44,9 +42,7 @@ func (f *federator) Distribute(resource runtime.Object, clusterNames ...string) 
 	err = f.kubeFedClient.Update(context.TODO(), fedResource)
 	if err == nil {
 		return nil
-	}
-
-	if !errors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return err
 	}
 
@@ -76,6 +72,7 @@ func createFederatedResource(scheme *runtime.Scheme, resource runtime.Object) (*
 	if err != nil {
 		return nil, fmt.Errorf(errorSettingFederatedFields, err)
 	}
+
 	// Adding an empty selector for the Placement field's MatchLabel. An empty selector means
 	// all clusters.
 	err = unstructured.SetNestedStringMap(fedResource.Object, map[string]string{}, ctlutil.SpecField, ctlutil.PlacementField, ctlutil.ClusterSelectorField, ctlutil.MatchLabelsField)
@@ -95,8 +92,8 @@ func setBasicMetaFields(resource, base *unstructured.Unstructured) {
 		Group:   kubefedopt.DefaultFederatedGroup,
 		Version: kubefedopt.DefaultFederatedVersion,
 	}
-	resource.SetAPIVersion(gv.String())
 
+	resource.SetAPIVersion(gv.String())
 	resource.SetName(base.GetName())
 	resource.SetNamespace(base.GetNamespace())
 }
