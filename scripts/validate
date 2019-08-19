@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+cd $(dirname $0)/..
+
+source scripts/lib/find_functions
+
+EXCLUDE_PKG_DIRS=".git .tmp .trash-cache vendor bin"
+
+PACKAGES=$(find_go_pkg_dirs --no-trailing-dots "*.go")
+
+if [[ $(goimports -l ${PACKAGES} | wc -l) -gt 0 ]]; then
+    echo Incorrect formatting, please run goimports and check the following files:
+    goimports -l ${PACKAGES}
+    exit 1
+fi
+
+golangci-lint run
