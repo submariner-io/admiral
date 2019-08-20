@@ -239,7 +239,7 @@ func testDistribute() {
 				// Sanity check
 				_, err := getResourceFromAPI(f.kubeFedClient, fedResource)
 				Expect(err).To(HaveOccurred())
-				expectNotFound(err)
+				expectNotFoundError(err)
 
 				_ = f.Distribute(resource, clusterNames...)
 				fedPod, err := getResourceFromAPI(f.kubeFedClient, fedResource)
@@ -299,8 +299,12 @@ func testDelete() {
 	var (
 		resource *corev1.Pod
 		f        *federator
-		err      error
 	)
+
+	AfterEach(func() {
+		resource = nil
+		f = nil
+	})
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
@@ -308,41 +312,35 @@ func testDelete() {
 		resource = newPod("test-pod")
 	})
 
-	JustBeforeEach(func() {
-		err = f.Delete(resource)
-	})
-
 	When("the resource type scheme has NOT been added to the type registry", func() {
 		It("should return an error", func() {
-			Expect(err).To(HaveOccurred())
+			Expect(f.Delete(resource)).ToNot(Succeed())
 		})
 	})
 
 	When("the resource type scheme has been added to the type registry", func() {
 		BeforeEach(func() {
-			corev1.AddToScheme(f.scheme)
+			Expect(corev1.AddToScheme(f.scheme)).To(Succeed())
 		})
 
 		When("the resource doesn't exist", func() {
 			It("should fail with NotFound", func() {
-				expectNotFound(err)
+				err := f.Delete(resource)
+				expectNotFoundError(err)
 			})
 		})
 
-		When("the resource is succesfully deleted", func() {
+		When("the resource is successfully deleted", func() {
 			BeforeEach(func() {
-				err = f.Distribute(resource)
-			})
-
-			It("should return no error", func() {
-				Expect(err).ToNot(HaveOccurred())
+				Expect(f.Distribute(resource)).To(Succeed())
 			})
 
 			It("should have removed the resource from the datastore", func() {
+				Expect(f.Delete(resource)).To(Succeed())
 				fedResource, err := createFederatedResource(f.scheme, resource)
 				Expect(err).ToNot(HaveOccurred())
 				_, err = getResourceFromAPI(f.kubeFedClient, fedResource)
-				expectNotFound(err)
+				expectNotFoundError(err)
 			})
 		})
 	})
@@ -431,6 +429,6 @@ func getResourceFromAPI(kubeFedClient client.Client, resource *unstructured.Unst
 	return fedResource, err
 }
 
-func expectNotFound(err error) {
-	Expect(kuberrors.IsNotFound(err)).To(BeTrue())
+func expectNotFoundError(err error) {
+	ExpectWithOffset(1, kuberrors.IsNotFound(err)).To(BeTrue())
 }
