@@ -3,6 +3,7 @@ package kubefed
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -10,8 +11,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kuberrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	ctlutil "sigs.k8s.io/kubefed/pkg/controller/util"
@@ -27,6 +30,39 @@ var _ client.Client = &fakeClientWithUpdateError{}
 
 func (fake *fakeClientWithUpdateError) Update(ctx context.Context, obj runtime.Object) error {
 	return errors.New(fake.msg)
+}
+
+type fakeClientWithUpdateChecking struct {
+	client.Client
+}
+
+func (fake *fakeClientWithUpdateChecking) Update(ctx context.Context, obj runtime.Object) error {
+	// Verify the ResourceVersion is set on update as the real API server does.
+	metadata, err := meta.Accessor(obj)
+	if err != nil {
+		return fmt.Errorf("No metadata found on %#v", obj)
+	}
+
+	if metadata.GetResourceVersion() == "" {
+		return errors.New("ResourceVersion must be specified for update")
+	}
+
+	return fake.Client.Update(ctx, obj)
+}
+
+type fakeClientWithInitialConflict struct {
+	client.Client
+	first bool
+}
+
+func (fake *fakeClientWithInitialConflict) Update(ctx context.Context, obj runtime.Object) error {
+	if fake.first {
+		fake.first = false
+		return kuberrors.NewConflict(schema.GroupResource{}, "", errors.New("fake"))
+
+	}
+
+	return fake.Client.Update(ctx, obj)
 }
 
 var _ = Describe("Federator", func() {
@@ -197,12 +233,12 @@ func testDistribute() {
 			expectedImage := "apache"
 
 			BeforeEach(func() {
+				fedResource.SetResourceVersion("1")
 				initObjs = append(initObjs, fedResource)
 				resource = newPodWithImage("test-pod", expectedImage)
 			})
 
-			It("should update the resource", func() {
-				_ = f.Distribute(resource, clusterNames...)
+			verifyUpdate := func() {
 				fedPod, err := getResourceFromAPI(f.kubeFedClient, fedResource)
 				Expect(err).ToNot(HaveOccurred())
 				fedPodObj, found, err := getTemplateField(fedPod)
@@ -220,17 +256,37 @@ func testDistribute() {
 				)
 				image := mapObj[0].(map[string]interface{})["image"]
 				Expect(image).To(BeEquivalentTo(expectedImage))
-			})
-		})
+			}
 
-		When("on update the Kube API returns an error that is not a NotFound", func() {
-			BeforeEach(func() {
-				clientPatcher = &fakeClientWithUpdateError{fake.NewFakeClient(), "test error"}
-			})
-
-			It("should return an error and not create the resource", func() {
+			It("should update the resource on success", func() {
 				err := f.Distribute(resource, clusterNames...)
-				Expect(err).To(MatchError(HavePrefix("test error")))
+				Expect(err).ToNot(HaveOccurred())
+
+				verifyUpdate()
+			})
+
+			When("update initially fails due to conflict", func() {
+				BeforeEach(func() {
+					clientPatcher = &fakeClientWithInitialConflict{fake.NewFakeClientWithScheme(scheme, fedResource), true}
+				})
+
+				It("should retry until it succeeds", func() {
+					err := f.Distribute(resource, clusterNames...)
+					Expect(err).ToNot(HaveOccurred())
+
+					verifyUpdate()
+				})
+			})
+
+			When("update returns an error that is not a NotFound", func() {
+				BeforeEach(func() {
+					clientPatcher = &fakeClientWithUpdateError{fake.NewFakeClientWithScheme(scheme, fedResource), "fake error"}
+				})
+
+				It("should return an error and not create the resource", func() {
+					err := f.Distribute(resource, clusterNames...)
+					Expect(err).To(MatchError(HaveSuffix("fake error")))
+				})
 			})
 		})
 
@@ -370,10 +426,10 @@ func newPodWithImage(name string, imageName string) *corev1.Pod {
 
 func newFederatorWithScheme(scheme *runtime.Scheme, client client.Client, initObjs ...runtime.Object) *federator {
 	if client == nil {
-		client = fake.NewFakeClientWithScheme(
+		client = &fakeClientWithUpdateChecking{fake.NewFakeClientWithScheme(
 			scheme,
 			initObjs...,
-		)
+		)}
 	}
 
 	return &federator{
