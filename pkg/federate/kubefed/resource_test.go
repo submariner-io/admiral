@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	kuberrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,6 +31,7 @@ func (fake *fakeClientWithUpdateError) Update(ctx context.Context, obj runtime.O
 
 var _ = Describe("Federator", func() {
 	Describe("function Distribute", testDistribute)
+	Describe("function Delete", testDelete)
 	Describe("helper function createFederatedResource", testCreateFederatedResource)
 })
 
@@ -40,7 +42,7 @@ func testCreateFederatedResource() {
 	)
 
 	BeforeEach(func() {
-		resource = newPod("test-pod", "nginx")
+		resource = newPod("test-pod")
 		scheme = runtime.NewScheme()
 	})
 
@@ -154,7 +156,7 @@ func testDistribute() {
 	)
 
 	BeforeEach(func() {
-		resource = newPod("test-pod", "nginx")
+		resource = newPod("test-pod")
 		scheme = runtime.NewScheme()
 	})
 
@@ -196,7 +198,7 @@ func testDistribute() {
 
 			BeforeEach(func() {
 				initObjs = append(initObjs, fedResource)
-				resource = newPod("test-pod", expectedImage)
+				resource = newPodWithImage("test-pod", expectedImage)
 			})
 
 			It("should update the resource", func() {
@@ -237,6 +239,7 @@ func testDistribute() {
 				// Sanity check
 				_, err := getResourceFromAPI(f.kubeFedClient, fedResource)
 				Expect(err).To(HaveOccurred())
+				expectNotFoundError(err)
 
 				_ = f.Distribute(resource, clusterNames...)
 				fedPod, err := getResourceFromAPI(f.kubeFedClient, fedResource)
@@ -292,7 +295,62 @@ func testDistribute() {
 	})
 }
 
-func newPod(name string, imageName string) *corev1.Pod {
+func testDelete() {
+	var (
+		resource *corev1.Pod
+		f        *federator
+	)
+
+	AfterEach(func() {
+		resource = nil
+		f = nil
+	})
+
+	BeforeEach(func() {
+		scheme := runtime.NewScheme()
+		f = newFederatorWithScheme(scheme, fake.NewFakeClientWithScheme(scheme))
+		resource = newPod("test-pod")
+	})
+
+	When("the resource type scheme has NOT been added to the type registry", func() {
+		It("should return an error", func() {
+			Expect(f.Delete(resource)).ToNot(Succeed())
+		})
+	})
+
+	When("the resource type scheme has been added to the type registry", func() {
+		BeforeEach(func() {
+			Expect(corev1.AddToScheme(f.scheme)).To(Succeed())
+		})
+
+		When("the resource doesn't exist", func() {
+			It("should fail with NotFound", func() {
+				err := f.Delete(resource)
+				expectNotFoundError(err)
+			})
+		})
+
+		When("the resource is successfully deleted", func() {
+			BeforeEach(func() {
+				Expect(f.Distribute(resource)).To(Succeed())
+			})
+
+			It("should have removed the resource from the datastore", func() {
+				Expect(f.Delete(resource)).To(Succeed())
+				fedResource, err := createFederatedResource(f.scheme, resource)
+				Expect(err).ToNot(HaveOccurred())
+				_, err = getResourceFromAPI(f.kubeFedClient, fedResource)
+				expectNotFoundError(err)
+			})
+		})
+	})
+}
+
+func newPod(name string) *corev1.Pod {
+	return newPodWithImage(name, "nginx")
+}
+
+func newPodWithImage(name string, imageName string) *corev1.Pod {
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{Kind: "Pod"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -369,4 +427,8 @@ func getResourceFromAPI(kubeFedClient client.Client, resource *unstructured.Unst
 		fedResource,
 	)
 	return fedResource, err
+}
+
+func expectNotFoundError(err error) {
+	ExpectWithOffset(1, kuberrors.IsNotFound(err)).To(BeTrue())
 }
