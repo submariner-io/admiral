@@ -3,11 +3,15 @@ package kubefed
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/util/retry"
+	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctlutil "sigs.k8s.io/kubefed/pkg/controller/util"
 	kubefedopt "sigs.k8s.io/kubefed/pkg/kubefedctl/options"
 )
@@ -41,16 +45,50 @@ func (f *federator) Distribute(resource runtime.Object, clusterNames ...string) 
 	}
 
 	// Update first, as it will probably be the most common operation
-	err = f.kubeFedClient.Update(context.TODO(), fedResource)
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		existing := &unstructured.Unstructured{}
+		existing.SetGroupVersionKind(fedResource.GroupVersionKind())
+
+		getErr := f.kubeFedClient.Get(context.TODO(), client.ObjectKey{Namespace: fedResource.GetNamespace(), Name: fedResource.GetName()}, existing)
+		if getErr != nil {
+			return getErr
+		}
+
+		// Replace the "spec" field in the existing object with the updated field from "fedResource". We preserve the
+		// existing metadata info, specifically the ResourceVersion which must be set on an update operation.
+		// Note - we set a valid "spec" field earlier in "fedResource" so no need to handle the other return values.
+		newSpec, _, _ := unstructured.NestedFieldNoCopy(fedResource.Object, ctlutil.SpecField)
+
+		oldSpec, _, _ := unstructured.NestedFieldNoCopy(existing.Object, ctlutil.SpecField)
+		if reflect.DeepEqual(oldSpec, newSpec) {
+			// No need to issue the update if the spec didn't change
+			return nil
+		}
+
+		if setErr := unstructured.SetNestedField(existing.Object, newSpec, ctlutil.SpecField); setErr != nil {
+			return fmt.Errorf(errorSettingFederatedFields, setErr)
+		}
+
+		klog.V(2).Infof("Updating federated resource: %#v", existing)
+
+		return f.kubeFedClient.Update(context.TODO(), existing)
+	})
+
 	if err == nil {
 		return nil
 	}
 
 	if !errors.IsNotFound(err) {
-		return err
+		return fmt.Errorf("error updating federated resource %#v: %v", fedResource, err)
 	}
 
-	return f.kubeFedClient.Create(context.TODO(), fedResource)
+	klog.V(2).Infof("Creating federated resource: %#v", fedResource)
+
+	if err = f.kubeFedClient.Create(context.TODO(), fedResource); err != nil {
+		return fmt.Errorf("error creating federated resoource %#v: %v", fedResource, err)
+	}
+
+	return nil
 }
 
 func (f *federator) Delete(resource runtime.Object) error {
