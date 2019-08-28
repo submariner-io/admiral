@@ -10,7 +10,7 @@ require (
 	github.com/golang/mock v1.3.1
 	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.5.0
-	github.com/submariner-io/submariner v0.0.0-20190708095718-350482d85dd4
+	github.com/submariner-io/submariner v0.0.2-0.20190828132721-a11a9a84c90d
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.10.0 // indirect

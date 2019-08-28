@@ -3,7 +3,6 @@ package controller
 import (
 	"errors"
 	"fmt"
-	"net"
 	"reflect"
 
 	"github.com/golang/mock/gomock"
@@ -320,7 +319,7 @@ func newEndpoint() *submarinerv1.Endpoint {
 			CableName: "cable-east-10.20.30.40",
 			Hostname:  "myhost",
 			Subnets:   []string{"10.20.30.40/16"},
-			PrivateIP: net.IP{1, 2, 3, 4},
+			PrivateIP: "1, 2, 3, 4",
 		},
 	}
 }
