@@ -158,6 +158,7 @@ func testResourceDistribution() {
 		cluster          *submarinerv1.Cluster
 		endpoint         *submarinerv1.Endpoint
 		distributeCalled chan bool
+		deleteCalled     chan bool
 		mockCtrl         *gomock.Controller
 		mockFederator    *mocks.MockFederator
 		controller       *controller
@@ -168,6 +169,7 @@ func testResourceDistribution() {
 		cluster = newCluster()
 		endpoint = newEndpoint()
 		distributeCalled = make(chan bool, 1)
+		deleteCalled = make(chan bool, 1)
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockFederator = mocks.NewMockFederator(mockCtrl)
 		controller = New(mockFederator)
@@ -181,6 +183,7 @@ func testResourceDistribution() {
 	})
 
 	AfterEach(func() {
+		controller.Stop()
 		mockCtrl.Finish()
 	})
 
@@ -189,25 +192,90 @@ func testResourceDistribution() {
 		return err
 	}
 
+	deleteCluster := func() error {
+		return fakeClientset.SubmarinerV1().Clusters(submarinerNamespace).Delete(cluster.Name, &metav1.DeleteOptions{})
+	}
+
 	createEndpoint := func() error {
 		_, err := fakeClientset.SubmarinerV1().Endpoints(submarinerNamespace).Create(endpoint)
 		return err
 	}
 
+	deleteEndpoint := func() error {
+		return fakeClientset.SubmarinerV1().Endpoints(submarinerNamespace).Delete(endpoint.Name, &metav1.DeleteOptions{})
+	}
+
+	testClusterDistributed := func() {
+		// Distribute is called async and gomock doesn't have a way of specifying a timeout for the invocation
+		// so we use our own Do action and a channel.
+		var captured **submarinerv1.Cluster = new(*submarinerv1.Cluster)
+		mockFederator.EXPECT().Distribute(EqCluster(cluster)).Return(nil).Do(func(c *submarinerv1.Cluster) {
+			*captured = c
+			distributeCalled <- true
+		})
+
+		Expect(createCluster()).To(Succeed())
+
+		Eventually(distributeCalled, 5).Should(Receive(), "Distribute was not called")
+		Expect((*captured).GetLabels()).Should(HaveKeyWithValue(clusterIDLabelKey, clusterID))
+	}
+
+	testClusterNotDistributed := func() {
+		cluster.SetLabels(map[string]string{clusterIDLabelKey: "west"})
+		mockFederator.EXPECT().Distribute(EqCluster(cluster)).Return(nil).MaxTimes(0).Do(func(c *submarinerv1.Cluster) {
+			distributeCalled <- true
+		})
+
+		Expect(createCluster()).To(Succeed())
+
+		Consistently(distributeCalled).ShouldNot(Receive(), "Distribute was unexpectedly called")
+	}
+
+	clusterToDelete := func() *submarinerv1.Cluster {
+		return &submarinerv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
+			},
+		}
+	}
+
+	testEndpointDistributed := func() {
+		var captured **submarinerv1.Endpoint = new(*submarinerv1.Endpoint)
+		mockFederator.EXPECT().Distribute(EqEndpoint(endpoint)).Return(nil).Do(func(e *submarinerv1.Endpoint) {
+			*captured = e
+			distributeCalled <- true
+		})
+
+		Expect(createEndpoint()).To(Succeed())
+
+		Eventually(distributeCalled, 5).Should(Receive(), "Distribute was not called")
+		Expect((*captured).GetLabels()).Should(HaveKeyWithValue(clusterIDLabelKey, clusterID))
+	}
+
+	testEndpointNotDistributed := func() {
+		endpoint.SetLabels(map[string]string{clusterIDLabelKey: "west"})
+		mockFederator.EXPECT().Distribute(EqEndpoint(endpoint)).Return(nil).MaxTimes(0).Do(func(e *submarinerv1.Endpoint) {
+			distributeCalled <- true
+		})
+
+		Expect(createEndpoint()).To(Succeed())
+
+		Consistently(distributeCalled).ShouldNot(Receive(), "Distribute was unexpectedly called")
+	}
+
+	endpointToDelete := func() *submarinerv1.Endpoint {
+		return &submarinerv1.Endpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      endpoint.Name,
+				Namespace: endpoint.Namespace,
+			},
+		}
+	}
+
 	When("a Cluster resource is added", func() {
 		It("should distribute the resource", func() {
-			// Distribute is called async and gomock doesn't have a way of specifying a timeout for the invocation
-			// so we use our own Do action and a channel.
-			var captured **submarinerv1.Cluster = new(*submarinerv1.Cluster)
-			mockFederator.EXPECT().Distribute(EqCluster(cluster)).Return(nil).Do(func(c *submarinerv1.Cluster) {
-				*captured = c
-				distributeCalled <- true
-			})
-
-			Expect(createCluster()).To(Succeed())
-
-			Eventually(distributeCalled, 5).Should(Receive(), "Distribute was not called")
-			Expect((*captured).GetLabels()).Should(HaveKeyWithValue(clusterIDLabelKey, clusterID))
+			testClusterDistributed()
 		})
 	})
 
@@ -216,7 +284,7 @@ func testResourceDistribution() {
 			// Simulate the first call to Distribute fails and the second succeeds.
 			gomock.InOrder(
 				mockFederator.EXPECT().Distribute(EqCluster(cluster)).Return(errors.New("mock")),
-				mockFederator.EXPECT().Distribute(gomock.Any()).Return(nil).Do(func(c *submarinerv1.Cluster) {
+				mockFederator.EXPECT().Distribute(EqCluster(cluster)).Return(nil).Do(func(c *submarinerv1.Cluster) {
 					distributeCalled <- true
 				}))
 
@@ -228,42 +296,65 @@ func testResourceDistribution() {
 
 	When("a Cluster resource is added with a non-matching clusterID label", func() {
 		It("should not distribute the resource", func() {
-			cluster.SetLabels(map[string]string{clusterIDLabelKey: "west"})
-			mockFederator.EXPECT().Distribute(EqCluster(cluster)).Return(nil).MaxTimes(0).Do(func(c *submarinerv1.Cluster) {
-				distributeCalled <- true
-			})
-
-			Expect(createCluster()).To(Succeed())
-
-			Consistently(distributeCalled).ShouldNot(Receive(), "Distribute was unexpectedly called")
+			testClusterNotDistributed()
 		})
 	})
 
 	When("a Cluster resource is added with a matching clusterID label", func() {
 		It("should distribute the resource", func() {
 			cluster.SetLabels(map[string]string{clusterIDLabelKey: clusterID})
-			mockFederator.EXPECT().Distribute(EqCluster(cluster)).Return(nil).Do(func(c *submarinerv1.Cluster) {
-				distributeCalled <- true
+			testClusterDistributed()
+		})
+	})
+
+	When("a Cluster resource is deleted", func() {
+		It("should delete the distributed resource", func() {
+			testClusterDistributed()
+
+			mockFederator.EXPECT().Delete(EqCluster(clusterToDelete())).Return(nil).Do(func(c *submarinerv1.Cluster) {
+				deleteCalled <- true
 			})
 
-			Expect(createCluster()).To(Succeed())
+			Expect(deleteCluster()).To(Succeed())
 
-			Eventually(distributeCalled, 5).Should(Receive(), "Distribute was not called")
+			Eventually(deleteCalled, 5).Should(Receive(), "Delete was not called")
+		})
+	})
+
+	When("a Cluster resource is deleted with a non-matching clusterID label", func() {
+		It("should not delete the distributed resource", func() {
+			testClusterNotDistributed()
+
+			mockFederator.EXPECT().Delete(gomock.Any()).Return(nil).MaxTimes(0).Do(func(c *submarinerv1.Cluster) {
+				deleteCalled <- true
+			})
+
+			Expect(deleteCluster()).To(Succeed())
+
+			Consistently(deleteCalled).ShouldNot(Receive(), "Delete was unexpectedly called")
+		})
+	})
+
+	When("a Cluster resource is deleted and federated Delete initially fails", func() {
+		It("should retry until it succeeds", func() {
+			testClusterDistributed()
+
+			// Simulate the first call to Delete fails and the second succeeds.
+			gomock.InOrder(
+				mockFederator.EXPECT().Delete(EqCluster(clusterToDelete())).Return(errors.New("mock")),
+				mockFederator.EXPECT().Delete(EqCluster(clusterToDelete())).Return(nil).Do(func(c *submarinerv1.Cluster) {
+					deleteCalled <- true
+				}))
+
+			Expect(deleteCluster()).To(Succeed())
+
+			Eventually(deleteCalled, 5).Should(Receive(), "Delete was not retried")
 		})
 	})
 
 	When("an Endpoint resource is added", func() {
 		It("should distribute the resource", func() {
-			var captured **submarinerv1.Endpoint = new(*submarinerv1.Endpoint)
-			mockFederator.EXPECT().Distribute(EqEndpoint(endpoint)).Return(nil).Do(func(e *submarinerv1.Endpoint) {
-				*captured = e
-				distributeCalled <- true
-			})
-
-			Expect(createEndpoint()).To(Succeed())
-
-			Eventually(distributeCalled, 5).Should(Receive(), "Distribute was not called")
-			Expect((*captured).GetLabels()).Should(HaveKeyWithValue(clusterIDLabelKey, clusterID))
+			testEndpointDistributed()
 		})
 	})
 
@@ -284,27 +375,59 @@ func testResourceDistribution() {
 
 	When("an Endpoint resource is added with a non-matching clusterID label", func() {
 		It("should not distribute the resource", func() {
-			endpoint.SetLabels(map[string]string{clusterIDLabelKey: "west"})
-			mockFederator.EXPECT().Distribute(EqEndpoint(endpoint)).Return(nil).MaxTimes(0).Do(func(e *submarinerv1.Endpoint) {
-				distributeCalled <- true
-			})
-
-			Expect(createEndpoint()).To(Succeed())
-
-			Consistently(distributeCalled).ShouldNot(Receive(), "Distribute was unexpectedly called")
+			testEndpointNotDistributed()
 		})
 	})
 
 	When("an Endpoint resource is added with a matching clusterID label", func() {
 		It("should distribute the resource", func() {
 			cluster.SetLabels(map[string]string{clusterIDLabelKey: clusterID})
-			mockFederator.EXPECT().Distribute(EqEndpoint(endpoint)).Return(nil).Do(func(c *submarinerv1.Endpoint) {
-				distributeCalled <- true
+			testEndpointDistributed()
+		})
+	})
+
+	When("an Endpoint resource is deleted", func() {
+		It("should delete the distributed resource", func() {
+			testEndpointDistributed()
+
+			mockFederator.EXPECT().Delete(EqEndpoint(endpointToDelete())).Return(nil).Do(func(f interface{}) {
+				deleteCalled <- true
 			})
 
-			Expect(createEndpoint()).To(Succeed())
+			Expect(deleteEndpoint()).To(Succeed())
 
-			Eventually(distributeCalled).Should(Receive(), "Distribute was not called")
+			Eventually(deleteCalled, 5).Should(Receive(), "Delete was not called")
+		})
+	})
+
+	When("an Endpoint resource is deleted with a non-matching clusterID label", func() {
+		It("should not delete the distributed resource", func() {
+			testEndpointNotDistributed()
+
+			mockFederator.EXPECT().Delete(gomock.Any()).Return(nil).MaxTimes(0).Do(func(f interface{}) {
+				deleteCalled <- true
+			})
+
+			Expect(deleteEndpoint()).To(Succeed())
+
+			Consistently(deleteCalled).ShouldNot(Receive(), "Delete was unexpectedly called")
+		})
+	})
+
+	When("an Endpoint resource is deleted and federated Delete initially fails", func() {
+		It("should retry until it succeeds", func() {
+			testEndpointDistributed()
+
+			// Simulate the first call to Delete fails and the second succeeds.
+			gomock.InOrder(
+				mockFederator.EXPECT().Delete(EqEndpoint(endpointToDelete())).Return(errors.New("mock")),
+				mockFederator.EXPECT().Delete(EqEndpoint(endpointToDelete())).Return(nil).Do(func(f interface{}) {
+					deleteCalled <- true
+				}))
+
+			Expect(deleteEndpoint()).To(Succeed())
+
+			Eventually(deleteCalled, 5).Should(Receive(), "Delete was not retried")
 		})
 	})
 }
@@ -312,7 +435,8 @@ func testResourceDistribution() {
 func newEndpoint() *submarinerv1.Endpoint {
 	return &submarinerv1.Endpoint{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "east-endpoint",
+			Name:      "east-endpoint",
+			Namespace: "submariner",
 		},
 		Spec: submarinerv1.EndpointSpec{
 			ClusterID: "east",
@@ -327,7 +451,8 @@ func newEndpoint() *submarinerv1.Endpoint {
 func newCluster() *submarinerv1.Cluster {
 	return &submarinerv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "east",
+			Name:      "east",
+			Namespace: "submariner",
 		},
 		Spec: submarinerv1.ClusterSpec{
 			ClusterID:   "east",
@@ -383,7 +508,7 @@ func (m *eqCluster) Matches(x interface{}) bool {
 	if !ok {
 		return false
 	}
-	return m.expected.Name == actual.Name && reflect.DeepEqual(m.expected.Spec, actual.Spec)
+	return m.expected.Name == actual.Name && m.expected.Namespace == actual.Namespace && reflect.DeepEqual(m.expected.Spec, actual.Spec)
 }
 
 func (m *eqCluster) String() string {
@@ -399,7 +524,7 @@ func (m *eqEndpoint) Matches(x interface{}) bool {
 	if !ok {
 		return false
 	}
-	return m.expected.Name == actual.Name && reflect.DeepEqual(m.expected.Spec, actual.Spec)
+	return m.expected.Name == actual.Name && m.expected.Namespace == actual.Namespace && reflect.DeepEqual(m.expected.Spec, actual.Spec)
 }
 
 func (m *eqEndpoint) String() string {

@@ -6,15 +6,19 @@ import (
 	"sync"
 
 	"github.com/submariner-io/admiral/pkg/federate"
+	submarinerv1 "github.com/submariner-io/submariner/pkg/apis/submariner.io/v1"
 	submarinerClientset "github.com/submariner-io/submariner/pkg/client/clientset/versioned"
 	submarinerInformers "github.com/submariner-io/submariner/pkg/client/informers/externalversions"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 )
+
+type resourceKeyProviderFunc func(namespace, name string) runtime.Object
 
 type clusterWatcherMap map[string]*clusterWatcher
 
@@ -119,8 +123,23 @@ func (c *controller) startNewWatcherForCluster(kubeConfig *rest.Config, clusterI
 
 	submarinerInformerFactory.Start(watcher.stopChan)
 
-	go runQueueWorker(clusterID, c.federator, clusterInformer, watcher.clusterWorkQueue)
-	go runQueueWorker(clusterID, c.federator, endpointInformer, watcher.endpointWorkQueue)
+	go runQueueWorker(clusterID, c.federator, clusterInformer, watcher.clusterWorkQueue, func(namespace, name string) runtime.Object {
+		return &submarinerv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+			},
+		}
+	})
+
+	go runQueueWorker(clusterID, c.federator, endpointInformer, watcher.endpointWorkQueue, func(namespace, name string) runtime.Object {
+		return &submarinerv1.Endpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+			},
+		}
+	})
 }
 
 func getLabel(obj interface{}, key string) (string, bool) {
@@ -168,7 +187,7 @@ func newResourceEventHandler(clusterID string, workQueue workqueue.RateLimitingI
 
 		label, exists := getLabel(obj, clusterIDLabelKey)
 		if exists && label != clusterID {
-			klog.V(2).Infof("Label \"%s=%s\" for \"%s\" does not match \"%s\" - skipping", clusterIDLabelKey,
+			klog.V(2).Infof("Label \"%s=%s\" for %q does not match %q - skipping", clusterIDLabelKey,
 				label, key, clusterID)
 			return
 		}
@@ -190,12 +209,12 @@ func newResourceEventHandler(clusterID string, workQueue workqueue.RateLimitingI
 }
 
 func (c *controller) OnAdd(clusterID string, kubeConfig *rest.Config) {
-	klog.V(2).Infof("In controller OnAdd for cluster %s", clusterID)
+	klog.V(2).Infof("In controller OnAdd for cluster %q", clusterID)
 
 	// startNewWatcherForCluster locks the controller so there is no need to lock here.
 	c.startNewWatcherForCluster(kubeConfig, clusterID)
 
-	klog.Infof("Cluster \"%s\" has been added - started submariner informers", clusterID)
+	klog.Infof("Cluster %q has been added - started submariner informers", clusterID)
 }
 
 func (c *controller) OnUpdate(clusterID string, kubeConfig *rest.Config) {
@@ -204,43 +223,54 @@ func (c *controller) OnUpdate(clusterID string, kubeConfig *rest.Config) {
 	// startNewWatcherForCluster locks the controller so there is no need to lock here.
 	c.startNewWatcherForCluster(kubeConfig, clusterID)
 
-	klog.Infof("Cluster \"%s\" has been updated - restarted submariner informers", clusterID)
+	klog.Infof("Cluster %q has been updated - restarted submariner informers", clusterID)
 }
 
 func (c *controller) OnRemove(clusterID string) {
-	klog.V(2).Infof("In controller OnRemove for cluster %s", clusterID)
+	klog.V(2).Infof("In controller OnRemove for cluster %q", clusterID)
 
 	c.Lock()
 	defer c.Unlock()
 
 	c.removeExistingClusterWatcher(clusterID)
 
-	klog.Infof("Cluster %s has been removed - stopped submariner informers", clusterID)
+	klog.Infof("Cluster %q has been removed - stopped submariner informers", clusterID)
 }
 
 func runQueueWorker(clusterID string, federator federate.Federator, informer cache.SharedIndexInformer,
-	workQueue workqueue.RateLimitingInterface) {
+	workQueue workqueue.RateLimitingInterface, resourceKeyProvider resourceKeyProviderFunc) {
 
 	for {
-		key, shutdown := workQueue.Get()
+		keyObj, shutdown := workQueue.Get()
 		if shutdown {
-			klog.V(2).Infof("Submariner watcher for cluster \"%s\" stopped", clusterID)
+			klog.V(2).Infof("Submariner watcher for cluster %q stopped", clusterID)
 			return
 		}
 
-		klog.V(2).Infof("Processing key \"%s\" for cluster \"%s\"", key, clusterID)
+		key := keyObj.(string)
+
+		klog.V(2).Infof("Processing key %q for cluster %q", key, clusterID)
 
 		func() {
 			defer workQueue.Done(key)
 
-			item, exists, err := informer.GetIndexer().GetByKey(key.(string))
+			item, exists, err := informer.GetIndexer().GetByKey(key)
 			if err != nil {
-				klog.Errorf("Error fetching object with key %s from store: %v", key, err)
+				klog.Errorf("Error fetching object with key %q from store: %v", key, err)
 				workQueue.AddRateLimited(key)
 			} else if !exists {
-				klog.V(2).Infof("Key \"%s\" does not exist - deleting distributed resource", key)
-				// TODO - handle delete
-				workQueue.Forget(key)
+				// Ignoring the error as it should never happen as we're using the corresponding function(s) to create the keys.
+				namespace, name, _ := cache.SplitMetaNamespaceKey(key)
+				resourceKey := resourceKeyProvider(namespace, name)
+
+				klog.V(2).Infof("Key %q does not exist - deleting distributed resource: %#v", key, resourceKey)
+
+				if err := federator.Delete(resourceKey); err != nil {
+					klog.Errorf("Error deleting %#v: %v", resourceKey, err)
+					workQueue.AddRateLimited(key)
+				} else {
+					workQueue.Forget(key)
+				}
 			} else {
 				obj := setLabel(item.(runtime.Object), clusterIDLabelKey, clusterID)
 
