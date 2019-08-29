@@ -80,13 +80,16 @@ func (c *controller) Stop() {
 	}
 }
 
-func (c *controller) removeExistingClusterWatcher(clusterID string) {
+func (c *controller) removeExistingClusterWatcher(clusterID string) bool {
 	watcher := c.clusterWatchers[clusterID]
 	if watcher != nil {
-		klog.V(2).Infof("A watcher for cluster %s already exists - stopping watch", clusterID)
+		klog.V(2).Infof("Stopping watcher for existing cluster %s", clusterID)
 		watcher.close()
 		delete(c.clusterWatchers, clusterID)
+		return true
 	}
+
+	return false
 }
 
 func (c *controller) startNewWatcherForCluster(kubeConfig *rest.Config, clusterID string) {
@@ -95,11 +98,6 @@ func (c *controller) startNewWatcherForCluster(kubeConfig *rest.Config, clusterI
 		klog.Errorf("error building submariner clientset for cluster %s: %v", clusterID, err)
 		return
 	}
-
-	c.Lock()
-	defer c.Unlock()
-
-	c.removeExistingClusterWatcher(clusterID)
 
 	watcher := &clusterWatcher{
 		clusterID: clusterID,
@@ -142,7 +140,7 @@ func (c *controller) startNewWatcherForCluster(kubeConfig *rest.Config, clusterI
 	})
 }
 
-func getLabel(obj interface{}, key string) (string, bool) {
+func getClusterIDLabel(obj interface{}) (string, bool) {
 	if deleted, ok := obj.(cache.DeletedFinalStateUnknown); ok {
 		obj = deleted.Obj
 	}
@@ -157,11 +155,11 @@ func getLabel(obj interface{}, key string) (string, bool) {
 		return "", false
 	}
 
-	label, exists := labels[key]
+	label, exists := labels[clusterIDLabelKey]
 	return label, exists
 }
 
-func setLabel(obj runtime.Object, key, value string) runtime.Object {
+func setClusterIDLabel(obj runtime.Object, value string) runtime.Object {
 	copy := obj.DeepCopyObject()
 
 	// We can safely ignore the error as all the resources implement meta.Object
@@ -170,10 +168,10 @@ func setLabel(obj runtime.Object, key, value string) runtime.Object {
 	labels := metadata.GetLabels()
 	if labels == nil {
 		labels = make(map[string]string)
+		metadata.SetLabels(labels)
 	}
 
-	labels[key] = value
-	metadata.SetLabels(labels)
+	labels[clusterIDLabelKey] = value
 	return copy
 }
 
@@ -185,7 +183,7 @@ func newResourceEventHandler(clusterID string, workQueue workqueue.RateLimitingI
 			return
 		}
 
-		label, exists := getLabel(obj, clusterIDLabelKey)
+		label, exists := getClusterIDLabel(obj)
 		if exists && label != clusterID {
 			klog.V(2).Infof("Label \"%s=%s\" for \"%s\" does not match \"%s\" - skipping", clusterIDLabelKey,
 				label, key, clusterID)
@@ -211,7 +209,9 @@ func newResourceEventHandler(clusterID string, workQueue workqueue.RateLimitingI
 func (c *controller) OnAdd(clusterID string, kubeConfig *rest.Config) {
 	klog.V(2).Infof("In controller OnAdd for cluster %s", clusterID)
 
-	// startNewWatcherForCluster locks the controller so there is no need to lock here.
+	c.Lock()
+	defer c.Unlock()
+
 	c.startNewWatcherForCluster(kubeConfig, clusterID)
 
 	klog.Infof("Cluster \"%s\" has been added - started submariner informers", clusterID)
@@ -220,7 +220,13 @@ func (c *controller) OnAdd(clusterID string, kubeConfig *rest.Config) {
 func (c *controller) OnUpdate(clusterID string, kubeConfig *rest.Config) {
 	klog.V(2).Infof("In controller OnUpdate for cluster %s", clusterID)
 
-	// startNewWatcherForCluster locks the controller so there is no need to lock here.
+	c.Lock()
+	defer c.Unlock()
+
+	if !c.removeExistingClusterWatcher(clusterID) {
+		klog.Warningf("Existing watcher not found for updated cluster %s", clusterID)
+	}
+
 	c.startNewWatcherForCluster(kubeConfig, clusterID)
 
 	klog.Infof("Cluster \"%s\" has been updated - restarted submariner informers", clusterID)
@@ -232,7 +238,9 @@ func (c *controller) OnRemove(clusterID string) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.removeExistingClusterWatcher(clusterID)
+	if !c.removeExistingClusterWatcher(clusterID) {
+		klog.Warningf("Existing watcher not found for removed cluster %s", clusterID)
+	}
 
 	klog.Infof("Cluster %s has been removed - stopped submariner informers", clusterID)
 }
@@ -258,7 +266,10 @@ func runQueueWorker(clusterID string, federator federate.Federator, informer cac
 			if err != nil {
 				klog.Errorf("Error fetching object with key %s from store: %v", key, err)
 				workQueue.AddRateLimited(key)
-			} else if !exists {
+				return
+			}
+
+			if !exists {
 				// Ignoring the error as it should never happen as we're using the corresponding function(s) to create the keys.
 				namespace, name, _ := cache.SplitMetaNamespaceKey(key)
 				resourceKey := resourceKeyProvider(namespace, name)
@@ -268,21 +279,24 @@ func runQueueWorker(clusterID string, federator federate.Federator, informer cac
 				if err := federator.Delete(resourceKey); err != nil {
 					klog.Errorf("Error deleting %#v: %v", resourceKey, err)
 					workQueue.AddRateLimited(key)
-				} else {
-					workQueue.Forget(key)
+					return
 				}
-			} else {
-				obj := setLabel(item.(runtime.Object), clusterIDLabelKey, clusterID)
 
-				klog.V(2).Infof("Distributing: %#v", obj)
-
-				if err := federator.Distribute(obj); err != nil {
-					klog.Errorf("Error distributing %#v: %v", item, err)
-					workQueue.AddRateLimited(key)
-				} else {
-					workQueue.Forget(key)
-				}
+				workQueue.Forget(key)
+				return
 			}
+
+			obj := setClusterIDLabel(item.(runtime.Object), clusterID)
+
+			klog.V(2).Infof("Distributing: %#v", obj)
+
+			if err := federator.Distribute(obj); err != nil {
+				klog.Errorf("Error distributing %#v: %v", item, err)
+				workQueue.AddRateLimited(key)
+				return
+			}
+
+			workQueue.Forget(key)
 		}()
 	}
 }
