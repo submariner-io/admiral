@@ -89,14 +89,16 @@ type Options struct {
 	GroupVersion *schema.GroupVersion
 }
 
+// DefaultOptions are the options when invoking a NewDefaultFramework()
+var DefaultOptions Options = Options{
+	ClientQPS:   20,
+	ClientBurst: 50,
+}
+
 // NewDefaultFramework makes a new framework and sets up a BeforeEach/AfterEach for
 // you (you can write additional before/after each functions).
 func NewDefaultFramework(baseName string) Framework {
-	options := Options{
-		ClientQPS:   20,
-		ClientBurst: 50,
-	}
-	return NewFramework(baseName, options)
+	return NewFramework(baseName, DefaultOptions)
 }
 
 // NewFramework creates a test framework.
