@@ -153,7 +153,7 @@ func (f *federator) OnUpdate(oldObj, newObj interface{}) {
 	// (eg LastProbeTime). We're only interested in changes to the KubeFedClusterSpec which contains the
 	// cluster's connection info so check if the old and new Specs differ before proceeding.
 	if reflect.DeepEqual(oldCluster.Spec, newCluster.Spec) {
-		klog.V(2).Infof("KubeFedClusterSpecs are equal - not updating")
+		klog.V(3).Infof("KubeFedClusterSpecs are equal - not updating")
 		return
 	}
 
