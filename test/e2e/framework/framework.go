@@ -7,19 +7,19 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/uuid"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
-
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/uuid"
+	"k8s.io/client-go/kubernetes"
 	kubeclientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 
-	. "github.com/onsi/gomega"
+	"github.com/submariner-io/admiral/pkg/federate"
 )
 
 const (
@@ -40,6 +40,11 @@ var Clusters = ClusterIndexes{
 	Cluster2,
 }
 
+// InitFunc type holds the signature of functions used by
+// control plane helpers to initalize the framework with a properly
+// configured federate.Federator
+type InitFunc func() Framework
+
 // Framework supports common operations used by e2e tests; it will keep a client & a namespace for you.
 // Eventual goal is to merge this with integration test framework.
 type Framework interface {
@@ -55,6 +60,9 @@ type Framework interface {
 	GetKubeContexts() []string
 	GetClusterClients() []*kubeclientset.Clientset
 	GetClusterConfigs() []*rest.Config
+
+	GetFederator() federate.Federator
+	SetFederator(federate.Federator)
 }
 
 type frameworkWrapper struct {
@@ -80,6 +88,9 @@ type frameworkWrapper struct {
 
 	// configuration for framework's client
 	options Options
+
+	// federator stores the federator that will be initialized before the test
+	federator federate.Federator
 }
 
 // Options is a struct for managing test framework options.
@@ -300,6 +311,14 @@ func (f *frameworkWrapper) GetUniqueName() string {
 
 func (f *frameworkWrapper) GetBaseName() string {
 	return f.baseName
+}
+
+func (f *frameworkWrapper) GetFederator() federate.Federator {
+	return f.federator
+}
+
+func (f *frameworkWrapper) SetFederator(federator federate.Federator) {
+	f.federator = federator
 }
 
 func generateNamespace(client kubeclientset.Interface, baseName string, labels map[string]string) *v1.Namespace {
