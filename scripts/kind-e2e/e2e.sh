@@ -111,7 +111,7 @@ function test_with_e2e_tests {
     cd ../test/e2e
 
     # Setup the KUBECONFIG env
-    export KUBECONFIG=$(echo ${PRJ_ROOT}/output/kind-config/dapper/kind-config-cluster{1..3} | sed 's/ /:/g')
+    export KUBECONFIG=$(echo ${PRJ_ROOT}/output/kind-config/dapper/kind-config-cluster{1..2} | sed 's/ /:/g')
 
     go test -args -ginkgo.v -ginkgo.randomizeAllSpecs \
         -dp-context cluster1 -dp-context cluster2  \
