@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/submariner-io/admiral/test/e2e/framework"
+
+	_ "github.com/submariner-io/admiral/test/e2e/api"
 )
 
 func init() {

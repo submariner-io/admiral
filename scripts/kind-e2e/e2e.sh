@@ -163,7 +163,7 @@ install_helm
 if [[ $3 = true ]]; then
     enable_kubefed
 fi
-#test_with_e2e_tests
+test_with_e2e_tests
 
 if [[ $1 = keep ]]; then
     echo "your 2 virtual clusters are deployed and working properly."
