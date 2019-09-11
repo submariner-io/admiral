@@ -58,3 +58,30 @@ func ExpectNoErrorWithOffset(offset int, err error, explain ...interface{}) {
 	}
 	ExpectWithOffset(1+offset, err).NotTo(HaveOccurred(), explain...)
 }
+
+// BuildPresenceMap is meant to be used as a way to make sure that the tests
+// will continue to be valid even if `framework.Clusters` change in the future.
+func BuildPresenceMap(testContexts []string, clusters ...string) map[int]bool {
+	presence := make(map[int]bool)
+	skipSearch := clusters == nil
+
+	var found bool
+	for _, n := range Clusters {
+		if skipSearch {
+			presence[n] = true
+			continue
+		}
+
+		found = false
+		for _, name := range clusters {
+			if testContexts[n] == name {
+				found = true
+				break
+			}
+		}
+		presence[n] = found
+	}
+
+	return presence
+
+}
