@@ -1,6 +1,6 @@
 .idea
 .dapper
-bin
+/bin
 dist
 output
 /vendor
@@ -8,3 +8,5 @@ output
 .project
 .settings
 *.coverprofile
+*.out
+junit.xml
