@@ -8,9 +8,9 @@ require (
 	github.com/go-logr/logr v0.1.0 // indirect
 	github.com/go-logr/zapr v0.1.1 // indirect
 	github.com/golang/mock v1.3.1
-	github.com/onsi/ginkgo v1.8.0
-	github.com/onsi/gomega v1.5.0
-	github.com/submariner-io/submariner v0.0.2-0.20190828132721-a11a9a84c90d
+	github.com/onsi/ginkgo v1.12.0
+	github.com/onsi/gomega v1.9.0
+	github.com/submariner-io/submariner v0.1.0
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.10.0 // indirect
@@ -23,5 +23,3 @@ require (
 	sigs.k8s.io/kubefed v0.1.0-rc3
 	sigs.k8s.io/testing_frameworks v0.1.1 // indirect
 )
-
-replace github.com/bronze1man/goStrongswanVici => github.com/mangelajo/goStrongswanVici v0.0.0-20190223031456-9a5ae4453bd
