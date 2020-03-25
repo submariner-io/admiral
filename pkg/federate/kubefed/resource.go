@@ -30,18 +30,10 @@ type UnstructuredConversionError struct {
 
 var _ error = &UnstructuredConversionError{}
 
-func (f *federator) Distribute(resource runtime.Object, clusterNames ...string) error {
+func (f *Federator) Distribute(resource runtime.Object) error {
 	fedResource, err := createFederatedResource(f.scheme, resource)
 	if err != nil {
 		return err
-	}
-
-	if len(clusterNames) > 0 {
-		unstructured.RemoveNestedField(fedResource.Object, ctlutil.SpecField, ctlutil.PlacementField)
-		err = ctlutil.SetClusterNames(fedResource, clusterNames)
-		if err != nil {
-			return fmt.Errorf(errorSettingFederatedFields, err)
-		}
 	}
 
 	// Update first, as it will probably be the most common operation
@@ -91,7 +83,7 @@ func (f *federator) Distribute(resource runtime.Object, clusterNames ...string) 
 	return nil
 }
 
-func (f *federator) Delete(resource runtime.Object) error {
+func (f *Federator) Delete(resource runtime.Object) error {
 	fedResource, err := createFederatedResource(f.scheme, resource)
 	if err != nil {
 		return err

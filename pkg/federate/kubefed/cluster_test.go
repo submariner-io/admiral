@@ -59,13 +59,13 @@ func testAddingWatch() {
 			*newKubeFedCluster("west"))
 
 		handler1 := &testClusterEventHandler1{*newTestClusterEventHandler()}
-		err := federator.WatchClusters(handler1)
+		err := federator.AddHandler(handler1)
 		Expect(err).ToNot(HaveOccurred())
 
 		handler1.verifyAddEvents("east", "west")
 
 		handler2 := &testClusterEventHandler2{*newTestClusterEventHandler()}
-		err = federator.WatchClusters(handler2)
+		err = federator.AddHandler(handler2)
 		Expect(err).ToNot(HaveOccurred())
 
 		handler2.verifyAddEvents("east", "west")
@@ -78,7 +78,7 @@ func testClose() {
 		federator := newFederatorWithWatcher(watch.NewFake(), stopChan)
 
 		handler := &testClusterEventHandler1{*newTestClusterEventHandler()}
-		err := federator.WatchClusters(handler)
+		err := federator.AddHandler(handler)
 		Expect(err).ToNot(HaveOccurred())
 
 		queue := federator.clusterWatchers[0].eventQueue
@@ -115,7 +115,7 @@ func testOnRemove(fakeWatcher *watch.FakeWatcher, handler *testClusterEventHandl
 func testKubeFedClusterNotifications() {
 	var stopChan chan struct{}
 	var fakeWatcher *watch.FakeWatcher
-	var federator *federator
+	var federator *Federator
 	var handler *testClusterEventHandler
 	var event interface{}
 	BeforeEach(func() {
@@ -124,7 +124,7 @@ func testKubeFedClusterNotifications() {
 		federator = newFederatorWithWatcher(fakeWatcher, stopChan)
 		handler = newTestClusterEventHandler()
 
-		err := federator.WatchClusters(handler)
+		err := federator.AddHandler(handler)
 		Expect(err).ToNot(HaveOccurred())
 		Consistently(handler.events).ShouldNot(Receive())
 	})
@@ -222,8 +222,8 @@ func newKubeFedCluster(name string) *fedv1.KubeFedCluster {
 	}
 }
 
-func newFederatorWithWatcher(watcher watch.Interface, stopChan <-chan struct{}, initialKubeFedClusters ...fedv1.KubeFedCluster) *federator {
-	federator := &federator{
+func newFederatorWithWatcher(watcher watch.Interface, stopChan <-chan struct{}, initialKubeFedClusters ...fedv1.KubeFedCluster) *Federator {
+	federator := &Federator{
 		clusterMap:    make(map[string]*rest.Config),
 		kubeFedClient: clientFake.NewFakeClient(newSecret()),
 		stopChan:      stopChan,

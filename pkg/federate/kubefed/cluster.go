@@ -40,7 +40,7 @@ type clusterRemoved struct {
 	clusterID string
 }
 
-func (f *federator) WatchClusters(handler federate.ClusterEventHandler) error {
+func (f *Federator) AddHandler(handler federate.ClusterEventHandler) error {
 	f.startInformerOnce.Do(func() {
 		go func() {
 			f.kubeFedClusterInformer.Run(f.stopChan)
@@ -79,7 +79,7 @@ func (f *federator) WatchClusters(handler federate.ClusterEventHandler) error {
 	return nil
 }
 
-func (f *federator) OnAdd(obj interface{}) {
+func (f *Federator) OnAdd(obj interface{}) {
 	klog.V(3).Infof("In federated cluster watcher OnAdd for %#v", obj)
 
 	kubeFedCluster := obj.(*fedv1.KubeFedCluster)
@@ -108,7 +108,7 @@ func (f *federator) OnAdd(obj interface{}) {
 	}
 }
 
-func (f *federator) OnDelete(obj interface{}) {
+func (f *Federator) OnDelete(obj interface{}) {
 	klog.V(3).Infof("In federated cluster watcher OnDelete for %#v", obj)
 
 	kubeFedCluster, ok := obj.(*fedv1.KubeFedCluster)
@@ -143,7 +143,7 @@ func (f *federator) OnDelete(obj interface{}) {
 	}
 }
 
-func (f *federator) OnUpdate(oldObj, newObj interface{}) {
+func (f *Federator) OnUpdate(oldObj, newObj interface{}) {
 	klog.V(3).Infof("In federated cluster watcher OnUpdate - OLD OBJ: %#v\nNEW OBJ: %#v", oldObj, newObj)
 
 	oldCluster := oldObj.(*fedv1.KubeFedCluster)
@@ -181,7 +181,7 @@ func (f *federator) OnUpdate(oldObj, newObj interface{}) {
 	}
 }
 
-func (f *federator) buildFederatedClusterConfig(kubeFedCluster *fedv1.KubeFedCluster) (*rest.Config, error) {
+func (f *Federator) buildFederatedClusterConfig(kubeFedCluster *fedv1.KubeFedCluster) (*rest.Config, error) {
 	apiEndpoint := kubeFedCluster.Spec.APIEndpoint
 	if apiEndpoint == "" {
 		return nil, fmt.Errorf("the API endpoint is empty")
@@ -213,7 +213,7 @@ func (f *federator) buildFederatedClusterConfig(kubeFedCluster *fedv1.KubeFedClu
 	return kubeConfig, nil
 }
 
-func (f *federator) initKubeFedClusterInformer(listerWatcher cache.ListerWatcher) {
+func (f *Federator) initKubeFedClusterInformer(listerWatcher cache.ListerWatcher) {
 	// Providing 0 duration to an informer indicates that resync should be delayed as long as possible
 	resyncPeriod := 0 * time.Second
 	_, informer := cache.NewInformer(listerWatcher, &fedv1.KubeFedCluster{}, resyncPeriod, f)
