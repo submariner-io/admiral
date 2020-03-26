@@ -33,7 +33,7 @@ require (
 	k8s.io/klog v0.0.0-20181108234604-8139d8cb77af
 	k8s.io/kube-openapi v0.0.0-20200204173128-addea2498afe // indirect
 	sigs.k8s.io/controller-runtime v0.1.12
-	sigs.k8s.io/kubefed v0.1.0-rc3
+	sigs.k8s.io/kubefed v0.2.0-alpha.1
 	sigs.k8s.io/testing_frameworks v0.1.1 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
