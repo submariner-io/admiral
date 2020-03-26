@@ -7,7 +7,7 @@ require (
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-logr/logr v0.1.0 // indirect
 	github.com/go-logr/zapr v0.1.1 // indirect
-	github.com/golang/mock v1.3.1
+	github.com/golang/mock v1.4.3
 	github.com/onsi/ginkgo v1.12.0
 	github.com/onsi/gomega v1.9.0
 	github.com/submariner-io/submariner v0.1.0
