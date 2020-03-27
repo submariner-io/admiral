@@ -17,8 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	ctlutil "sigs.k8s.io/kubefed/pkg/controller/util"
-	kubefedopt "sigs.k8s.io/kubefed/pkg/kubefedctl/options"
 )
 
 type fakeClientWithUpdateError struct {
@@ -126,14 +124,14 @@ func testCreateFederatedResource() {
 			expected, err := createFederatedResource(scheme, resource)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(expected.GroupVersionKind().Group).
-				To(Equal(kubefedopt.DefaultFederatedGroup))
+				To(Equal(DefaultFederatedGroup))
 		})
 
 		It("the returned resource's Version should be the default KubeFed FederatedVersion", func() {
 			expected, err := createFederatedResource(scheme, resource)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(expected.GroupVersionKind().Version).
-				To(Equal(kubefedopt.DefaultFederatedVersion))
+				To(Equal(DefaultFederatedVersion))
 		})
 
 		It("the returned resource's name should be the same as the input's object", func() {
@@ -249,9 +247,7 @@ func testDistribute() {
 				Expect(fedPodObj["spec"]).ToNot(BeEquivalentTo(expectObj["spec"]))
 
 				mapObj, _, _ := unstructured.NestedSlice(
-					fedPod.Object,
-					ctlutil.SpecField, ctlutil.TemplateField, "spec", "containers",
-				)
+					fedPod.Object, SpecField, TemplateField, "spec", "containers")
 				image := mapObj[0].(map[string]interface{})["image"]
 				Expect(image).To(BeEquivalentTo(expectedImage))
 			}
@@ -393,18 +389,11 @@ func newFederatorWithScheme(scheme *runtime.Scheme, client client.Client, initOb
 }
 
 func getTemplateField(resource *unstructured.Unstructured) (map[string]interface{}, bool, error) {
-	return unstructured.NestedMap(
-		resource.Object,
-		ctlutil.SpecField, ctlutil.TemplateField,
-	)
+	return unstructured.NestedMap(resource.Object, SpecField, TemplateField)
 }
 
 func getMatchLabelsField(resource *unstructured.Unstructured) (map[string]string, bool, error) {
-	return unstructured.NestedStringMap(
-		resource.Object,
-		ctlutil.SpecField, ctlutil.PlacementField,
-		ctlutil.ClusterSelectorField, ctlutil.MatchLabelsField,
-	)
+	return unstructured.NestedStringMap(resource.Object, SpecField, PlacementField, ClusterSelectorField, MatchLabelsField)
 }
 
 func getResourceFromAPI(kubeFedClient client.Client, resource *unstructured.Unstructured) (*unstructured.Unstructured, error) {
