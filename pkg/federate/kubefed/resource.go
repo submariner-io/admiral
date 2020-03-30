@@ -12,8 +12,6 @@ import (
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctlutil "sigs.k8s.io/kubefed/pkg/controller/util"
-	kubefedopt "sigs.k8s.io/kubefed/pkg/kubefedctl/options"
 )
 
 const (
@@ -49,15 +47,15 @@ func (f *Federator) Distribute(resource runtime.Object) error {
 		// Replace the "spec" field in the existing object with the updated field from "fedResource". We preserve the
 		// existing metadata info, specifically the ResourceVersion which must be set on an update operation.
 		// Note - we set a valid "spec" field earlier in "fedResource" so no need to handle the other return values.
-		newSpec, _, _ := unstructured.NestedFieldNoCopy(fedResource.Object, ctlutil.SpecField)
+		newSpec, _, _ := unstructured.NestedFieldNoCopy(fedResource.Object, SpecField)
 
-		oldSpec, _, _ := unstructured.NestedFieldNoCopy(existing.Object, ctlutil.SpecField)
+		oldSpec, _, _ := unstructured.NestedFieldNoCopy(existing.Object, SpecField)
 		if reflect.DeepEqual(oldSpec, newSpec) {
 			// No need to issue the update if the spec didn't change
 			return nil
 		}
 
-		if setErr := unstructured.SetNestedField(existing.Object, newSpec, ctlutil.SpecField); setErr != nil {
+		if setErr := unstructured.SetNestedField(existing.Object, newSpec, SpecField); setErr != nil {
 			return fmt.Errorf(errorSettingFederatedFields, setErr)
 		}
 
@@ -107,13 +105,13 @@ func createFederatedResource(scheme *runtime.Scheme, resource runtime.Object) (*
 	removeUnwantedFields(targetResource)
 
 	// Adding the template field and including the targetResource's object as its content.
-	err = unstructured.SetNestedField(fedResource.Object, targetResource.Object, ctlutil.SpecField, ctlutil.TemplateField)
+	err = unstructured.SetNestedField(fedResource.Object, targetResource.Object, SpecField, TemplateField)
 	if err != nil {
 		return nil, fmt.Errorf(errorSettingFederatedFields, err)
 	}
 	// Adding an empty selector for the Placement field's MatchLabel. An empty selector means
 	// all clusters.
-	err = unstructured.SetNestedStringMap(fedResource.Object, map[string]string{}, ctlutil.SpecField, ctlutil.PlacementField, ctlutil.ClusterSelectorField, ctlutil.MatchLabelsField)
+	err = unstructured.SetNestedStringMap(fedResource.Object, map[string]string{}, SpecField, PlacementField, ClusterSelectorField, MatchLabelsField)
 	if err != nil {
 		return nil, fmt.Errorf(errorSettingFederatedFields, err)
 	}
@@ -127,8 +125,8 @@ func setBasicMetaFields(resource, base *unstructured.Unstructured) {
 
 	// TODO(mpeterson): Modify to get the type config and generalize this usage
 	gv := schema.GroupVersion{
-		Group:   kubefedopt.DefaultFederatedGroup,
-		Version: kubefedopt.DefaultFederatedVersion,
+		Group:   DefaultFederatedGroup,
+		Version: DefaultFederatedVersion,
 	}
 	resource.SetAPIVersion(gv.String())
 

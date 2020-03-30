@@ -14,6 +14,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	DefaultFederatedGroup   = "types.kubefed.k8s.io"
+	DefaultFederatedVersion = "v1beta1"
+	SpecField               = "spec"
+	TemplateField           = "template"
+	PlacementField          = "placement"
+	MatchLabelsField        = "matchLabels"
+	ClusterSelectorField    = "clusterSelector"
+	ApiEndpointField        = "apiEndpoint"
+	SecretRefField          = "secretRef"
+	NameField               = "name"
+	CaBundleField           = "caBundle"
+)
+
 var (
 	kubeFedNamespace string
 )

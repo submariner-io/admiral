@@ -9,17 +9,17 @@ import (
 	federate "github.com/submariner-io/admiral/pkg/federate"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	fedv1 "sigs.k8s.io/kubefed/pkg/apis/core/v1beta1"
-	"sigs.k8s.io/kubefed/pkg/client/generic/scheme"
 )
 
 type clusterEvent interface {
@@ -82,7 +82,8 @@ func (f *Federator) AddHandler(handler federate.ClusterEventHandler) error {
 func (f *Federator) OnAdd(obj interface{}) {
 	klog.V(3).Infof("In federated cluster watcher OnAdd for %#v", obj)
 
-	kubeFedCluster := obj.(*fedv1.KubeFedCluster)
+	kubeFedCluster := obj.(*unstructured.Unstructured)
+	clusterName := kubeFedCluster.GetName()
 
 	kubeConfig, err := f.buildFederatedClusterConfig(kubeFedCluster)
 	if err != nil {
@@ -93,16 +94,16 @@ func (f *Federator) OnAdd(obj interface{}) {
 	f.Lock()
 	defer f.Unlock()
 
-	if f.clusterMap[kubeFedCluster.Name] != nil {
-		klog.V(2).Infof("An entry for KubeFedCluster \"%s\" already exists", kubeFedCluster.Name)
+	if f.clusterMap[clusterName] != nil {
+		klog.V(2).Infof("An entry for KubeFedCluster %q already exists", clusterName)
 		return
 	}
 
-	klog.Infof("KubeFedCluster \"%s\" has been added", kubeFedCluster.Name)
+	klog.Infof("KubeFedCluster %q has been added", clusterName)
 
-	f.clusterMap[kubeFedCluster.Name] = kubeConfig
+	f.clusterMap[clusterName] = kubeConfig
 
-	event := &clusterAdded{kubeFedCluster.Name, kubeConfig}
+	event := &clusterAdded{clusterName, kubeConfig}
 	for _, clusterWatcher := range f.clusterWatchers {
 		clusterWatcher.enqueue(event)
 	}
@@ -111,33 +112,35 @@ func (f *Federator) OnAdd(obj interface{}) {
 func (f *Federator) OnDelete(obj interface{}) {
 	klog.V(3).Infof("In federated cluster watcher OnDelete for %#v", obj)
 
-	kubeFedCluster, ok := obj.(*fedv1.KubeFedCluster)
+	kubeFedCluster, ok := obj.(*unstructured.Unstructured)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			klog.Errorf("Could not convert object %#v to a KubeFedCluster", obj)
 			return
 		}
-		kubeFedCluster, ok = tombstone.Obj.(*fedv1.KubeFedCluster)
+		kubeFedCluster, ok = tombstone.Obj.(*unstructured.Unstructured)
 		if !ok {
 			klog.Errorf("Could not convert object tombstone %#v to a KubeFedCluster", obj)
 			return
 		}
 	}
 
+	clusterName := kubeFedCluster.GetName()
+
 	f.Lock()
 	defer f.Unlock()
 
-	if f.clusterMap[kubeFedCluster.Name] == nil {
-		klog.Warningf("OnDelete - no cached entry for KubeFedCluster \"%s\" exists", kubeFedCluster.Name)
+	if f.clusterMap[clusterName] == nil {
+		klog.Warningf("OnDelete - no cached entry for KubeFedCluster %q exists", clusterName)
 		return
 	}
 
-	klog.Infof("KubeFedCluster \"%s\" has been deleted", kubeFedCluster.Name)
+	klog.Infof("KubeFedCluster %q has been deleted", clusterName)
 
-	delete(f.clusterMap, kubeFedCluster.Name)
+	delete(f.clusterMap, clusterName)
 
-	event := &clusterRemoved{kubeFedCluster.Name}
+	event := &clusterRemoved{clusterName}
 	for _, clusterWatcher := range f.clusterWatchers {
 		clusterWatcher.enqueue(event)
 	}
@@ -146,13 +149,16 @@ func (f *Federator) OnDelete(obj interface{}) {
 func (f *Federator) OnUpdate(oldObj, newObj interface{}) {
 	klog.V(3).Infof("In federated cluster watcher OnUpdate - OLD OBJ: %#v\nNEW OBJ: %#v", oldObj, newObj)
 
-	oldCluster := oldObj.(*fedv1.KubeFedCluster)
-	newCluster := newObj.(*fedv1.KubeFedCluster)
+	oldCluster := oldObj.(*unstructured.Unstructured)
+	newCluster := newObj.(*unstructured.Unstructured)
+
+	oldSpec, _, _ := unstructured.NestedMap(oldCluster.Object, SpecField)
+	newSpec, _, _ := unstructured.NestedMap(newCluster.Object, SpecField)
 
 	// KubeFedCluster has other fields/structs like KubeFedClusterStatus that may be updated periodically
 	// (eg LastProbeTime). We're only interested in changes to the KubeFedClusterSpec which contains the
 	// cluster's connection info so check if the old and new Specs differ before proceeding.
-	if reflect.DeepEqual(oldCluster.Spec, newCluster.Spec) {
+	if reflect.DeepEqual(oldSpec, newSpec) {
 		klog.V(3).Infof("KubeFedClusterSpecs are equal - not updating")
 		return
 	}
@@ -163,38 +169,40 @@ func (f *Federator) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	klog.Infof("KubeFedCluster \"%s\" has been updated", newCluster.Name)
+	clusterName := newCluster.GetName()
+
+	klog.Infof("KubeFedCluster %q has been updated", clusterName)
 
 	f.Lock()
 	defer f.Unlock()
 
-	if f.clusterMap[newCluster.Name] == nil {
-		klog.Warningf("OnUpdate - no cached entry for KubeFedCluster \"%s\" exists", newCluster.Name)
+	if f.clusterMap[clusterName] == nil {
+		klog.Warningf("OnUpdate - no cached entry for KubeFedCluster %q exists", clusterName)
 		return
 	}
 
-	f.clusterMap[newCluster.Name] = kubeConfig
+	f.clusterMap[clusterName] = kubeConfig
 
-	event := &clusterUpdated{newCluster.Name, kubeConfig}
+	event := &clusterUpdated{clusterName, kubeConfig}
 	for _, clusterWatcher := range f.clusterWatchers {
 		clusterWatcher.enqueue(event)
 	}
 }
 
-func (f *Federator) buildFederatedClusterConfig(kubeFedCluster *fedv1.KubeFedCluster) (*rest.Config, error) {
-	apiEndpoint := kubeFedCluster.Spec.APIEndpoint
-	if apiEndpoint == "" {
-		return nil, fmt.Errorf("the API endpoint is empty")
+func (f *Federator) buildFederatedClusterConfig(kubeFedCluster *unstructured.Unstructured) (*rest.Config, error) {
+	apiEndpoint, found, _ := unstructured.NestedString(kubeFedCluster.Object, SpecField, ApiEndpointField)
+	if !found || apiEndpoint == "" {
+		return nil, fmt.Errorf("the API endpoint is missing or empty")
 	}
 
-	secretName := kubeFedCluster.Spec.SecretRef.Name
-	if secretName == "" {
-		return nil, fmt.Errorf("the cluster does not have a secret name")
+	secretName, found, _ := unstructured.NestedString(kubeFedCluster.Object, SpecField, SecretRefField, NameField)
+	if !found || secretName == "" {
+		return nil, fmt.Errorf("the secret name is missing or empty")
 	}
 
 	secret := &corev1.Secret{}
 	if err := f.kubeFedClient.Get(context.TODO(), client.ObjectKey{Namespace: kubeFedNamespace, Name: secretName}, secret); err != nil {
-		return nil, fmt.Errorf("error getting Secret \"%s\": %v", secretName, err)
+		return nil, fmt.Errorf("error getting Secret %q: %v", secretName, err)
 	}
 
 	token, tokenFound := secret.Data[corev1.ServiceAccountTokenKey]
@@ -207,7 +215,11 @@ func (f *Federator) buildFederatedClusterConfig(kubeFedCluster *fedv1.KubeFedClu
 		return nil, err
 	}
 
-	kubeConfig.CAData = kubeFedCluster.Spec.CABundle
+	caBundle, found, _ := unstructured.NestedString(kubeFedCluster.Object, SpecField, CaBundleField)
+	if found {
+		kubeConfig.CAData = []byte(caBundle)
+	}
+
 	kubeConfig.BearerToken = string(token)
 
 	return kubeConfig, nil
@@ -216,46 +228,28 @@ func (f *Federator) buildFederatedClusterConfig(kubeFedCluster *fedv1.KubeFedClu
 func (f *Federator) initKubeFedClusterInformer(listerWatcher cache.ListerWatcher) {
 	// Providing 0 duration to an informer indicates that resync should be delayed as long as possible
 	resyncPeriod := 0 * time.Second
-	_, informer := cache.NewInformer(listerWatcher, &fedv1.KubeFedCluster{}, resyncPeriod, f)
+	_, informer := cache.NewInformer(listerWatcher, &unstructured.Unstructured{}, resyncPeriod, f)
 	f.kubeFedClusterInformer = informer
 }
 
-func newKubeFedClusterListerWatcher(kubeFedConfig *rest.Config) (cache.ListerWatcher, error) {
-	var obj runtime.Object = &fedv1.KubeFedCluster{}
-
-	gvk, err := apiutil.GVKForObject(obj, scheme.Scheme)
+func newKubeFedClusterListerWatcher(restConfig *rest.Config) (cache.ListerWatcher, error) {
+	dynClient, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
-		return nil, fmt.Errorf("error finding GroupVersionKind for %T: %v", obj, err)
+		return nil, fmt.Errorf("error creating dynamic Client: %v", err)
 	}
 
-	klog.V(3).Infof("GroupVersionKind for %T: %#v", obj, gvk)
-
-	mapper, err := apiutil.NewDiscoveryRESTMapper(kubeFedConfig)
-	if err != nil {
-		return nil, fmt.Errorf("error creating RESTMapper from config: %v", err)
-	}
-
-	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
-	if err != nil {
-		return nil, fmt.Errorf("error creating RESTMapping for %#v: %v", gvk, err)
-	}
-
-	client, err := apiutil.RESTClientForGVK(gvk, kubeFedConfig, scheme.Codecs)
-	if err != nil {
-		return nil, fmt.Errorf("error creating RESTClient for %#v: %v", gvk, err)
+	kubefedClustersRes := schema.GroupVersionResource{
+		Group:    "core.kubefed.k8s.io",
+		Version:  DefaultFederatedVersion,
+		Resource: "kubefedclusters",
 	}
 
 	return &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			result := &fedv1.KubeFedClusterList{}
-			err := client.Get().Namespace(kubeFedNamespace).Resource(mapping.Resource.Resource).
-				VersionedParams(&options, scheme.ParameterCodec).Do().Into(result)
-			return result, err
+			return dynClient.Resource(kubefedClustersRes).Namespace(kubeFedNamespace).List(metav1.ListOptions{})
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			options.Watch = true
-			return client.Get().Namespace(kubeFedNamespace).Resource(mapping.Resource.Resource).
-				VersionedParams(&options, scheme.ParameterCodec).Watch()
+			return dynClient.Resource(kubefedClustersRes).Namespace(kubeFedNamespace).Watch(options)
 		},
 	}, nil
 }

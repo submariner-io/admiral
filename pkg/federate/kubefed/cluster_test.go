@@ -7,13 +7,13 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 	clientFake "sigs.k8s.io/controller-runtime/pkg/client/fake"
-	fedv1 "sigs.k8s.io/kubefed/pkg/apis/core/v1beta1"
 )
 
 type added string
@@ -36,7 +36,7 @@ const (
 	secretName = "my-secret"
 )
 
-var _ = Describe("Kubefed Cluster", func() {
+var _ = Describe("Kubefed ClusterInformer", func() {
 	klog.InitFlags(nil)
 
 	When("Adding a watch", testAddingWatch)
@@ -89,7 +89,7 @@ func testClose() {
 	})
 }
 
-func testOnAdd(fakeWatcher *watch.FakeWatcher, handler *testClusterEventHandler) *fedv1.KubeFedCluster {
+func testOnAdd(fakeWatcher *watch.FakeWatcher, handler *testClusterEventHandler) *unstructured.Unstructured {
 	addedKubeFedCluster := newKubeFedCluster("east")
 	fakeWatcher.Add(addedKubeFedCluster)
 
@@ -150,7 +150,7 @@ func testKubeFedClusterNotifications() {
 			addedKubeFedCluster := testOnAdd(fakeWatcher, handler)
 
 			updatedKubeFedCluster := addedKubeFedCluster.DeepCopy()
-			updatedKubeFedCluster.Spec.CABundle = []byte{0, 1}
+			Expect(unstructured.SetNestedField(updatedKubeFedCluster.Object, "123", SpecField, CaBundleField)).To(Succeed())
 
 			fakeWatcher.Modify(updatedKubeFedCluster)
 
@@ -164,7 +164,7 @@ func testKubeFedClusterNotifications() {
 		It("should notify the ClusterEventHandler of OnAdd, OnUpdate, and OnRemove in order", func() {
 			addedKubeFedCluster := newKubeFedCluster("east")
 			updatedKubeFedCluster := addedKubeFedCluster.DeepCopy()
-			updatedKubeFedCluster.Spec.CABundle = []byte{0, 1}
+			Expect(unstructured.SetNestedField(updatedKubeFedCluster.Object, "123", SpecField, CaBundleField)).To(Succeed())
 
 			fakeWatcher.Add(addedKubeFedCluster)
 			fakeWatcher.Modify(updatedKubeFedCluster)
@@ -204,7 +204,7 @@ func testKubeFedClusterNotifications() {
 			addedKubeFedCluster := testOnAdd(fakeWatcher, handler)
 
 			updatedKubeFedCluster := addedKubeFedCluster.DeepCopy()
-			updatedKubeFedCluster.Status = fedv1.KubeFedClusterStatus{Region: "east"}
+			Expect(unstructured.SetNestedField(updatedKubeFedCluster.Object, "east", "status", "region")).To(Succeed())
 
 			fakeWatcher.Modify(updatedKubeFedCluster)
 			Consistently(handler.events, time.Millisecond*300).ShouldNot(Receive())
@@ -212,17 +212,15 @@ func testKubeFedClusterNotifications() {
 	})
 }
 
-func newKubeFedCluster(name string) *fedv1.KubeFedCluster {
-	return &fedv1.KubeFedCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Spec: fedv1.KubeFedClusterSpec{
-			APIEndpoint: "http://localhost",
-			SecretRef:   fedv1.LocalSecretReference{Name: secretName},
-		},
-	}
+func newKubeFedCluster(name string) *unstructured.Unstructured {
+	u := &unstructured.Unstructured{}
+	u.SetName(name)
+	Expect(unstructured.SetNestedField(u.Object, "http://localhost", SpecField, ApiEndpointField)).To(Succeed())
+	Expect(unstructured.SetNestedField(u.Object, secretName, SpecField, SecretRefField, NameField)).To(Succeed())
+	return u
 }
 
-func newFederatorWithWatcher(watcher watch.Interface, stopChan <-chan struct{}, initialKubeFedClusters ...fedv1.KubeFedCluster) *Federator {
+func newFederatorWithWatcher(watcher watch.Interface, stopChan <-chan struct{}, initialKubeFedClusters ...unstructured.Unstructured) *Federator {
 	federator := &Federator{
 		clusterMap:    make(map[string]*rest.Config),
 		kubeFedClient: clientFake.NewFakeClient(newSecret()),
@@ -231,9 +229,8 @@ func newFederatorWithWatcher(watcher watch.Interface, stopChan <-chan struct{}, 
 
 	federator.initKubeFedClusterInformer(&cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return &fedv1.KubeFedClusterList{
-				ListMeta: metav1.ListMeta{ResourceVersion: "1"},
-				Items:    initialKubeFedClusters,
+			return &unstructured.UnstructuredList{
+				Items: initialKubeFedClusters,
 			}, nil
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
