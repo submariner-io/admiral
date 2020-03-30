@@ -27,7 +27,7 @@ type clusterWatcher struct {
 	handler    federate.ClusterEventHandler
 }
 
-type federator struct {
+type Federator struct {
 	sync.Mutex
 	clusterMap             map[string]*rest.Config
 	kubeFedClient          client.Client
@@ -39,13 +39,13 @@ type federator struct {
 }
 
 // New creates a new Federator instance.
-func New(kubeFedConfig *rest.Config, stopChan <-chan struct{}) (federate.Federator, error) {
+func New(kubeFedConfig *rest.Config, stopChan <-chan struct{}) (*Federator, error) {
 	kubeFedClient, err := client.New(kubeFedConfig, client.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("error building kubernetes clientset: %v", err)
 	}
 
-	federator := &federator{
+	federator := &Federator{
 		clusterMap:    make(map[string]*rest.Config),
 		kubeFedClient: kubeFedClient,
 		stopChan:      stopChan,
