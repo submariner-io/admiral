@@ -83,6 +83,7 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 
 	if requeue {
 		q.AddRateLimited(key)
+		klog.V(log.DEBUG).Infof("%s: enqueued %q for retry - # of times re-queued: %d", q.name, key, q.NumRequeues(key))
 	} else {
 		q.Forget(key)
 	}
