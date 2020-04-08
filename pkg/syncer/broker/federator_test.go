@@ -67,7 +67,7 @@ func testDistribute() {
 			})
 		})
 
-		When("creation fails", func() {
+		When("create fails", func() {
 			JustBeforeEach(func() {
 				resourceClient.FailOnCreate = apierrors.NewServiceUnavailable("fake")
 			})
@@ -76,14 +76,27 @@ func testDistribute() {
 				Expect(f.Distribute(resource)).ToNot(Succeed())
 			})
 		})
+
+		When("create returns AlreadyExists error due to a simulated out-of-band create", func() {
+			BeforeEach(func() {
+				initObjs = append(initObjs, resource)
+				resource = test.NewPodWithImage(sourceNamespace, "apache")
+			})
+
+			JustBeforeEach(func() {
+				resourceClient.FailOnGet = apierrors.NewNotFound(schema.GroupResource{}, resource.GetName())
+				resourceClient.FailOnCreate = apierrors.NewAlreadyExists(schema.GroupResource{}, resource.GetName())
+			})
+
+			It("should update the resource", func() {
+				Expect(f.Distribute(resource)).To(Succeed())
+				test.VerifyResource(resourceClient, resource, brokerNamespace, localClusterID)
+			})
+		})
 	})
 
 	When("the resource already exists in the broker datastore", func() {
 		BeforeEach(func() {
-			resource.SetNamespace(brokerNamespace)
-			resource.SetUID(uuid.NewUUID())
-			resource.SetResourceVersion("1")
-			resource.GetLabels()[federate.ClusterIDLabelKey] = localClusterID
 			initObjs = append(initObjs, resource)
 
 			resource = test.NewPodWithImage(sourceNamespace, "apache")
@@ -181,6 +194,20 @@ func setupFederator(resource *corev1.Pod, initObjs []runtime.Object, localCluste
 	Expect(err).To(Succeed())
 	Expect(gvks).ToNot(HaveLen(0))
 	gvk := gvks[0]
+
+	for i := range initObjs {
+		initObjs[i] = initObjs[i].DeepCopyObject()
+		meta, err := meta.Accessor(initObjs[i])
+		Expect(err).To(Succeed())
+		meta.SetNamespace(brokerNamespace)
+		meta.SetUID(uuid.NewUUID())
+		meta.SetResourceVersion("1")
+
+		if meta.GetLabels() == nil {
+			meta.SetLabels(map[string]string{})
+		}
+		meta.GetLabels()[federate.ClusterIDLabelKey] = localClusterID
+	}
 
 	dynClient := fake.NewDynamicClient(initObjs...)
 

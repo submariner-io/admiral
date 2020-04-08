@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
@@ -86,8 +87,8 @@ func (f *federator) Distribute(resource runtime.Object) error {
 
 			_, err := resourceClient.Create(toDistribute, metav1.CreateOptions{})
 			if apierrors.IsAlreadyExists(err) {
-				klog.V(log.DEBUG).Infof("Resource %q already exists", toDistribute.GetName())
-				return nil
+				klog.V(log.DEBUG).Infof("Resource %q already exists - retrying", toDistribute.GetName())
+				return apierrors.NewConflict(schema.GroupResource{Resource: toDistribute.GetKind()}, toDistribute.GetName(), err)
 			}
 
 			if err != nil {
