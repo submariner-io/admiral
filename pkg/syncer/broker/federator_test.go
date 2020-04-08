@@ -8,6 +8,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/fake"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer/broker"
+	"github.com/submariner-io/admiral/pkg/syncer/test"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -39,7 +40,7 @@ func testDistribute() {
 
 	BeforeEach(func() {
 		localClusterID = "east"
-		resource = newPod()
+		resource = test.NewPod(sourceNamespace)
 		initObjs = nil
 	})
 
@@ -51,7 +52,7 @@ func testDistribute() {
 		When("a local cluster ID is specified", func() {
 			It("should create the resource with the cluster ID label", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				verifyResource(resourceClient, resource, localClusterID)
+				test.VerifyResource(resourceClient, resource, brokerNamespace, localClusterID)
 			})
 		})
 
@@ -62,7 +63,7 @@ func testDistribute() {
 
 			It("should create the resource without the cluster ID label", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				verifyResource(resourceClient, resource, localClusterID)
+				test.VerifyResource(resourceClient, resource, brokerNamespace, localClusterID)
 			})
 		})
 
@@ -85,12 +86,12 @@ func testDistribute() {
 			resource.GetLabels()[federate.ClusterIDLabelKey] = localClusterID
 			initObjs = append(initObjs, resource)
 
-			resource = newPodWithImage("apache")
+			resource = test.NewPodWithImage(sourceNamespace, "apache")
 		})
 
 		It("should update the resource", func() {
 			Expect(f.Distribute(resource)).To(Succeed())
-			verifyResource(resourceClient, resource, localClusterID)
+			test.VerifyResource(resourceClient, resource, brokerNamespace, localClusterID)
 		})
 
 		When("update initially fails due to conflict", func() {
@@ -100,7 +101,7 @@ func testDistribute() {
 
 			It("should retry until it succeeds", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				verifyResource(resourceClient, resource, localClusterID)
+				test.VerifyResource(resourceClient, resource, brokerNamespace, localClusterID)
 			})
 		})
 
@@ -135,7 +136,7 @@ func testDelete() {
 	)
 
 	BeforeEach(func() {
-		resource = newPod()
+		resource = test.NewPod(sourceNamespace)
 		initObjs = nil
 	})
 
@@ -153,7 +154,7 @@ func testDelete() {
 		It("should delete the resource", func() {
 			Expect(f.Delete(resource)).To(Succeed())
 
-			_, err := getResource(resourceClient, resource)
+			_, err := test.GetResource(resourceClient, resource)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 		})
 

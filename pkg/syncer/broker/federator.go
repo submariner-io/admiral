@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
+	"github.com/submariner-io/admiral/pkg/util"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +33,7 @@ type federator struct {
 var keepMetadataFields = map[string]bool{"name": true, "namespace": true, labelsField: true, "annotations": true}
 
 func NewFederator(localClusterID string) (federate.Federator, error) {
-	restConfig, namespace, err := buildConfig()
+	restConfig, namespace, err := buildBrokerConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +43,7 @@ func NewFederator(localClusterID string) (federate.Federator, error) {
 		return nil, fmt.Errorf("error creating dynamic client: %v", err)
 	}
 
-	restMapper, err := buildRestMapper(restConfig)
+	restMapper, err := util.BuildRestMapper(restConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +131,7 @@ func (f *federator) Delete(resource runtime.Object) error {
 }
 
 func (f *federator) toUnstructured(from runtime.Object) (*unstructured.Unstructured, dynamic.ResourceInterface, error) {
-	to, gvr, err := toUnstructuredResource(from, f.restMapper)
+	to, gvr, err := util.ToUnstructuredResource(from, f.restMapper)
 	if err != nil {
 		return nil, nil, err
 	}

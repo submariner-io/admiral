@@ -1,4 +1,4 @@
-package broker
+package util
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ import (
 	"k8s.io/klog"
 )
 
-func buildRestMapper(restConfig *rest.Config) (meta.RESTMapper, error) {
+func BuildRestMapper(restConfig *rest.Config) (meta.RESTMapper, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(restConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error creating discovery client: %v", err)
@@ -30,14 +30,14 @@ func buildRestMapper(restConfig *rest.Config) (meta.RESTMapper, error) {
 	return restmapper.NewDiscoveryRESTMapper(groupResources), nil
 }
 
-func toUnstructuredResource(from runtime.Object, restMapper meta.RESTMapper) (*unstructured.Unstructured, *schema.GroupVersionResource, error) {
+func ToUnstructuredResource(from runtime.Object, restMapper meta.RESTMapper) (*unstructured.Unstructured, *schema.GroupVersionResource, error) {
 	to := &unstructured.Unstructured{}
 	err := scheme.Scheme.Convert(from, to, nil)
 	if err != nil {
 		return nil, nil, errors.WithMessagef(err, "error converting %#v to unstructured.Unstructured", from)
 	}
 
-	gvr, err := findGroupVersionResource(to, restMapper)
+	gvr, err := FindGroupVersionResource(to, restMapper)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -45,7 +45,7 @@ func toUnstructuredResource(from runtime.Object, restMapper meta.RESTMapper) (*u
 	return to, gvr, nil
 }
 
-func findGroupVersionResource(from *unstructured.Unstructured, restMapper meta.RESTMapper) (*schema.GroupVersionResource, error) {
+func FindGroupVersionResource(from *unstructured.Unstructured, restMapper meta.RESTMapper) (*schema.GroupVersionResource, error) {
 	gvk := from.GroupVersionKind()
 	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
