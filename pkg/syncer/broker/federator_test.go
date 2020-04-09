@@ -11,20 +11,11 @@ import (
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/uuid"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/klog"
 )
 
-const brokerNamespace = "broker-ns"
-const sourceNamespace = "source-ns"
-
 var _ = Describe("Federator", func() {
-	klog.InitFlags(nil)
-
 	Describe("Distribute", testDistribute)
 	Describe("Delete", testDelete)
 })
@@ -40,7 +31,7 @@ func testDistribute() {
 
 	BeforeEach(func() {
 		localClusterID = "east"
-		resource = test.NewPod(sourceNamespace)
+		resource = test.NewPod(test.LocalNamespace)
 		initObjs = nil
 	})
 
@@ -52,7 +43,7 @@ func testDistribute() {
 		When("a local cluster ID is specified", func() {
 			It("should create the resource with the cluster ID label", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				test.VerifyResource(resourceClient, resource, brokerNamespace, localClusterID)
+				test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
 			})
 		})
 
@@ -63,7 +54,7 @@ func testDistribute() {
 
 			It("should create the resource without the cluster ID label", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				test.VerifyResource(resourceClient, resource, brokerNamespace, localClusterID)
+				test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
 			})
 		})
 
@@ -80,7 +71,7 @@ func testDistribute() {
 		When("create returns AlreadyExists error due to a simulated out-of-band create", func() {
 			BeforeEach(func() {
 				initObjs = append(initObjs, resource)
-				resource = test.NewPodWithImage(sourceNamespace, "apache")
+				resource = test.NewPodWithImage(test.LocalNamespace, "apache")
 			})
 
 			JustBeforeEach(func() {
@@ -90,7 +81,7 @@ func testDistribute() {
 
 			It("should update the resource", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				test.VerifyResource(resourceClient, resource, brokerNamespace, localClusterID)
+				test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
 			})
 		})
 	})
@@ -99,12 +90,12 @@ func testDistribute() {
 		BeforeEach(func() {
 			initObjs = append(initObjs, resource)
 
-			resource = test.NewPodWithImage(sourceNamespace, "apache")
+			resource = test.NewPodWithImage(test.LocalNamespace, "apache")
 		})
 
 		It("should update the resource", func() {
 			Expect(f.Distribute(resource)).To(Succeed())
-			test.VerifyResource(resourceClient, resource, brokerNamespace, localClusterID)
+			test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
 		})
 
 		When("update initially fails due to conflict", func() {
@@ -114,7 +105,7 @@ func testDistribute() {
 
 			It("should retry until it succeeds", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				test.VerifyResource(resourceClient, resource, brokerNamespace, localClusterID)
+				test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
 			})
 		})
 
@@ -149,7 +140,7 @@ func testDelete() {
 	)
 
 	BeforeEach(func() {
-		resource = test.NewPod(sourceNamespace)
+		resource = test.NewPod(test.LocalNamespace)
 		initObjs = nil
 	})
 
@@ -160,7 +151,7 @@ func testDelete() {
 	When("the resource exists in the broker datastore", func() {
 		BeforeEach(func() {
 			existing := resource.DeepCopy()
-			existing.SetNamespace(brokerNamespace)
+			existing.SetNamespace(test.RemoteNamespace)
 			initObjs = append(initObjs, existing)
 		})
 
@@ -190,34 +181,9 @@ func testDelete() {
 }
 
 func setupFederator(resource *corev1.Pod, initObjs []runtime.Object, localClusterID string) (federate.Federator, *fake.DynamicResourceClient) {
-	gvks, _, err := scheme.Scheme.ObjectKinds(resource)
-	Expect(err).To(Succeed())
-	Expect(gvks).ToNot(HaveLen(0))
-	gvk := gvks[0]
+	dynClient := fake.NewDynamicClient(test.PrepInitialClientObjs(test.RemoteNamespace, localClusterID, initObjs...)...)
+	restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(resource)
+	f := broker.NewTestFederator(dynClient, restMapper, test.RemoteNamespace, localClusterID)
 
-	for i := range initObjs {
-		initObjs[i] = initObjs[i].DeepCopyObject()
-		meta, err := meta.Accessor(initObjs[i])
-		Expect(err).To(Succeed())
-		meta.SetNamespace(brokerNamespace)
-		meta.SetUID(uuid.NewUUID())
-		meta.SetResourceVersion("1")
-
-		if meta.GetLabels() == nil {
-			meta.SetLabels(map[string]string{})
-		}
-		meta.GetLabels()[federate.ClusterIDLabelKey] = localClusterID
-	}
-
-	dynClient := fake.NewDynamicClient(initObjs...)
-
-	restMapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{gvk.GroupVersion()})
-	restMapper.Add(gvk, meta.RESTScopeNamespace)
-
-	f := broker.NewTestFederator(dynClient, restMapper, brokerNamespace, localClusterID)
-
-	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
-	Expect(err).To(Succeed())
-
-	return f, dynClient.Resource(mapping.Resource).Namespace(brokerNamespace).(*fake.DynamicResourceClient)
+	return f, dynClient.Resource(*gvr).Namespace(test.RemoteNamespace).(*fake.DynamicResourceClient)
 }

@@ -1,17 +1,25 @@
 package test
 
 import (
+	"time"
+
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/federate"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/uuid"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 )
+
+const RemoteNamespace = "remote-ns"
+const LocalNamespace = "local-ns"
 
 func GetResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) (*unstructured.Unstructured, error) {
 	meta, err := meta.Accessor(obj)
@@ -70,4 +78,63 @@ func NewPodWithImage(namespace, imageName string) *corev1.Pod {
 			},
 		},
 	}
+}
+
+func GetRESTMapperAndGroupVersionResourceFor(obj runtime.Object) (meta.RESTMapper, *schema.GroupVersionResource) {
+	gvks, _, err := scheme.Scheme.ObjectKinds(obj)
+	Expect(err).To(Succeed())
+	Expect(gvks).ToNot(HaveLen(0))
+	gvk := gvks[0]
+
+	restMapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{gvk.GroupVersion()})
+	restMapper.Add(gvk, meta.RESTScopeNamespace)
+
+	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	Expect(err).To(Succeed())
+	return restMapper, &mapping.Resource
+}
+
+func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Object) []runtime.Object {
+	var newObjs []runtime.Object
+	for _, obj := range initObjs {
+		raw := &unstructured.Unstructured{}
+		err := scheme.Scheme.Convert(obj, raw, nil)
+		Expect(err).To(Succeed())
+
+		raw.SetNamespace(namespace)
+		raw.SetUID(uuid.NewUUID())
+		raw.SetResourceVersion("1")
+
+		if clusterID != "" {
+			labels := raw.GetLabels()
+			if labels == nil {
+				labels = map[string]string{}
+			}
+			labels[federate.ClusterIDLabelKey] = clusterID
+			raw.SetLabels(labels)
+		}
+
+		newObjs = append(newObjs, raw)
+	}
+
+	return newObjs
+}
+
+func WaitForResource(client dynamic.ResourceInterface, name string) *unstructured.Unstructured {
+	var found *unstructured.Unstructured
+	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
+		obj, err := client.Get(name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+
+		found = obj
+		return true, nil
+	})
+
+	Expect(err).To(Succeed())
+	return found
 }
