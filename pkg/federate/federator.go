@@ -1,12 +1,14 @@
 package federate
 
-//go:generate mockgen -destination=./mocks/mock_federator.go -package=mocks github.com/submariner-io/admiral/pkg/federate Federator
-
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// Federator provides methods for accessing federated clusters.
+// ClusterIDLabelKey is the key for a label that may be added to federated resources to hold the ID of the cluster from
+// which the resource originated, allowing for filtering of resources emanating from the originating cluster.
+const ClusterIDLabelKey = "submariner-io/clusterID"
+
+// Federator provides methods for accessing federated resources.
 type Federator interface {
 	// Distribute distributes the given resource to all federated clusters.
 	// The actual distribution may occur asynchronously in which case any returned error only indicates that the request
