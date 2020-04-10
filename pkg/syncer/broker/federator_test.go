@@ -158,7 +158,7 @@ func testDelete() {
 		It("should delete the resource", func() {
 			Expect(f.Delete(resource)).To(Succeed())
 
-			_, err := test.GetResource(resourceClient, resource)
+			_, err := test.GetResourceAndError(resourceClient, resource)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 		})
 

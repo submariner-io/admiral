@@ -14,11 +14,6 @@ import (
 	"k8s.io/klog"
 )
 
-const (
-	metadataField = "metadata"
-	labelsField   = "labels"
-)
-
 type federator struct {
 	dynClient       dynamic.Interface
 	restMapper      meta.RESTMapper
@@ -26,7 +21,7 @@ type federator struct {
 	localClusterID  string
 }
 
-var keepMetadataFields = map[string]bool{"name": true, "namespace": true, labelsField: true, "annotations": true}
+var keepMetadataFields = map[string]bool{"name": true, "namespace": true, util.LabelsField: true, "annotations": true}
 
 func NewFederator(localClusterID string) (federate.Federator, error) {
 	restConfig, namespace, err := buildBrokerConfig()
@@ -71,17 +66,18 @@ func (f *federator) Distribute(resource runtime.Object) error {
 	}
 
 	if f.localClusterID != "" {
-		setNestedField(toDistribute.Object, f.localClusterID, metadataField, labelsField, federate.ClusterIDLabelKey)
+		setNestedField(toDistribute.Object, f.localClusterID, util.MetadataField, util.LabelsField, federate.ClusterIDLabelKey)
 	}
 
 	f.prepareResourceForSync(toDistribute)
+	toDistribute.SetNamespace(f.brokerNamespace)
 
 	_, err = util.CreateOrUpdate(resourceClient, toDistribute, func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 		// Preserve the existing metadata info (except Labels and Annotations), specifically the ResourceVersion which must
 		// be set on an update operation.
 		existing.SetLabels(toDistribute.GetLabels())
 		existing.SetAnnotations(toDistribute.GetAnnotations())
-		setNestedField(toDistribute.Object, getMetadata(existing), metadataField)
+		setNestedField(toDistribute.Object, util.GetMetadata(existing), util.MetadataField)
 		return toDistribute, nil
 	})
 
@@ -110,23 +106,15 @@ func (f *federator) toUnstructured(from runtime.Object) (*unstructured.Unstructu
 
 func (f *federator) prepareResourceForSync(resource *unstructured.Unstructured) {
 	//  Remove metadata fields that are set by the API server on creation.
-	metadata := getMetadata(resource)
+	metadata := util.GetMetadata(resource)
 	for field := range metadata {
 		if !keepMetadataFields[field] {
-			unstructured.RemoveNestedField(resource.Object, metadataField, field)
+			unstructured.RemoveNestedField(resource.Object, util.MetadataField, field)
 		}
 	}
 
+	unstructured.RemoveNestedField(resource.Object, "status")
 	resource.SetNamespace(f.brokerNamespace)
-}
-
-func getMetadata(from *unstructured.Unstructured) map[string]interface{} {
-	value, _, _ := unstructured.NestedFieldNoCopy(from.Object, metadataField)
-	if value != nil {
-		return value.(map[string]interface{})
-	}
-
-	return map[string]interface{}{}
 }
 
 func setNestedField(to map[string]interface{}, value interface{}, fields ...string) {
