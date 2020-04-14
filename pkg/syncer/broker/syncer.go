@@ -54,7 +54,7 @@ type Syncer struct {
 	federators map[reflect.Type]federate.Federator
 }
 
-// NewSyncer creates a Syncer that performs 2-way syncing of resources between a local source and a central broker.
+// NewSyncer creates a Syncer that performs bi-directional syncing of resources between a local source and a central broker.
 func NewSyncer(config SyncerConfig) (*Syncer, error) {
 	restMapper, err := util.BuildRestMapper(config.LocalRestConfig)
 	if err != nil {
@@ -143,11 +143,11 @@ func (s *Syncer) Start(stopCh <-chan struct{}) error {
 	return nil
 }
 
-func (s *Syncer) GetBrokerFederatorFor(resourceType runtime.Object) (federate.Federator, error) {
+func (s *Syncer) GetBrokerFederatorFor(resourceType runtime.Object) federate.Federator {
 	f, found := s.federators[reflect.TypeOf(resourceType)]
-	if !found {
-		return nil, fmt.Errorf("no Federator found for type %T", resourceType)
+	if found {
+		return f
 	}
 
-	return f, nil
+	return nil
 }
