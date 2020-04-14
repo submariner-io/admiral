@@ -8,9 +8,9 @@ import (
 	"k8s.io/klog"
 )
 
-var _ = Describe("", func() {
+func init() {
 	klog.InitFlags(nil)
-})
+}
 
 func TestSyncer(t *testing.T) {
 	RegisterFailHandler(Fail)
