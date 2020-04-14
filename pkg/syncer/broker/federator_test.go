@@ -183,7 +183,7 @@ func testDelete() {
 func setupFederator(resource *corev1.Pod, initObjs []runtime.Object, localClusterID string) (federate.Federator, *fake.DynamicResourceClient) {
 	dynClient := fake.NewDynamicClient(test.PrepInitialClientObjs(test.RemoteNamespace, localClusterID, initObjs...)...)
 	restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(resource)
-	f := broker.NewTestFederator(dynClient, restMapper, test.RemoteNamespace, localClusterID)
+	f := broker.NewFederator(dynClient, restMapper, test.RemoteNamespace, localClusterID)
 
 	return f, dynClient.Resource(*gvr).Namespace(test.RemoteNamespace).(*fake.DynamicResourceClient)
 }

@@ -16,7 +16,7 @@ type brokerSpecification struct {
 	Ca              string
 }
 
-func buildBrokerConfig() (*rest.Config, string, error) {
+func BuildBrokerConfigFromEnv() (*rest.Config, string, error) {
 	brokerSpec := brokerSpecification{}
 	err := envconfig.Process("broker_k8s", &brokerSpec)
 	if err != nil {

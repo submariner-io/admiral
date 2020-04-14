@@ -85,8 +85,8 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 		config: *config,
 	}
 
-	if config.Scheme == nil {
-		config.Scheme = scheme.Scheme
+	if syncer.config.Scheme == nil {
+		syncer.config.Scheme = scheme.Scheme
 	}
 
 	_, gvr, err := util.ToUnstructuredResource(config.ResourceType, config.RestMapper)
@@ -114,21 +114,21 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 }
 
 func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
-	klog.Infof("Starting %q syncer", r.config.Name)
+	klog.Infof("Starting syncer %q", r.config.Name)
 
 	go func() {
 		defer r.workQueue.ShutDown()
 		r.informer.Run(stopCh)
 	}()
 
-	klog.Infof("%q syncer waiting for informer cache to sync", r.config.Name)
+	klog.Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
 	if ok := cache.WaitForCacheSync(stopCh, r.informer.HasSynced); !ok {
 		return fmt.Errorf("failed to wait for informer cache to sync")
 	}
 
 	r.workQueue.Run(stopCh, r.processNextWorkItem)
 
-	klog.Infof("%q syncer started", r.config.Name)
+	klog.Infof("Syncer %q started", r.config.Name)
 	return nil
 }
 
@@ -207,6 +207,8 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured) *unstructure
 		return from
 	}
 
+	clusterID, _ := getClusterIDLabel(from)
+
 	converted := r.config.ResourceType.DeepCopyObject()
 	err := r.config.Scheme.Convert(from, converted, nil)
 	if err != nil {
@@ -224,6 +226,11 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured) *unstructure
 	if err != nil {
 		klog.Errorf("Syncer %q: error converting transform function result: %v", r.config.Name, err)
 		return nil
+	}
+
+	// Preserve the cluster ID label
+	if clusterID != "" {
+		_ = unstructured.SetNestedField(result.Object, clusterID, util.MetadataField, util.LabelsField, federate.ClusterIDLabelKey)
 	}
 
 	return result
@@ -278,7 +285,7 @@ func (r *resourceSyncer) onDelete(obj interface{}) {
 }
 
 func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
-	clusterID, found, _ := unstructured.NestedString(resource.Object, util.MetadataField, util.LabelsField, federate.ClusterIDLabelKey)
+	clusterID, found := getClusterIDLabel(resource)
 	if r.config.Direction == LocalToRemote && found {
 		// This is the local -> remote case - only sync local resources w/o the label
 		klog.V(log.DEBUG).Infof("Found cluster ID label %q - not syncing resource %q", clusterID, resource.GetName())
@@ -293,4 +300,9 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 	}
 
 	return true
+}
+
+func getClusterIDLabel(resource *unstructured.Unstructured) (string, bool) {
+	clusterID, found, _ := unstructured.NestedString(resource.Object, util.MetadataField, util.LabelsField, federate.ClusterIDLabelKey)
+	return clusterID, found
 }

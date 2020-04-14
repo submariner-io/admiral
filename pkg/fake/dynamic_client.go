@@ -1,6 +1,9 @@
 package fake
 
 import (
+	"time"
+
+	. "github.com/onsi/gomega"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,6 +26,9 @@ type namespaceableResource struct {
 
 type DynamicResourceClient struct {
 	dynamic.ResourceInterface
+	created      chan string
+	updated      chan string
+	deleted      chan string
 	FailOnCreate error
 	FailOnUpdate error
 	FailOnDelete error
@@ -57,11 +63,18 @@ func (f *namespaceableResource) Namespace(namespace string) dynamic.ResourceInte
 		return i
 	}
 
-	f.resourceClients[namespace] = &DynamicResourceClient{ResourceInterface: f.NamespaceableResourceInterface.Namespace(namespace)}
+	f.resourceClients[namespace] = &DynamicResourceClient{
+		ResourceInterface: f.NamespaceableResourceInterface.Namespace(namespace),
+		created:           make(chan string, 10000),
+		updated:           make(chan string, 10000),
+		deleted:           make(chan string, 10000),
+	}
 	return f.resourceClients[namespace]
 }
 
 func (f *DynamicResourceClient) Create(obj *unstructured.Unstructured, options v1.CreateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+	f.created <- obj.GetName()
+
 	fail := f.FailOnCreate
 	if fail != nil {
 		f.FailOnCreate = nil
@@ -74,6 +87,8 @@ func (f *DynamicResourceClient) Create(obj *unstructured.Unstructured, options v
 }
 
 func (f *DynamicResourceClient) Update(obj *unstructured.Unstructured, options v1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+	f.updated <- obj.GetName()
+
 	fail := f.FailOnUpdate
 	if fail != nil {
 		f.FailOnUpdate = nil
@@ -84,6 +99,8 @@ func (f *DynamicResourceClient) Update(obj *unstructured.Unstructured, options v
 }
 
 func (f *DynamicResourceClient) Delete(name string, options *v1.DeleteOptions, subresources ...string) error {
+	f.deleted <- name
+
 	fail := f.FailOnDelete
 	if fail != nil {
 		f.FailOnDelete = nil
@@ -101,4 +118,16 @@ func (f *DynamicResourceClient) Get(name string, options v1.GetOptions, subresou
 	}
 
 	return f.ResourceInterface.Get(name, options, subresources...)
+}
+
+func (f *DynamicResourceClient) VerifyNoCreate(name string) {
+	Consistently(f.created, 300*time.Millisecond).ShouldNot(Receive(Equal(name)), "Create was unexpectedly called")
+}
+
+func (f *DynamicResourceClient) VerifyNoUpdate(name string) {
+	Consistently(f.updated, 300*time.Millisecond).ShouldNot(Receive(Equal(name)), "Update was unexpectedly called")
+}
+
+func (f *DynamicResourceClient) VerifyNoDelete(name string) {
+	Consistently(f.deleted, 300*time.Millisecond).ShouldNot(Receive(Equal(name)), "Delete was unexpectedly called")
 }

@@ -50,13 +50,18 @@ func ToUnstructuredResource(from runtime.Object, restMapper meta.RESTMapper) (*u
 }
 
 func ToUnstructured(from runtime.Object) (*unstructured.Unstructured, error) {
-	to := &unstructured.Unstructured{}
-	err := scheme.Scheme.Convert(from, to, nil)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "error converting %#v to unstructured.Unstructured", from)
-	}
+	switch f := from.(type) {
+	case *unstructured.Unstructured:
+		return f.DeepCopy(), nil
+	default:
+		to := &unstructured.Unstructured{}
+		err := scheme.Scheme.Convert(from, to, nil)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "error converting %#v to unstructured.Unstructured", from)
+		}
 
-	return to, nil
+		return to, nil
+	}
 }
 
 func FindGroupVersionResource(from *unstructured.Unstructured, restMapper meta.RESTMapper) (*schema.GroupVersionResource, error) {

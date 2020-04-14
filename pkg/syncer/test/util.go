@@ -172,3 +172,20 @@ func WaitForResource(client dynamic.ResourceInterface, name string) *unstructure
 	Expect(err).To(Succeed())
 	return found
 }
+
+func WaitForNoResource(client dynamic.ResourceInterface, name string) {
+	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
+		_, err := client.Get(name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+
+		if err != nil {
+			return false, err
+		}
+
+		return false, nil
+	})
+
+	Expect(err).To(Succeed())
+}

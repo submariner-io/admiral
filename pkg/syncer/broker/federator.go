@@ -1,8 +1,6 @@
 package broker
 
 import (
-	"fmt"
-
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -23,32 +21,7 @@ type federator struct {
 
 var keepMetadataFields = map[string]bool{"name": true, "namespace": true, util.LabelsField: true, "annotations": true}
 
-func NewFederator(localClusterID string) (federate.Federator, error) {
-	restConfig, namespace, err := buildBrokerConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	dynClient, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("error creating dynamic client: %v", err)
-	}
-
-	restMapper, err := util.BuildRestMapper(restConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	return &federator{
-		dynClient:       dynClient,
-		restMapper:      restMapper,
-		brokerNamespace: namespace,
-		localClusterID:  localClusterID,
-	}, nil
-}
-
-// Use for testing purposes only
-func NewTestFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, brokerNamespace string, localClusterID string) federate.Federator {
+func NewFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, brokerNamespace string, localClusterID string) federate.Federator {
 	return &federator{
 		dynClient:       dynClient,
 		restMapper:      restMapper,
