@@ -14,13 +14,16 @@ import (
 )
 
 type ResourceConfig struct {
-	// LocalResourceType the type of the local resource to sync to the broker.
+	// SourceNamespace the namespace in the local source from which to retrieve the local resources to sync.
+	LocalSourceNamespace string
+
+	// LocalResourceType the type of the local resources to sync to the broker.
 	LocalResourceType runtime.Object
 
 	// LocalTransform function used to transform a local resource to the equivalent broker resource.
 	LocalTransform syncer.TransformFunc
 
-	// BrokerResourceType the type of the broker resource to sync locally.
+	// BrokerResourceType the type of the broker resources to sync to the local source.
 	BrokerResourceType runtime.Object
 
 	// BrokerTransform function used to transform a broker resource to the equivalent local resource.
@@ -31,18 +34,20 @@ type SyncerConfig struct {
 	// LocalRestConfig the REST config used to access the local resources to sync.
 	LocalRestConfig *rest.Config
 
-	// LocalNamespace the namespace of the local resources to sync.
+	// LocalNamespace the namespace in the local source to which resources from the broker will be synced.
 	LocalNamespace string
 
-	// LocalClusterID the ID of the local cluster.
+	// LocalClusterID the ID of the local cluster. This is used to avoid loops when syncing the same resources between
+	// the local and broker sources. If local resources are transformed to different broker resource types then
+	// specify an empty LocalClusterID to disable this loop protection.
 	LocalClusterID string
 
 	// BrokerRestConfig the REST config used to access the broker resources to sync. If not specified, the config is
 	// built from environment variables via BuildBrokerConfigFromEnv.
 	BrokerRestConfig *rest.Config
 
-	// BrokerNamespace the namespace of the broker resources to sync. If not specified, the namespace is obtained from
-	// an environment variable via BuildBrokerConfigFromEnv.
+	// BrokerNamespace the namespace in the broker to which resources from the local source will be synced. If not
+	// specified, the namespace is obtained from an environment variable via BuildBrokerConfigFromEnv.
 	BrokerNamespace string
 
 	// ResourceConfigs the configurations for resources to sync
@@ -93,7 +98,7 @@ func newSyncer(config *SyncerConfig, localClient, brokerClient dynamic.Interface
 		localSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
 			Name:            fmt.Sprintf("local -> broker for %T", rc.LocalResourceType),
 			SourceClient:    localClient,
-			SourceNamespace: config.LocalNamespace,
+			SourceNamespace: rc.LocalSourceNamespace,
 			LocalClusterID:  config.LocalClusterID,
 			Direction:       syncer.LocalToRemote,
 			RestMapper:      restMapper,

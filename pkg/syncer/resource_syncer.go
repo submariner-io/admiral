@@ -46,7 +46,8 @@ type ResourceSyncerConfig struct {
 	// SourceNamespace the namespace of the resources to sync.
 	SourceNamespace string
 
-	// LocalClusterID the cluster ID of the source client. This is used in conjunction with Direction to avoid sync loops.
+	// LocalClusterID the cluster ID of the source client. This is used in conjunction with Direction to avoid
+	// loops when syncing the same resources between the local and remote sources.
 	LocalClusterID string
 
 	// Direction specifies how resources are synced. It is assumed that resources emanating from a remote source have

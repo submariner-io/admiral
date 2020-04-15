@@ -116,9 +116,12 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 	var newObjs []runtime.Object
 	for _, obj := range initObjs {
 		raw := ToUnstructured(obj)
-		raw.SetNamespace(namespace)
 		raw.SetUID(uuid.NewUUID())
 		raw.SetResourceVersion("1")
+
+		if namespace != "" {
+			raw.SetNamespace(namespace)
+		}
 
 		if clusterID != "" {
 			labels := raw.GetLabels()

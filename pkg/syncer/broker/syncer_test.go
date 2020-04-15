@@ -6,21 +6,24 @@ import (
 	"github.com/submariner-io/admiral/pkg/fake"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var _ = Describe("Broker Syncer", func() {
 	var (
-		syncer       *Syncer
-		config       *SyncerConfig
-		localClient  *fake.DynamicResourceClient
-		brokerClient *fake.DynamicResourceClient
-		resource     *corev1.Pod
-		transformed  *corev1.Pod
-		stopCh       chan struct{}
+		syncer           *Syncer
+		config           *SyncerConfig
+		localClient      *fake.DynamicResourceClient
+		brokerClient     *fake.DynamicResourceClient
+		resource         *corev1.Pod
+		transformed      *corev1.Pod
+		initialResources []runtime.Object
+		stopCh           chan struct{}
 	)
 
 	BeforeEach(func() {
+		initialResources = nil
 		stopCh = make(chan struct{})
 		resource = test.NewPod("")
 		config = &SyncerConfig{
@@ -39,10 +42,10 @@ var _ = Describe("Broker Syncer", func() {
 	JustBeforeEach(func() {
 		restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(resource)
 
-		localDynClient := fake.NewDynamicClient()
+		localDynClient := fake.NewDynamicClient(test.PrepInitialClientObjs("", "", initialResources...)...)
 		brokerDynClient := fake.NewDynamicClient()
 
-		localClient = localDynClient.Resource(*gvr).Namespace(config.LocalNamespace).(*fake.DynamicResourceClient)
+		localClient = localDynClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace).(*fake.DynamicResourceClient)
 		brokerClient = brokerDynClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)
 
 		var err error
@@ -104,6 +107,21 @@ var _ = Describe("Broker Syncer", func() {
 			test.CreateResource(brokerClient, resource)
 
 			localClient.VerifyNoCreate(resource.GetName())
+		})
+	})
+
+	When("syncing resources from all local namespaces", func() {
+		BeforeEach(func() {
+			config.ResourceConfigs[0].LocalSourceNamespace = metav1.NamespaceAll
+			resource.SetNamespace(metav1.NamespaceDefault)
+			initialResources = append(initialResources, resource)
+		})
+
+		When("a local resource is created in any namespace", func() {
+			It("should sync to the broker datastore", func() {
+				test.WaitForResource(brokerClient, resource.GetName())
+				test.VerifyResource(brokerClient, resource, config.BrokerNamespace, config.LocalClusterID)
+			})
 		})
 	})
 
