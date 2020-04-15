@@ -23,219 +23,119 @@ import (
 
 var _ = Describe("Resource Syncer", func() {
 	Describe("Local -> Remote", testLocalToRemote)
-	Describe("Remote -> Local ", testRemoteToLocal)
+
+	Describe("Remote -> Local", func() {
+		Context("with a local cluster ID", testRemoteToLocalWithLocalClusterID)
+		Context("without a local cluster ID", testRemoteToLocalWithoutLocalClusterID)
+	})
+
 	Describe("With Transform Function", testTransformFunction)
 	Describe("Sync Errors", testSyncErrors)
 	Describe("Update Suppression", testUpdateSuppression)
 })
 
 func testLocalToRemote() {
-	var (
-		d *testDriver
-	)
-
-	BeforeEach(func() {
-		d = newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
-	})
-
-	JustBeforeEach(func() {
-		d.run()
-	})
-
-	AfterEach(func() {
-		d.stop()
-	})
+	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
 
 	When("a resource without a cluster ID label is created in the local datastore", func() {
-		It("should distribute it remotely", func() {
-			d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, d.resource))
-		})
+		d.verifyDistributeOnCreateTest("")
 	})
 
 	When("a resource without a cluster ID label is updated in the local datastore", func() {
-		BeforeEach(func() {
-			d.addInitialResource(d.resource)
-		})
-
-		It("should distribute it remotely", func() {
-			d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
-			d.federator.VerifyDistribute(test.UpdateResource(d.sourceClient, test.NewPodWithImage(d.config.SourceNamespace, "apache")))
-		})
+		d.verifyDistributeOnUpdateTest("")
 	})
 
 	When("a resource without a cluster ID label is deleted from the local datastore", func() {
-		BeforeEach(func() {
-			d.addInitialResource(d.resource)
-		})
-
-		It("should delete it remotely", func() {
-			expected := test.GetResource(d.sourceClient, d.resource)
-			d.federator.VerifyDistribute(expected)
-
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
-			d.federator.VerifyDelete(expected)
-		})
+		d.verifyDistributeOnDeleteTest("")
 	})
 
 	When("a resource with a cluster ID label is created in the local datastore", func() {
-		It("should not distribute it remotely", func() {
-			test.CreateResource(d.sourceClient, test.SetClusterIDLabel(d.resource, "remote"))
-			d.federator.VerifyNoDistribute()
-		})
+		d.verifyNoDistributeOnCreateTest("remote")
 	})
 
 	When("a resource with a cluster ID label is updated in the local datastore", func() {
-		BeforeEach(func() {
-			d.addInitialResource(test.SetClusterIDLabel(d.resource, "remote"))
-		})
-
-		It("should not distribute it remotely", func() {
-			d.federator.VerifyNoDistribute()
-
-			test.UpdateResource(d.sourceClient, test.SetClusterIDLabel(
-				test.NewPodWithImage(d.config.SourceNamespace, "apache"), "remote"))
-			d.federator.VerifyNoDistribute()
-		})
+		d.verifyNoDistributeOnUpdateTest("remote")
 	})
 
-	When("a resource with a local cluster ID label is deleted from the local datastore", func() {
-		BeforeEach(func() {
-			d.addInitialResource(test.SetClusterIDLabel(d.resource, "remote"))
-		})
-
-		It("should not delete it remotely", func() {
-			d.federator.VerifyNoDistribute()
-
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
-			d.federator.VerifyNoDelete()
-		})
+	When("a resource with a cluster ID label is deleted from the local datastore", func() {
+		d.verifyNoDistributeOnDeleteTest("remote")
 	})
 }
 
-func testRemoteToLocal() {
-	var (
-		d *testDriver
-	)
-
-	BeforeEach(func() {
-		d = newTestDiver(test.RemoteNamespace, "local", syncer.RemoteToLocal)
-	})
-
-	JustBeforeEach(func() {
-		d.run()
-	})
-
-	AfterEach(func() {
-		d.stop()
-	})
+func testRemoteToLocalWithLocalClusterID() {
+	d := newTestDiver(test.RemoteNamespace, "local", syncer.RemoteToLocal)
 
 	When("a resource with a non-local cluster ID label is created in the remote datastore", func() {
-		It("should distribute it locally", func() {
-			d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, test.SetClusterIDLabel(d.resource, "remote")))
-		})
+		d.verifyDistributeOnCreateTest("remote")
 	})
 
 	When("a resource with a non-local cluster ID label is updated in the remote datastore", func() {
-		BeforeEach(func() {
-			d.addInitialResource(test.SetClusterIDLabel(d.resource, "remote"))
-		})
-
-		It("should distribute it locally", func() {
-			d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
-			d.federator.VerifyDistribute(test.UpdateResource(d.sourceClient,
-				test.SetClusterIDLabel(test.NewPodWithImage(d.config.SourceNamespace, "apache"), "remote")))
-		})
+		d.verifyDistributeOnUpdateTest("remote")
 	})
 
 	When("a resource with a non-local cluster ID label is deleted from the remote datastore", func() {
-		BeforeEach(func() {
-			d.addInitialResource(test.SetClusterIDLabel(d.resource, "remote"))
-		})
-
-		It("should delete it locally", func() {
-			expected := test.GetResource(d.sourceClient, d.resource)
-			d.federator.VerifyDistribute(expected)
-
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
-			d.federator.VerifyDelete(expected)
-		})
+		d.verifyDistributeOnDeleteTest("remote")
 	})
 
 	When("a resource with a local cluster ID label is created in the remote datastore", func() {
-		It("should not distribute it locally", func() {
-			test.CreateResource(d.sourceClient, test.SetClusterIDLabel(d.resource, d.config.LocalClusterID))
-			d.federator.VerifyNoDistribute()
-		})
+		d.verifyNoDistributeOnCreateTest(d.config.LocalClusterID)
 	})
 
 	When("a resource with a local cluster ID label is updated in the remote datastore", func() {
-		BeforeEach(func() {
-			d.addInitialResource(test.SetClusterIDLabel(d.resource, d.config.LocalClusterID))
-		})
-
-		It("should not distribute it locally", func() {
-			d.federator.VerifyNoDistribute()
-
-			test.UpdateResource(d.sourceClient, test.NewPodWithImage(d.config.SourceNamespace, "apache"))
-			d.federator.VerifyNoDistribute()
-		})
+		d.verifyNoDistributeOnUpdateTest(d.config.LocalClusterID)
 	})
 
 	When("a resource with a local cluster ID label is deleted from the remote datastore", func() {
-		BeforeEach(func() {
-			d.addInitialResource(test.SetClusterIDLabel(d.resource, d.config.LocalClusterID))
-		})
-
-		It("should not delete it locally", func() {
-			d.federator.VerifyNoDistribute()
-
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
-			d.federator.VerifyNoDelete()
-		})
+		d.verifyNoDistributeOnDeleteTest(d.config.LocalClusterID)
 	})
 
 	When("a resource without a cluster ID label is created in the remote datastore", func() {
-		It("should not distribute it locally", func() {
-			test.CreateResource(d.sourceClient, d.resource)
-			d.federator.VerifyNoDistribute()
-		})
+		d.verifyNoDistributeOnCreateTest("")
 	})
 
 	When("a resource without a cluster ID label is updated in the remote datastore", func() {
-		BeforeEach(func() {
-			d.addInitialResource(d.resource)
-		})
-
-		It("should not distribute it locally", func() {
-			d.federator.VerifyNoDistribute()
-
-			test.UpdateResource(d.sourceClient, test.NewPodWithImage(d.config.SourceNamespace, "apache"))
-			d.federator.VerifyNoDistribute()
-		})
+		d.verifyNoDistributeOnUpdateTest("")
 	})
 
 	When("a resource without a local cluster ID label is deleted from the remote datastore", func() {
-		BeforeEach(func() {
-			d.addInitialResource(d.resource)
-		})
+		d.verifyNoDistributeOnDeleteTest("")
+	})
+}
 
-		It("should not delete it locally", func() {
-			d.federator.VerifyNoDistribute()
+func testRemoteToLocalWithoutLocalClusterID() {
+	d := newTestDiver(test.RemoteNamespace, "", syncer.RemoteToLocal)
 
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
-			d.federator.VerifyNoDelete()
-		})
+	When("a resource with a cluster ID label is created in the remote datastore", func() {
+		d.verifyDistributeOnCreateTest("remote")
+	})
+
+	When("a resource with a cluster ID label is updated in the remote datastore", func() {
+		d.verifyDistributeOnUpdateTest("remote")
+	})
+
+	When("a resource with a cluster ID label is deleted from the remote datastore", func() {
+		d.verifyDistributeOnCreateTest("remote")
+	})
+
+	When("a resource without a cluster ID label is created in the remote datastore", func() {
+		d.verifyDistributeOnCreateTest("")
+	})
+
+	When("a resource without a cluster ID label is updated in the local datastore", func() {
+		d.verifyDistributeOnUpdateTest("")
+	})
+
+	When("a resource without a cluster ID label is deleted from the local datastore", func() {
+		d.verifyDistributeOnCreateTest("")
 	})
 }
 
 func testTransformFunction() {
-	var (
-		d           *testDriver
-		transformed *corev1.Pod
-	)
+	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	var transformed *corev1.Pod
 
 	BeforeEach(func() {
-		d = newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
 		d.config.Transform = func(from runtime.Object) runtime.Object {
 			pod, ok := from.(*corev1.Pod)
@@ -243,14 +143,6 @@ func testTransformFunction() {
 			Expect(equality.Semantic.DeepDerivative(d.resource.Spec, pod.Spec)).To(BeTrue())
 			return transformed
 		}
-	})
-
-	JustBeforeEach(func() {
-		d.run()
-	})
-
-	AfterEach(func() {
-		d.stop()
 	})
 
 	When("a resource is created in the datastore", func() {
@@ -317,22 +209,12 @@ func testTransformFunction() {
 }
 
 func testSyncErrors() {
-	var (
-		d           *testDriver
-		expectedErr error
-	)
+	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	var expectedErr error
 
 	BeforeEach(func() {
-		d = newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
 		expectedErr = errors.New("fake error")
-	})
-
-	JustBeforeEach(func() {
-		d.run()
-	})
-
-	AfterEach(func() {
-		d.stop()
 	})
 
 	When("distribute initially fails", func() {
@@ -380,24 +262,15 @@ func testSyncErrors() {
 }
 
 func testUpdateSuppression() {
-	var (
-		d *testDriver
-	)
+	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
 
 	BeforeEach(func() {
-		d = newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
 		d.addInitialResource(d.resource)
 	})
 
 	JustBeforeEach(func() {
-		d.run()
-
 		d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
 		test.UpdateResource(d.sourceClient, d.resource)
-	})
-
-	AfterEach(func() {
-		d.stop()
 	})
 
 	When("the resource's Status is updated in the datastore", func() {
@@ -455,54 +328,127 @@ type testDriver struct {
 }
 
 func newTestDiver(sourceNamespace, localClusterID string, syncDirection syncer.SyncDirection) *testDriver {
-	federator := fake.New()
 	resourceType := &corev1.Pod{}
-	return &testDriver{
+	d := &testDriver{
 		config: syncer.ResourceSyncerConfig{
 			Name:            "test",
 			SourceNamespace: sourceNamespace,
 			LocalClusterID:  localClusterID,
-			Federator:       federator,
 			ResourceType:    resourceType,
 			Direction:       syncDirection,
 			Scheme:          runtime.NewScheme(),
 		},
-		federator:          federator,
-		stopCh:             make(chan struct{}),
-		resource:           test.NewPod(sourceNamespace),
-		savedErrorHandlers: utilruntime.ErrorHandlers,
-		handledError:       make(chan error, 1000),
 	}
-}
 
-func (t *testDriver) run() {
-	err := corev1.AddToScheme(t.config.Scheme)
-	Expect(err).To(Succeed())
+	err := corev1.AddToScheme(d.config.Scheme)
+	if err != nil {
+		panic(err)
+	}
 
-	initObjs := test.PrepInitialClientObjs(t.config.SourceNamespace, "", t.initialResources...)
-
-	restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(t.config.ResourceType)
-
-	t.config.RestMapper = restMapper
-	t.config.SourceClient = fakeClient.NewSimpleDynamicClient(t.config.Scheme, initObjs...)
-
-	t.sourceClient = t.config.SourceClient.Resource(*gvr).Namespace(t.config.SourceNamespace)
-
-	t.syncer, err = syncer.NewResourceSyncer(&t.config)
-	Expect(err).To(Succeed())
-
-	utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers, func(err error) {
-		t.handledError <- err
+	BeforeEach(func() {
+		d.federator = fake.New()
+		d.config.Federator = d.federator
+		d.initialResources = nil
+		d.resource = test.NewPod(sourceNamespace)
+		d.stopCh = make(chan struct{})
+		d.savedErrorHandlers = utilruntime.ErrorHandlers
+		d.handledError = make(chan error, 1000)
 	})
 
-	Expect(t.syncer.Start(t.stopCh)).To(Succeed())
-}
+	JustBeforeEach(func() {
+		initObjs := test.PrepInitialClientObjs(d.config.SourceNamespace, "", d.initialResources...)
 
-func (t *testDriver) stop() {
-	close(t.stopCh)
-	utilruntime.ErrorHandlers = t.savedErrorHandlers
+		restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(d.config.ResourceType)
+
+		d.config.RestMapper = restMapper
+		d.config.SourceClient = fakeClient.NewSimpleDynamicClient(d.config.Scheme, initObjs...)
+
+		d.sourceClient = d.config.SourceClient.Resource(*gvr).Namespace(d.config.SourceNamespace)
+
+		d.syncer, err = syncer.NewResourceSyncer(&d.config)
+		Expect(err).To(Succeed())
+
+		utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers, func(err error) {
+			d.handledError <- err
+		})
+
+		Expect(d.syncer.Start(d.stopCh)).To(Succeed())
+	})
+
+	AfterEach(func() {
+		close(d.stopCh)
+		utilruntime.ErrorHandlers = d.savedErrorHandlers
+	})
+
+	return d
 }
 
 func (t *testDriver) addInitialResource(obj runtime.Object) {
 	t.initialResources = append(t.initialResources, test.ToUnstructured(obj))
+}
+
+func (t *testDriver) verifyDistributeOnCreateTest(clusterID string) {
+	It("should distribute it", func() {
+		t.federator.VerifyDistribute(test.CreateResource(t.sourceClient, test.SetClusterIDLabel(t.resource, clusterID)))
+	})
+}
+
+func (t *testDriver) verifyNoDistributeOnCreateTest(clusterID string) {
+	It("should not distribute it", func() {
+		test.CreateResource(t.sourceClient, test.SetClusterIDLabel(t.resource, clusterID))
+		t.federator.VerifyNoDistribute()
+	})
+}
+
+func (t *testDriver) verifyDistributeOnUpdateTest(clusterID string) {
+	BeforeEach(func() {
+		t.addInitialResource(test.SetClusterIDLabel(t.resource, clusterID))
+	})
+
+	It("should distribute it", func() {
+		t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
+		t.federator.VerifyDistribute(test.UpdateResource(t.sourceClient, test.SetClusterIDLabel(
+			test.NewPodWithImage(t.config.SourceNamespace, "apache"), clusterID)))
+	})
+}
+
+func (t *testDriver) verifyNoDistributeOnUpdateTest(clusterID string) {
+	BeforeEach(func() {
+		t.addInitialResource(test.SetClusterIDLabel(t.resource, clusterID))
+	})
+
+	It("should not distribute it", func() {
+		t.federator.VerifyNoDistribute()
+
+		test.UpdateResource(t.sourceClient, test.SetClusterIDLabel(
+			test.NewPodWithImage(t.config.SourceNamespace, "apache"), clusterID))
+		t.federator.VerifyNoDistribute()
+	})
+}
+
+func (t *testDriver) verifyDistributeOnDeleteTest(clusterID string) {
+	BeforeEach(func() {
+		t.addInitialResource(test.SetClusterIDLabel(t.resource, clusterID))
+	})
+
+	It("should delete it", func() {
+		expected := test.GetResource(t.sourceClient, t.resource)
+		t.federator.VerifyDistribute(expected)
+
+		Expect(t.sourceClient.Delete(t.resource.GetName(), nil)).To(Succeed())
+		t.federator.VerifyDelete(expected)
+	})
+}
+
+func (t *testDriver) verifyNoDistributeOnDeleteTest(clusterID string) {
+	BeforeEach(func() {
+		t.addInitialResource(test.SetClusterIDLabel(t.resource, clusterID))
+	})
+
+	It("should not delete it", func() {
+		t.federator.VerifyNoDistribute()
+
+		Expect(t.sourceClient.Delete(t.resource.GetName(), nil)).To(Succeed())
+		t.federator.VerifyNoDelete()
+	})
 }

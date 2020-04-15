@@ -287,15 +287,16 @@ func (r *resourceSyncer) onDelete(obj interface{}) {
 func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 	clusterID, found := getClusterIDLabel(resource)
 	if r.config.Direction == LocalToRemote && found {
-		// This is the local -> remote case - only sync local resources w/o the label
+		// This is the local -> remote case - only sync local resources w/o the label, assuming any resource with the
+		// label originated from a remote source.
 		klog.V(log.DEBUG).Infof("Found cluster ID label %q - not syncing resource %q", clusterID, resource.GetName())
 		return false
 	}
 
-	if r.config.Direction == RemoteToLocal && (!found || clusterID == r.config.LocalClusterID) {
+	if r.config.Direction == RemoteToLocal && r.config.LocalClusterID != "" && (!found || clusterID == r.config.LocalClusterID) {
 		// This is the remote -> local case - do not sync local resources
-		klog.V(log.DEBUG).Infof("Cluster ID label %q matches local cluster ID - not syncing resource %q",
-			clusterID, resource.GetName())
+		klog.V(log.DEBUG).Infof("Cluster ID label %q not present or matches local cluster ID %q - not syncing resource %q",
+			clusterID, r.config.LocalClusterID, resource.GetName())
 		return false
 	}
 

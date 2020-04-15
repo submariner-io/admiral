@@ -150,7 +150,13 @@ func SetClusterIDLabel(obj runtime.Object, clusterID string) runtime.Object {
 		labels = map[string]string{}
 	}
 
-	labels[federate.ClusterIDLabelKey] = clusterID
+	if clusterID == "" {
+		delete(labels, federate.ClusterIDLabelKey)
+	} else {
+		labels[federate.ClusterIDLabelKey] = clusterID
+	}
+
+	meta.SetLabels(labels)
 	return obj
 }
 
