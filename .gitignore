@@ -4,9 +4,7 @@
 dist
 output
 /vendor
-/submariner
-.project
-.settings
 *.coverprofile
 *.out
-junit.xml
+junit*.xml
+.shflags

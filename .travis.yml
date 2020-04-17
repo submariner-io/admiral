@@ -11,6 +11,7 @@ git:
 jobs:
   include:
   - env: CMD="make test validate"
+  - env: CMD="make e2e"
 
 install:
   - sudo apt-get install moreutils # make ts available

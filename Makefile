@@ -1,21 +1,31 @@
-status ?= onetime
-version ?= 1.14.6
 
-TARGETS := $(shell ls scripts)
+ifneq (,$(DAPPER_HOST_ARCH))
 
-.dapper:
-	@echo Downloading dapper
-	@curl -sL https://releases.rancher.com/dapper/latest/dapper-`uname -s`-`uname -m` > .dapper.tmp
-	@@chmod +x .dapper.tmp
-	@./.dapper.tmp -v
-	@mv .dapper.tmp .dapper
+# Running in Dapper
 
-shell:
-	./.dapper -m bind -s
+include $(SHIPYARD_DIR)/Makefile.inc
 
-$(TARGETS): .dapper
-	./.dapper -m bind $@ $(status) $(version)
+TARGETS := $(shell ls -p scripts | grep -v -e /)
 
-.DEFAULT_GOAL := ci
+CLUSTER_SETTINGS_FLAG = --cluster_settings $(DAPPER_SOURCE)/scripts/cluster_settings
+override CLUSTERS_ARGS = $(CLUSTER_SETTINGS_FLAG)
+override E2E_ARGS += $(CLUSTER_SETTINGS_FLAG) --nolazy_deploy cluster1 cluster2
+
+deploy: clusters
+	./scripts/$@
+
+e2e: vendor/modules.txt deploy
+	./scripts/$@ $(E2E_ARGS)
 
 .PHONY: $(TARGETS)
+
+else
+
+# Not running in Dapper
+
+include Makefile.dapper
+
+endif
+
+# Disable rebuilding Makefile
+Makefile Makefile.dapper Makefile.inc: ;

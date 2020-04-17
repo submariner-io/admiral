@@ -1,0 +1,8 @@
+clusters=(cluster{1..2})
+
+cluster_nodes['cluster1']="control-plane worker"
+cluster_nodes['cluster2']="control-plane worker"
+
+cluster_subm['cluster1']="false"
+cluster_subm['cluster2']="false"
+
