@@ -1,30 +1,56 @@
 package test
 
 import (
+	"time"
+
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/federate"
+	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/uuid"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-func GetResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) (*unstructured.Unstructured, error) {
+const RemoteNamespace = "remote-ns"
+const LocalNamespace = "local-ns"
+
+func GetResourceAndError(resourceInterface dynamic.ResourceInterface, obj runtime.Object) (*unstructured.Unstructured, error) {
 	meta, err := meta.Accessor(obj)
 	Expect(err).To(Succeed())
 	return resourceInterface.Get(meta.GetName(), metav1.GetOptions{})
 }
 
-func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev1.Pod, expNamespace, clusterID string) {
-	raw, err := GetResource(resourceInterface, expected)
+func GetResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
+	resource, err := GetResourceAndError(resourceInterface, obj)
 	Expect(err).To(Succeed())
+	return resource
+}
+
+func CreateResource(resourceInterface dynamic.ResourceInterface, resource runtime.Object) *unstructured.Unstructured {
+	obj, err := resourceInterface.Create(ToUnstructured(resource), metav1.CreateOptions{})
+	Expect(err).To(Succeed())
+	return obj
+}
+
+func UpdateResource(resourceInterface dynamic.ResourceInterface, resource runtime.Object) *unstructured.Unstructured {
+	obj, err := resourceInterface.Update(ToUnstructured(resource), metav1.UpdateOptions{})
+	Expect(err).To(Succeed())
+	return obj
+}
+
+func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev1.Pod, expNamespace, clusterID string) {
+	raw := GetResource(resourceInterface, expected)
 
 	actual := &corev1.Pod{}
-	err = scheme.Scheme.Convert(raw, actual, nil)
+	err := scheme.Scheme.Convert(raw, actual, nil)
 	Expect(err).To(Succeed())
 
 	Expect(actual.GetName()).To(Equal(expected.GetName()))
@@ -70,4 +96,105 @@ func NewPodWithImage(namespace, imageName string) *corev1.Pod {
 			},
 		},
 	}
+}
+
+func GetRESTMapperAndGroupVersionResourceFor(obj runtime.Object) (meta.RESTMapper, *schema.GroupVersionResource) {
+	gvks, _, err := scheme.Scheme.ObjectKinds(obj)
+	Expect(err).To(Succeed())
+	Expect(gvks).ToNot(HaveLen(0))
+	gvk := gvks[0]
+
+	restMapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{gvk.GroupVersion()})
+	restMapper.Add(gvk, meta.RESTScopeNamespace)
+
+	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	Expect(err).To(Succeed())
+	return restMapper, &mapping.Resource
+}
+
+func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Object) []runtime.Object {
+	var newObjs []runtime.Object
+	for _, obj := range initObjs {
+		raw := ToUnstructured(obj)
+		raw.SetUID(uuid.NewUUID())
+		raw.SetResourceVersion("1")
+
+		if namespace != "" {
+			raw.SetNamespace(namespace)
+		}
+
+		if clusterID != "" {
+			labels := raw.GetLabels()
+			if labels == nil {
+				labels = map[string]string{}
+			}
+			labels[federate.ClusterIDLabelKey] = clusterID
+			raw.SetLabels(labels)
+		}
+
+		newObjs = append(newObjs, raw)
+	}
+
+	return newObjs
+}
+
+func ToUnstructured(obj runtime.Object) *unstructured.Unstructured {
+	raw, err := util.ToUnstructured(obj)
+	Expect(err).To(Succeed())
+	return raw
+}
+
+func SetClusterIDLabel(obj runtime.Object, clusterID string) runtime.Object {
+	meta, err := meta.Accessor(obj)
+	Expect(err).To(Succeed())
+
+	labels := meta.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+
+	if clusterID == "" {
+		delete(labels, federate.ClusterIDLabelKey)
+	} else {
+		labels[federate.ClusterIDLabelKey] = clusterID
+	}
+
+	meta.SetLabels(labels)
+	return obj
+}
+
+func WaitForResource(client dynamic.ResourceInterface, name string) *unstructured.Unstructured {
+	var found *unstructured.Unstructured
+	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
+		obj, err := client.Get(name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+
+		found = obj
+		return true, nil
+	})
+
+	Expect(err).To(Succeed())
+	return found
+}
+
+func WaitForNoResource(client dynamic.ResourceInterface, name string) {
+	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
+		_, err := client.Get(name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+
+		if err != nil {
+			return false, err
+		}
+
+		return false, nil
+	})
+
+	Expect(err).To(Succeed())
 }

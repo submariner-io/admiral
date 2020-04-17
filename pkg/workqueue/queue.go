@@ -13,7 +13,7 @@ import (
 	"k8s.io/klog"
 )
 
-type ProcessFunc func(name, namespace string) (bool, error)
+type ProcessFunc func(key, name, namespace string) (bool, error)
 
 type Interface interface {
 	Enqueue(obj interface{})
@@ -61,20 +61,22 @@ func (q *queueType) Run(stopCh <-chan struct{}, process ProcessFunc) {
 }
 
 func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
-	key, shutdown := q.Get()
+	obj, shutdown := q.Get()
 	if shutdown {
 		return false
 	}
 
+	key := obj.(string)
+
 	defer q.Done(key)
 
 	requeue, err := func() (bool, error) {
-		ns, name, err := cache.SplitMetaNamespaceKey(key.(string))
+		ns, name, err := cache.SplitMetaNamespaceKey(key)
 		if err != nil {
 			return false, err
 		}
 
-		return process(name, ns)
+		return process(key, name, ns)
 	}()
 
 	if err != nil {

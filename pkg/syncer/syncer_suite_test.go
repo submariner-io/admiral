@@ -1,4 +1,4 @@
-package broker_test
+package syncer_test
 
 import (
 	"testing"
@@ -12,7 +12,7 @@ func init() {
 	klog.InitFlags(nil)
 }
 
-func TestBroker(t *testing.T) {
+func TestSyncer(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Broker Suite")
+	RunSpecs(t, "Syncer Suite")
 }
