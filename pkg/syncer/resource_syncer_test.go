@@ -336,13 +336,7 @@ func newTestDiver(sourceNamespace, localClusterID string, syncDirection syncer.S
 			LocalClusterID:  localClusterID,
 			ResourceType:    resourceType,
 			Direction:       syncDirection,
-			Scheme:          runtime.NewScheme(),
 		},
-	}
-
-	err := corev1.AddToScheme(d.config.Scheme)
-	if err != nil {
-		panic(err)
 	}
 
 	BeforeEach(func() {
@@ -353,6 +347,10 @@ func newTestDiver(sourceNamespace, localClusterID string, syncDirection syncer.S
 		d.stopCh = make(chan struct{})
 		d.savedErrorHandlers = utilruntime.ErrorHandlers
 		d.handledError = make(chan error, 1000)
+		d.config.Scheme = runtime.NewScheme()
+
+		err := corev1.AddToScheme(d.config.Scheme)
+		Expect(err).To(Succeed())
 	})
 
 	JustBeforeEach(func() {
@@ -365,6 +363,7 @@ func newTestDiver(sourceNamespace, localClusterID string, syncDirection syncer.S
 
 		d.sourceClient = d.config.SourceClient.Resource(*gvr).Namespace(d.config.SourceNamespace)
 
+		var err error
 		d.syncer, err = syncer.NewResourceSyncer(&d.config)
 		Expect(err).To(Succeed())
 
