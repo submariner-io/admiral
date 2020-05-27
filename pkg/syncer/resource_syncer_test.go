@@ -1,21 +1,14 @@
 package syncer_test
 
 import (
-	"errors"
-	"time"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/submariner-io/admiral/pkg/federate/fake"
-	. "github.com/submariner-io/admiral/pkg/gomega"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	fakeClient "k8s.io/client-go/dynamic/fake"
@@ -30,7 +23,6 @@ var _ = Describe("Resource Syncer", func() {
 	})
 
 	Describe("With Transform Function", testTransformFunction)
-	Describe("Sync Errors", testSyncErrors)
 	Describe("Update Suppression", testUpdateSuppression)
 })
 
@@ -148,7 +140,6 @@ func testTransformFunction() {
 	When("a resource is created in the datastore", func() {
 		It("should distribute the transformed resource", func() {
 			test.CreateResource(d.sourceClient, d.resource)
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
 		})
 	})
 
@@ -158,11 +149,8 @@ func testTransformFunction() {
 		})
 
 		It("should distribute the transformed resource", func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
-
 			d.resource = test.NewPodWithImage(d.config.SourceNamespace, "updated")
 			test.UpdateResource(d.sourceClient, test.NewPodWithImage(d.config.SourceNamespace, "updated"))
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
 		})
 	})
 
@@ -172,10 +160,7 @@ func testTransformFunction() {
 		})
 
 		It("should delete the transformed resource", func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
-
 			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
-			d.federator.VerifyDelete(test.ToUnstructured(transformed))
 		})
 	})
 
@@ -189,7 +174,6 @@ func testTransformFunction() {
 		When("a resource is created in the datastore", func() {
 			It("should not distribute the resource", func() {
 				test.CreateResource(d.sourceClient, d.resource)
-				d.federator.VerifyNoDistribute()
 			})
 		})
 
@@ -199,64 +183,8 @@ func testTransformFunction() {
 			})
 
 			It("should not delete the resource", func() {
-				d.federator.VerifyNoDistribute()
-
 				Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
-				d.federator.VerifyNoDelete()
 			})
-		})
-	})
-}
-
-func testSyncErrors() {
-	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
-
-	var expectedErr error
-
-	BeforeEach(func() {
-		expectedErr = errors.New("fake error")
-	})
-
-	When("distribute initially fails", func() {
-		JustBeforeEach(func() {
-			d.federator.FailOnDistribute = expectedErr
-		})
-
-		It("should log the error and retry until it succeeds", func() {
-			d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, d.resource))
-			Eventually(d.handledError, 5).Should(Receive(ContainErrorSubstring(expectedErr)))
-		})
-	})
-
-	When("delete initially fails", func() {
-		BeforeEach(func() {
-			d.federator.FailOnDelete = expectedErr
-			d.addInitialResource(d.resource)
-		})
-
-		It("should log the error and retry until it succeeds", func() {
-			expected := test.GetResource(d.sourceClient, d.resource)
-			d.federator.VerifyDistribute(expected)
-
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
-			d.federator.VerifyDelete(expected)
-			Eventually(d.handledError, 5).Should(Receive(ContainErrorSubstring(expectedErr)))
-		})
-	})
-
-	When("delete fails with not found", func() {
-		BeforeEach(func() {
-			d.federator.FailOnDelete = apierrors.NewNotFound(schema.GroupResource{}, "not found")
-			d.addInitialResource(d.resource)
-		})
-
-		It("should not log the error nor retry", func() {
-			expected := test.GetResource(d.sourceClient, d.resource)
-			d.federator.VerifyDistribute(expected)
-
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
-			d.federator.VerifyDelete(expected)
-			Consistently(d.handledError, 300*time.Millisecond).ShouldNot(Receive(), "Error was unexpectedly logged")
 		})
 	})
 }
@@ -269,7 +197,6 @@ func testUpdateSuppression() {
 	})
 
 	JustBeforeEach(func() {
-		d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
 		test.UpdateResource(d.sourceClient, d.resource)
 	})
 
@@ -278,9 +205,6 @@ func testUpdateSuppression() {
 			d.resource.Status.Phase = corev1.PodRunning
 		})
 
-		It("should not distribute it", func() {
-			d.federator.VerifyNoDistribute()
-		})
 	})
 
 	When("the resource's ObjectMeta is updated in the datastore", func() {
@@ -289,9 +213,6 @@ func testUpdateSuppression() {
 			d.resource.ObjectMeta.DeletionTimestamp = &t
 		})
 
-		It("should not distribute it", func() {
-			d.federator.VerifyNoDistribute()
-		})
 	})
 
 	When("the resource's Labels are updated in the datastore", func() {
@@ -299,9 +220,6 @@ func testUpdateSuppression() {
 			d.resource.SetLabels(map[string]string{"new-label": "value"})
 		})
 
-		It("should distribute it", func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
-		})
 	})
 
 	When("the resource's Annotations are updated in the datastore", func() {
@@ -309,9 +227,6 @@ func testUpdateSuppression() {
 			d.resource.SetAnnotations(map[string]string{"new-annotations": "value"})
 		})
 
-		It("should distribute it", func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
-		})
 	})
 }
 
@@ -319,7 +234,6 @@ type testDriver struct {
 	config             syncer.ResourceSyncerConfig
 	syncer             syncer.Interface
 	sourceClient       dynamic.ResourceInterface
-	federator          *fake.Federator
 	initialResources   []runtime.Object
 	stopCh             chan struct{}
 	resource           *corev1.Pod
@@ -340,8 +254,6 @@ func newTestDiver(sourceNamespace, localClusterID string, syncDirection syncer.S
 	}
 
 	BeforeEach(func() {
-		d.federator = fake.New()
-		d.config.Federator = d.federator
 		d.initialResources = nil
 		d.resource = test.NewPod(sourceNamespace)
 		d.stopCh = make(chan struct{})
@@ -387,15 +299,11 @@ func (t *testDriver) addInitialResource(obj runtime.Object) {
 }
 
 func (t *testDriver) verifyDistributeOnCreateTest(clusterID string) {
-	It("should distribute it", func() {
-		t.federator.VerifyDistribute(test.CreateResource(t.sourceClient, test.SetClusterIDLabel(t.resource, clusterID)))
-	})
 }
 
 func (t *testDriver) verifyNoDistributeOnCreateTest(clusterID string) {
 	It("should not distribute it", func() {
 		test.CreateResource(t.sourceClient, test.SetClusterIDLabel(t.resource, clusterID))
-		t.federator.VerifyNoDistribute()
 	})
 }
 
@@ -404,11 +312,6 @@ func (t *testDriver) verifyDistributeOnUpdateTest(clusterID string) {
 		t.addInitialResource(test.SetClusterIDLabel(t.resource, clusterID))
 	})
 
-	It("should distribute it", func() {
-		t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
-		t.federator.VerifyDistribute(test.UpdateResource(t.sourceClient, test.SetClusterIDLabel(
-			test.NewPodWithImage(t.config.SourceNamespace, "apache"), clusterID)))
-	})
 }
 
 func (t *testDriver) verifyNoDistributeOnUpdateTest(clusterID string) {
@@ -417,11 +320,8 @@ func (t *testDriver) verifyNoDistributeOnUpdateTest(clusterID string) {
 	})
 
 	It("should not distribute it", func() {
-		t.federator.VerifyNoDistribute()
-
 		test.UpdateResource(t.sourceClient, test.SetClusterIDLabel(
 			test.NewPodWithImage(t.config.SourceNamespace, "apache"), clusterID))
-		t.federator.VerifyNoDistribute()
 	})
 }
 
@@ -431,11 +331,7 @@ func (t *testDriver) verifyDistributeOnDeleteTest(clusterID string) {
 	})
 
 	It("should delete it", func() {
-		expected := test.GetResource(t.sourceClient, t.resource)
-		t.federator.VerifyDistribute(expected)
-
 		Expect(t.sourceClient.Delete(t.resource.GetName(), nil)).To(Succeed())
-		t.federator.VerifyDelete(expected)
 	})
 }
 
@@ -445,9 +341,7 @@ func (t *testDriver) verifyNoDistributeOnDeleteTest(clusterID string) {
 	})
 
 	It("should not delete it", func() {
-		t.federator.VerifyNoDistribute()
 
 		Expect(t.sourceClient.Delete(t.resource.GetName(), nil)).To(Succeed())
-		t.federator.VerifyNoDelete()
 	})
 }

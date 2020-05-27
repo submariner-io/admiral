@@ -4,7 +4,6 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
-	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -66,10 +65,6 @@ func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev
 		copy[k] = v
 	}
 
-	if clusterID != "" {
-		copy[federate.ClusterIDLabelKey] = clusterID
-	}
-
 	Expect(actual.GetLabels()).To(Equal(copy))
 }
 
@@ -128,7 +123,6 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 			if labels == nil {
 				labels = map[string]string{}
 			}
-			labels[federate.ClusterIDLabelKey] = clusterID
 			raw.SetLabels(labels)
 		}
 
@@ -151,12 +145,6 @@ func SetClusterIDLabel(obj runtime.Object, clusterID string) runtime.Object {
 	labels := meta.GetLabels()
 	if labels == nil {
 		labels = map[string]string{}
-	}
-
-	if clusterID == "" {
-		delete(labels, federate.ClusterIDLabelKey)
-	} else {
-		labels[federate.ClusterIDLabelKey] = clusterID
 	}
 
 	meta.SetLabels(labels)

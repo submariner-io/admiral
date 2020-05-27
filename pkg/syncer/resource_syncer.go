@@ -5,12 +5,10 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/util"
 	"github.com/submariner-io/admiral/pkg/workqueue"
 	"k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -59,9 +57,6 @@ type ResourceSyncerConfig struct {
 
 	// RestMapper used to obtain GroupVersionResources.
 	RestMapper meta.RESTMapper
-
-	// Federator used to perform the syncing.
-	Federator federate.Federator
 
 	// ResourceType the type of the resources to sync.
 	ResourceType runtime.Object
@@ -155,11 +150,6 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 
 		klog.V(log.DEBUG).Infof("Syncing resource: %#v", resource)
 
-		err = r.config.Federator.Distribute(resource)
-		if err != nil {
-			return true, err
-		}
-
 		klog.V(log.DEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, key)
 	}
 
@@ -185,17 +175,6 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 		}
 
 		klog.V(log.DEBUG).Infof("Syncer %q deleting resource: %#v", r.config.Name, resource)
-
-		err := r.config.Federator.Delete(resource)
-		if apierrors.IsNotFound(err) {
-			klog.V(log.DEBUG).Infof("Syncer %q: resource %q not found - ignoring", r.config.Name, key)
-			return false, nil
-		}
-
-		if err != nil {
-			r.deleted.Store(key, resource)
-			return true, err
-		}
 
 		klog.V(log.DEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, key)
 	}
@@ -231,7 +210,7 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured) *unstructure
 
 	// Preserve the cluster ID label
 	if clusterID != "" {
-		_ = unstructured.SetNestedField(result.Object, clusterID, util.MetadataField, util.LabelsField, federate.ClusterIDLabelKey)
+		_ = unstructured.SetNestedField(result.Object, clusterID, util.MetadataField, util.LabelsField)
 	}
 
 	return result
@@ -305,6 +284,6 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 }
 
 func getClusterIDLabel(resource *unstructured.Unstructured) (string, bool) {
-	clusterID, found, _ := unstructured.NestedString(resource.Object, util.MetadataField, util.LabelsField, federate.ClusterIDLabelKey)
+	clusterID, found, _ := unstructured.NestedString(resource.Object, util.MetadataField, util.LabelsField)
 	return clusterID, found
 }
