@@ -28,7 +28,7 @@ var _ = Describe("[syncer] Broker bi-directional syncer tests", func() {
 })
 
 func testWithSpecificSourceNamespace() {
-	t := newTestDiver()
+	t := newTestDriver()
 
 	BeforeEach(func() {
 		t.localSourceNamespace = t.framework.Namespace
@@ -38,11 +38,11 @@ func testWithSpecificSourceNamespace() {
 }
 
 func testWithSourceNamespaceAll() {
-	newTestDiver().bidirectionalSyncTests()
+	newTestDriver().bidirectionalSyncTests()
 }
 
 func testWithLocalTransform() {
-	t := newTestDiver()
+	t := newTestDriver()
 
 	BeforeEach(func() {
 		t.brokerResourceType = &testV1.ExportedToaster{}
@@ -79,7 +79,7 @@ type testDriver struct {
 	stopCh               chan struct{}
 }
 
-func newTestDiver() *testDriver {
+func newTestDriver() *testDriver {
 	f := framework.NewFramework("broker-syncer")
 
 	t := &testDriver{framework: f}

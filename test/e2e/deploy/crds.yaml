@@ -22,3 +22,4 @@ spec:
     kind: ExportedToaster
     plural: exportedtoasters
   scope: Namespaced
+
