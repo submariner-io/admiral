@@ -16,7 +16,7 @@ type brokerSpecification struct {
 	Ca              string
 }
 
-func BuildBrokerConfigFromEnv() (*rest.Config, string, error) {
+func BuildBrokerConfigFromEnv(useTokenCAForEndpoint bool) (*rest.Config, string, error) {
 	brokerSpec := brokerSpecification{}
 	err := envconfig.Process("broker_k8s", &brokerSpec)
 	if err != nil {
@@ -26,7 +26,7 @@ func BuildBrokerConfigFromEnv() (*rest.Config, string, error) {
 	tlsClientConfig := rest.TLSClientConfig{}
 	if brokerSpec.Insecure {
 		tlsClientConfig.Insecure = true
-	} else {
+	} else if useTokenCAForEndpoint {
 		caDecoded, err := base64.StdEncoding.DecodeString(brokerSpec.Ca)
 		if err != nil {
 			return nil, "", fmt.Errorf("error decoding CA data: %v", err)

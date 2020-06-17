@@ -1,13 +1,16 @@
 package broker
 
 import (
+	"crypto/x509"
 	"fmt"
+	"net/url"
 	"reflect"
 
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -61,6 +64,10 @@ type Syncer struct {
 
 // NewSyncer creates a Syncer that performs bi-directional syncing of resources between a local source and a central broker.
 func NewSyncer(config SyncerConfig) (*Syncer, error) {
+	if len(config.ResourceConfigs) == 0 {
+		return nil, fmt.Errorf("no resources to sync")
+	}
+
 	restMapper, err := util.BuildRestMapper(config.LocalRestConfig)
 	if err != nil {
 		return nil, err
@@ -71,20 +78,54 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 		return nil, fmt.Errorf("error creating dynamic client: %v", err)
 	}
 
-	brokerRestConfig := config.BrokerRestConfig
-	if brokerRestConfig == nil {
-		brokerRestConfig, config.BrokerNamespace, err = BuildBrokerConfigFromEnv()
+	var brokerClient dynamic.Interface
+	if config.BrokerRestConfig != nil {
+		// We have an existing REST configuration, assume it’s correct (but check it anyway)
+		brokerClient, err = getCheckedBrokerClientset(config.BrokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace, restMapper)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		var brokerRestConfig *rest.Config
+		// We’ll build a REST configuration from the environment, checking whether we need to provide an explicit trust anchor
+		brokerRestConfig, config.BrokerNamespace, err = BuildBrokerConfigFromEnv(false)
+		if err != nil {
+			return nil, err
+		}
+		brokerClient, err = getCheckedBrokerClientset(brokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace, restMapper)
+		if err != nil {
+			if urlError, ok := err.(*url.Error); ok {
+				if _, ok := urlError.Unwrap().(x509.UnknownAuthorityError); ok {
+					// Certificate error, try with the trust chain
+					brokerRestConfig, config.BrokerNamespace, err = BuildBrokerConfigFromEnv(true)
+					if err != nil {
+						return nil, err
+					}
+					brokerClient, err = getCheckedBrokerClientset(brokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace, restMapper)
+				}
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	brokerClient, err := dynamic.NewForConfig(brokerRestConfig)
-	if err != nil {
-		return nil, fmt.Errorf("error creating dynamic client: %v", err)
-	}
-
 	return newSyncer(&config, localClient, brokerClient, restMapper)
+}
+
+func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, brokerNamespace string, restMapper meta.RESTMapper) (dynamic.Interface, error) {
+	client, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return nil, err
+	}
+	// Try retrieving the resource
+	_, gvr, err := util.ToUnstructuredResource(rc.BrokerResourceType, restMapper)
+	if err != nil {
+		return nil, err
+	}
+	resourceClient := client.Resource(*gvr).Namespace(brokerNamespace)
+	_, err = resourceClient.List(metav1.ListOptions{})
+	return client, err
 }
 
 func newSyncer(config *SyncerConfig, localClient, brokerClient dynamic.Interface, restMapper meta.RESTMapper) (*Syncer, error) {
