@@ -9,12 +9,9 @@ import (
 	"github.com/submariner-io/shipyard/test/e2e"
 	"github.com/submariner-io/shipyard/test/e2e/framework"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/klog"
 )
 
 func init() {
-	klog.InitFlags(nil)
-
 	framework.AddBeforeSuite(func() {
 		Expect(testV1.AddToScheme(scheme.Scheme)).To(Succeed())
 	})
