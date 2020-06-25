@@ -1,1 +1,5 @@
 * @mangelajo @tpantelis @Oats87
+/.github/workflows/ 	@mkolesnik
+/scripts/ 		@mkolesnik
+Makefile* 		@mkolesnik
+Dockerfile.dapper 	@mkolesnik
