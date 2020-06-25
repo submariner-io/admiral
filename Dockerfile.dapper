@@ -1,4 +1,4 @@
-FROM quay.io/submariner/shipyard-dapper-base:0.4.0
+FROM quay.io/submariner/shipyard-dapper-base
 
 ENV DAPPER_ENV=REPO DAPPER_ENV=TAG \
     DAPPER_SOURCE=/go/src/github.com/submariner-io/admiral DAPPER_DOCKER_SOCKET=true
