@@ -46,14 +46,14 @@ func testWithLocalTransform() {
 
 	BeforeEach(func() {
 		t.brokerResourceType = &testV1.ExportedToaster{}
-		t.localTransform = func(from runtime.Object) runtime.Object {
+		t.localTransform = func(from runtime.Object) (runtime.Object, bool) {
 			toaster := from.(*testV1.Toaster)
 			return &testV1.ExportedToaster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: toaster.GetName(),
 				},
 				Spec: toaster.Spec,
-			}
+			}, false
 		}
 	})
 
@@ -73,7 +73,7 @@ func testWithLocalTransform() {
 type testDriver struct {
 	framework            *framework.Framework
 	localSourceNamespace string
-	localTransform       func(from runtime.Object) runtime.Object
+	localTransform       func(from runtime.Object) (runtime.Object, bool)
 	brokerResourceType   runtime.Object
 	clusterClients       []dynamic.Interface
 	stopCh               chan struct{}
