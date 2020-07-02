@@ -2,6 +2,7 @@ package syncer_test
 
 import (
 	"errors"
+	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -137,11 +138,13 @@ func testTransformFunction() {
 
 	BeforeEach(func() {
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
-		d.config.Transform = func(from runtime.Object) runtime.Object {
+		d.config.Transform = func(from runtime.Object) (runtime.Object, bool) {
+			defer GinkgoRecover()
 			pod, ok := from.(*corev1.Pod)
-			Expect(ok).To(BeTrue())
-			Expect(equality.Semantic.DeepDerivative(d.resource.Spec, pod.Spec)).To(BeTrue())
-			return transformed
+			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", from)
+			Expect(equality.Semantic.DeepDerivative(d.resource.Spec, pod.Spec)).To(BeTrue(),
+				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, d.resource.Spec)
+			return transformed, false
 		}
 	})
 
@@ -166,7 +169,7 @@ func testTransformFunction() {
 		})
 	})
 
-	When("a resource is deleted in the datastore", func() {
+	When("a resource is deleted from the datastore", func() {
 		BeforeEach(func() {
 			d.addInitialResource(d.resource)
 		})
@@ -179,10 +182,28 @@ func testTransformFunction() {
 		})
 	})
 
-	When("the transform function returns nil", func() {
+	When("deletion of the transformed resource initially fails", func() {
 		BeforeEach(func() {
-			d.config.Transform = func(from runtime.Object) runtime.Object {
-				return nil
+			d.federator.FailOnDelete = errors.New("fake error")
+			d.addInitialResource(d.resource)
+		})
+
+		It("should retry until it succeeds", func() {
+			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+
+			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+			d.federator.VerifyDelete(test.ToUnstructured(transformed))
+		})
+	})
+
+	When("the transform function returns nil with no re-queue", func() {
+		var count int32
+
+		BeforeEach(func() {
+			atomic.StoreInt32(&count, 0)
+			d.config.Transform = func(from runtime.Object) (runtime.Object, bool) {
+				atomic.AddInt32(&count, 1)
+				return nil, false
 			}
 		})
 
@@ -190,6 +211,7 @@ func testTransformFunction() {
 			It("should not distribute the resource", func() {
 				test.CreateResource(d.sourceClient, d.resource)
 				d.federator.VerifyNoDistribute()
+				Expect(int(atomic.LoadInt32(&count))).To(Equal(1))
 			})
 		})
 
@@ -200,9 +222,52 @@ func testTransformFunction() {
 
 			It("should not delete the resource", func() {
 				d.federator.VerifyNoDistribute()
+				atomic.StoreInt32(&count, 0)
 
 				Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
 				d.federator.VerifyNoDelete()
+				Expect(int(atomic.LoadInt32(&count))).To(Equal(1))
+			})
+		})
+	})
+
+	When("the transform function initially returns nil with re-queue", func() {
+		nilResource := &corev1.Pod{}
+		var transformFuncRet *atomic.Value
+
+		BeforeEach(func() {
+			transformFuncRet = &atomic.Value{}
+			transformFuncRet.Store(nilResource)
+			d.config.Transform = func(from runtime.Object) (runtime.Object, bool) {
+				var ret runtime.Object
+				v := transformFuncRet.Load()
+				if v != nilResource {
+					ret = v.(runtime.Object)
+				}
+
+				transformFuncRet.Store(transformed)
+				return ret, true
+			}
+		})
+
+		When("a resource is created in the datastore", func() {
+			It("should eventually distribute the transformed resource", func() {
+				test.CreateResource(d.sourceClient, d.resource)
+				d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			})
+		})
+
+		When("a resource is deleted in the datastore", func() {
+			BeforeEach(func() {
+				d.addInitialResource(d.resource)
+			})
+
+			It("should eventually delete the resource", func() {
+				d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+				transformFuncRet.Store(nilResource)
+
+				Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+				d.federator.VerifyDelete(test.ToUnstructured(transformed))
 			})
 		})
 	})
@@ -239,8 +304,8 @@ func testSyncErrors() {
 			d.federator.VerifyDistribute(expected)
 
 			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
-			d.federator.VerifyDelete(expected)
 			Eventually(d.handledError, 5).Should(Receive(ContainErrorSubstring(expectedErr)))
+			d.federator.VerifyDelete(expected)
 		})
 	})
 
@@ -255,7 +320,6 @@ func testSyncErrors() {
 			d.federator.VerifyDistribute(expected)
 
 			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
-			d.federator.VerifyDelete(expected)
 			Consistently(d.handledError, 300*time.Millisecond).ShouldNot(Receive(), "Error was unexpectedly logged")
 		})
 	})

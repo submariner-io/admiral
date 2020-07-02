@@ -22,26 +22,24 @@ func New() *Federator {
 }
 
 func (f *Federator) Distribute(resource runtime.Object) error {
-	f.distribute <- resource
-
 	err := f.FailOnDistribute
 	if err != nil {
 		f.FailOnDistribute = nil
 		return err
 	}
 
+	f.distribute <- resource
 	return nil
 }
 
 func (f *Federator) Delete(resource runtime.Object) error {
-	f.delete <- resource
-
 	err := f.FailOnDelete
 	if err != nil {
 		f.FailOnDelete = nil
 		return err
 	}
 
+	f.delete <- resource
 	return nil
 }
 
