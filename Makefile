@@ -10,6 +10,7 @@ TARGETS := $(shell ls -p scripts | grep -v -e /)
 CLUSTER_SETTINGS_FLAG = --cluster_settings $(DAPPER_SOURCE)/scripts/cluster_settings
 override CLUSTERS_ARGS = $(CLUSTER_SETTINGS_FLAG)
 override E2E_ARGS += $(CLUSTER_SETTINGS_FLAG) --nolazy_deploy cluster1 cluster2
+override UNIT_TEST_ARGS += test/e2e
 
 deploy: clusters
 	./scripts/$@
@@ -17,7 +18,9 @@ deploy: clusters
 e2e: vendor/modules.txt deploy
 	./scripts/$@ $(E2E_ARGS)
 
-.PHONY: $(TARGETS)
+test: unit-test
+	
+.PHONY: $(TARGETS) test
 
 else
 
