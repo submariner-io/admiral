@@ -58,6 +58,20 @@ func testDistribute() {
 			})
 		})
 
+		When("the resource contains Status data", func() {
+			BeforeEach(func() {
+				resource.Status = corev1.PodStatus{
+					Phase:   "PodRunning",
+					Message: "Pod is running",
+				}
+			})
+
+			It("should create the resource with the Status data", func() {
+				Expect(f.Distribute(resource)).To(Succeed())
+				test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
+			})
+		})
+
 		When("create fails", func() {
 			JustBeforeEach(func() {
 				resourceClient.FailOnCreate = apierrors.NewServiceUnavailable("fake")
