@@ -86,7 +86,6 @@ func (f *federator) prepareResourceForSync(resource *unstructured.Unstructured) 
 		}
 	}
 
-	unstructured.RemoveNestedField(resource.Object, "status")
 	resource.SetNamespace(f.brokerNamespace)
 }
 
