@@ -32,10 +32,29 @@ const (
 	RemoteToLocal
 )
 
+type Operation int
+
+const (
+	Create Operation = iota
+	Update
+	Delete
+)
+
+func (o Operation) String() string {
+	switch o {
+	case Create:
+		return "create"
+	case Update:
+		return "update"
+	default:
+		return "delete"
+	}
+}
+
 // TransformFunc is invoked prior to syncing to transform the resource or evaluate if it should be synced.
 // If nil is returned, the resource is not synced and, if the second return value is true, the resource is re-queued
 // to be retried later.
-type TransformFunc func(from runtime.Object) (runtime.Object, bool)
+type TransformFunc func(from runtime.Object, op Operation) (runtime.Object, bool)
 
 type ResourceSyncerConfig struct {
 	// Name of this syncer used for logging.
@@ -80,6 +99,7 @@ type resourceSyncer struct {
 	store     cache.Store
 	config    ResourceSyncerConfig
 	deleted   sync.Map
+	created   sync.Map
 }
 
 func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
@@ -107,7 +127,7 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 			return resourceClient.Watch(options)
 		},
 	}, &unstructured.Unstructured{}, 0, cache.ResourceEventHandlerFuncs{
-		AddFunc:    syncer.workQueue.Enqueue,
+		AddFunc:    syncer.onCreate,
 		UpdateFunc: syncer.onUpdate,
 		DeleteFunc: syncer.onDelete,
 	})
@@ -146,11 +166,20 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 
 	resource := obj.(*unstructured.Unstructured)
 
-	klog.V(log.DEBUG).Infof("Syncer %q retrieved added or updated resource: %#v", r.config.Name, resource)
+	op := Update
+	_, found := r.created.Load(key)
+	if found {
+		op = Create
+	}
+
+	klog.V(log.DEBUG).Infof("Syncer %q retrieved %sd resource: %#v", r.config.Name, op, resource)
 
 	if r.shouldSync(resource) {
-		resource, requeue := r.transform(resource)
+		resource, requeue := r.transform(resource, op)
 		if resource == nil {
+			if !requeue {
+				r.created.Delete(key)
+			}
 			return requeue, nil
 		}
 
@@ -164,6 +193,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 		klog.V(log.DEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, key)
 	}
 
+	r.created.Delete(key)
 	return false, nil
 }
 
@@ -180,7 +210,7 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 
 	deletedResource := obj.(*unstructured.Unstructured)
 	if r.shouldSync(deletedResource) {
-		resource, requeue := r.transform(deletedResource)
+		resource, requeue := r.transform(deletedResource, Delete)
 		if resource == nil {
 			if requeue {
 				r.deleted.Store(key, deletedResource)
@@ -207,7 +237,7 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 	return false, nil
 }
 
-func (r *resourceSyncer) transform(from *unstructured.Unstructured) (*unstructured.Unstructured, bool) {
+func (r *resourceSyncer) transform(from *unstructured.Unstructured, op Operation) (*unstructured.Unstructured, bool) {
 	if r.config.Transform == nil {
 		return from, false
 	}
@@ -221,7 +251,7 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured) (*unstructur
 		return nil, false
 	}
 
-	transformed, requeue := r.config.Transform(converted)
+	transformed, requeue := r.config.Transform(converted, op)
 	if transformed == nil {
 		klog.V(log.DEBUG).Infof("Syncer %q: transform function returned nil - not syncing - requeue: %v", r.config.Name, requeue)
 		return nil, requeue
@@ -239,6 +269,13 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured) (*unstructur
 	}
 
 	return result, false
+}
+
+func (r *resourceSyncer) onCreate(resource interface{}) {
+	key, _ := cache.MetaNamespaceKeyFunc(resource)
+	v := true
+	r.created.Store(key, &v)
+	r.workQueue.Enqueue(resource)
 }
 
 func (r *resourceSyncer) onUpdate(old interface{}, new interface{}) {

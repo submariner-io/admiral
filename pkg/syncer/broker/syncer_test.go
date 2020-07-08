@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/fake"
+	sync "github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -128,7 +129,7 @@ var _ = Describe("Broker Syncer", func() {
 	When("a local transform function is specified", func() {
 		BeforeEach(func() {
 			transformed = test.NewPodWithImage(config.LocalNamespace, "transformed")
-			config.ResourceConfigs[0].LocalTransform = func(from runtime.Object) (runtime.Object, bool) {
+			config.ResourceConfigs[0].LocalTransform = func(from runtime.Object, op sync.Operation) (runtime.Object, bool) {
 				return transformed, false
 			}
 		})
@@ -146,7 +147,7 @@ var _ = Describe("Broker Syncer", func() {
 	When("a broker transform function is specified", func() {
 		BeforeEach(func() {
 			transformed = test.NewPodWithImage(config.LocalNamespace, "transformed")
-			config.ResourceConfigs[0].BrokerTransform = func(from runtime.Object) (runtime.Object, bool) {
+			config.ResourceConfigs[0].BrokerTransform = func(from runtime.Object, op sync.Operation) (runtime.Object, bool) {
 				return transformed, false
 			}
 		})

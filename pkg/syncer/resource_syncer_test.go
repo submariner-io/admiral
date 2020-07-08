@@ -135,15 +135,18 @@ func testTransformFunction() {
 	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
 
 	var transformed *corev1.Pod
+	var expOperation chan syncer.Operation
 
 	BeforeEach(func() {
+		expOperation = make(chan syncer.Operation, 20)
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
-		d.config.Transform = func(from runtime.Object) (runtime.Object, bool) {
+		d.config.Transform = func(from runtime.Object, op syncer.Operation) (runtime.Object, bool) {
 			defer GinkgoRecover()
 			pod, ok := from.(*corev1.Pod)
 			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", from)
 			Expect(equality.Semantic.DeepDerivative(d.resource.Spec, pod.Spec)).To(BeTrue(),
 				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, d.resource.Spec)
+			expOperation <- op
 			return transformed, false
 		}
 	})
@@ -152,6 +155,7 @@ func testTransformFunction() {
 		It("should distribute the transformed resource", func() {
 			test.CreateResource(d.sourceClient, d.resource)
 			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 		})
 	})
 
@@ -162,10 +166,12 @@ func testTransformFunction() {
 
 		It("should distribute the transformed resource", func() {
 			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
 			d.resource = test.NewPodWithImage(d.config.SourceNamespace, "updated")
 			test.UpdateResource(d.sourceClient, test.NewPodWithImage(d.config.SourceNamespace, "updated"))
 			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Update)))
 		})
 	})
 
@@ -176,9 +182,11 @@ func testTransformFunction() {
 
 		It("should delete the transformed resource", func() {
 			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
 			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
 			d.federator.VerifyDelete(test.ToUnstructured(transformed))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 		})
 	})
 
@@ -190,9 +198,25 @@ func testTransformFunction() {
 
 		It("should retry until it succeeds", func() {
 			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
 			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
 			d.federator.VerifyDelete(test.ToUnstructured(transformed))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
+		})
+	})
+
+	When("distribute for the transformed resource initially fails", func() {
+		JustBeforeEach(func() {
+			d.federator.FailOnDistribute = errors.New("fake error")
+		})
+
+		It("retry until it succeeds", func() {
+			test.CreateResource(d.sourceClient, d.resource)
+			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 		})
 	})
 
@@ -201,8 +225,9 @@ func testTransformFunction() {
 
 		BeforeEach(func() {
 			atomic.StoreInt32(&count, 0)
-			d.config.Transform = func(from runtime.Object) (runtime.Object, bool) {
+			d.config.Transform = func(from runtime.Object, op syncer.Operation) (runtime.Object, bool) {
 				atomic.AddInt32(&count, 1)
+				expOperation <- op
 				return nil, false
 			}
 		})
@@ -212,6 +237,7 @@ func testTransformFunction() {
 				test.CreateResource(d.sourceClient, d.resource)
 				d.federator.VerifyNoDistribute()
 				Expect(int(atomic.LoadInt32(&count))).To(Equal(1))
+				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 			})
 		})
 
@@ -223,10 +249,12 @@ func testTransformFunction() {
 			It("should not delete the resource", func() {
 				d.federator.VerifyNoDistribute()
 				atomic.StoreInt32(&count, 0)
+				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
 				Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
 				d.federator.VerifyNoDelete()
 				Expect(int(atomic.LoadInt32(&count))).To(Equal(1))
+				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 			})
 		})
 	})
@@ -238,7 +266,7 @@ func testTransformFunction() {
 		BeforeEach(func() {
 			transformFuncRet = &atomic.Value{}
 			transformFuncRet.Store(nilResource)
-			d.config.Transform = func(from runtime.Object) (runtime.Object, bool) {
+			d.config.Transform = func(from runtime.Object, op syncer.Operation) (runtime.Object, bool) {
 				var ret runtime.Object
 				v := transformFuncRet.Load()
 				if v != nilResource {
@@ -246,6 +274,7 @@ func testTransformFunction() {
 				}
 
 				transformFuncRet.Store(transformed)
+				expOperation <- op
 				return ret, true
 			}
 		})
@@ -254,6 +283,7 @@ func testTransformFunction() {
 			It("should eventually distribute the transformed resource", func() {
 				test.CreateResource(d.sourceClient, d.resource)
 				d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 			})
 		})
 
@@ -264,10 +294,12 @@ func testTransformFunction() {
 
 			It("should eventually delete the resource", func() {
 				d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 				transformFuncRet.Store(nilResource)
 
 				Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
 				d.federator.VerifyDelete(test.ToUnstructured(transformed))
+				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 			})
 		})
 	})

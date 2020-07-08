@@ -7,6 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/broker"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	testV1 "github.com/submariner-io/admiral/test/apis/admiral.submariner.io/v1"
@@ -46,7 +47,7 @@ func testWithLocalTransform() {
 
 	BeforeEach(func() {
 		t.brokerResourceType = &testV1.ExportedToaster{}
-		t.localTransform = func(from runtime.Object) (runtime.Object, bool) {
+		t.localTransform = func(from runtime.Object, op syncer.Operation) (runtime.Object, bool) {
 			toaster := from.(*testV1.Toaster)
 			return &testV1.ExportedToaster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -73,7 +74,7 @@ func testWithLocalTransform() {
 type testDriver struct {
 	framework            *framework.Framework
 	localSourceNamespace string
-	localTransform       func(from runtime.Object) (runtime.Object, bool)
+	localTransform       func(from runtime.Object, op syncer.Operation) (runtime.Object, bool)
 	brokerResourceType   runtime.Object
 	clusterClients       []dynamic.Interface
 	stopCh               chan struct{}
