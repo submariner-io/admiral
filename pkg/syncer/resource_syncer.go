@@ -56,6 +56,9 @@ func (o Operation) String() string {
 // to be retried later.
 type TransformFunc func(from runtime.Object, op Operation) (runtime.Object, bool)
 
+// OnSuccessfulSyncFunc is invoked after a successful sync operation.
+type OnSuccessfulSyncFunc func(synced runtime.Object, op Operation)
+
 type ResourceSyncerConfig struct {
 	// Name of this syncer used for logging.
 	Name string
@@ -89,6 +92,9 @@ type ResourceSyncerConfig struct {
 	// Transform function used to transform resources prior to syncing.
 	Transform TransformFunc
 
+	// OnSuccessfulSync function invoked after a successful sync operation.
+	OnSuccessfulSync OnSuccessfulSyncFunc
+
 	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
 	Scheme *runtime.Scheme
 }
@@ -100,11 +106,13 @@ type resourceSyncer struct {
 	config    ResourceSyncerConfig
 	deleted   sync.Map
 	created   sync.Map
+	stopped   chan struct{}
 }
 
 func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 	syncer := &resourceSyncer{
-		config: *config,
+		config:  *config,
+		stopped: make(chan struct{}),
 	}
 
 	if syncer.config.Scheme == nil {
@@ -139,7 +147,12 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 	klog.Infof("Starting syncer %q", r.config.Name)
 
 	go func() {
+		defer func() {
+			r.stopped <- struct{}{}
+			klog.Infof("Syncer %q stopped", r.config.Name)
+		}()
 		defer r.workQueue.ShutDown()
+
 		r.informer.Run(stopCh)
 	}()
 
@@ -152,6 +165,10 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 
 	klog.Infof("Syncer %q started", r.config.Name)
 	return nil
+}
+
+func (r *resourceSyncer) AwaitStopped() {
+	<-r.stopped
 }
 
 func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error) {
@@ -175,7 +192,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 	klog.V(log.DEBUG).Infof("Syncer %q retrieved %sd resource: %#v", r.config.Name, op, resource)
 
 	if r.shouldSync(resource) {
-		resource, requeue := r.transform(resource, op)
+		resource, transformed, requeue := r.transform(resource, op)
 		if resource == nil {
 			if !requeue {
 				r.created.Delete(key)
@@ -189,6 +206,8 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 		if err != nil {
 			return true, err
 		}
+
+		r.onSuccessfulSync(resource, transformed, op)
 
 		klog.V(log.DEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, key)
 	}
@@ -210,7 +229,7 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 
 	deletedResource := obj.(*unstructured.Unstructured)
 	if r.shouldSync(deletedResource) {
-		resource, requeue := r.transform(deletedResource, Delete)
+		resource, transformed, requeue := r.transform(deletedResource, Delete)
 		if resource == nil {
 			if requeue {
 				r.deleted.Store(key, deletedResource)
@@ -231,15 +250,17 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 			return true, err
 		}
 
+		r.onSuccessfulSync(resource, transformed, Delete)
+
 		klog.V(log.DEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, key)
 	}
 
 	return false, nil
 }
 
-func (r *resourceSyncer) transform(from *unstructured.Unstructured, op Operation) (*unstructured.Unstructured, bool) {
+func (r *resourceSyncer) transform(from *unstructured.Unstructured, op Operation) (*unstructured.Unstructured, runtime.Object, bool) {
 	if r.config.Transform == nil {
-		return from, false
+		return from, nil, false
 	}
 
 	clusterID, _ := getClusterIDLabel(from)
@@ -248,19 +269,19 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, op Operation
 	err := r.config.Scheme.Convert(from, converted, nil)
 	if err != nil {
 		klog.Errorf("Syncer %q: error converting %#v to %T: %v", r.config.Name, from, r.config.ResourceType, err)
-		return nil, false
+		return nil, nil, false
 	}
 
 	transformed, requeue := r.config.Transform(converted, op)
 	if transformed == nil {
 		klog.V(log.DEBUG).Infof("Syncer %q: transform function returned nil - not syncing - requeue: %v", r.config.Name, requeue)
-		return nil, requeue
+		return nil, nil, requeue
 	}
 
 	result, err := util.ToUnstructured(transformed)
 	if err != nil {
 		klog.Errorf("Syncer %q: error converting transform function result: %v", r.config.Name, err)
-		return nil, false
+		return nil, nil, false
 	}
 
 	// Preserve the cluster ID label
@@ -268,7 +289,26 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, op Operation
 		_ = unstructured.SetNestedField(result.Object, clusterID, util.MetadataField, util.LabelsField, federate.ClusterIDLabelKey)
 	}
 
-	return result, false
+	return result, transformed, false
+}
+
+func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op Operation) {
+	if r.config.OnSuccessfulSync == nil {
+		return
+	}
+
+	if converted == nil {
+		converted = r.config.ResourceType.DeepCopyObject()
+		err := r.config.Scheme.Convert(resource, converted, nil)
+		if err != nil {
+			klog.Errorf("Syncer %q: error converting %#v to %T: %v", r.config.Name, resource, r.config.ResourceType, err)
+			return
+		}
+	}
+
+	klog.V(log.DEBUG).Infof("Syncer %q: invoking OnSuccessfulSync function with: %#v", r.config.Name, converted)
+
+	r.config.OnSuccessfulSync(converted, op)
 }
 
 func (r *resourceSyncer) onCreate(resource interface{}) {

@@ -31,6 +31,7 @@ var _ = Describe("Resource Syncer", func() {
 	})
 
 	Describe("With Transform Function", testTransformFunction)
+	Describe("With OnSuccessfulSync Function", testOnSuccessfulSyncFunction)
 	Describe("Sync Errors", testSyncErrors)
 	Describe("Update Suppression", testUpdateSuppression)
 })
@@ -305,6 +306,108 @@ func testTransformFunction() {
 	})
 }
 
+func testOnSuccessfulSyncFunction() {
+	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	var expResource *corev1.Pod
+	var expOperation chan syncer.Operation
+
+	BeforeEach(func() {
+		expOperation = make(chan syncer.Operation, 20)
+		expResource = d.resource
+		d.config.OnSuccessfulSync = func(synced runtime.Object, op syncer.Operation) {
+			defer GinkgoRecover()
+			pod, ok := synced.(*corev1.Pod)
+			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", synced)
+			Expect(equality.Semantic.DeepDerivative(expResource.Spec, pod.Spec)).To(BeTrue(),
+				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, expResource.Spec)
+			expOperation <- op
+		}
+	})
+
+	When("a resource is successfully created in the datastore", func() {
+		It("should invoke the OnSuccessfulSync function", func() {
+			d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, d.resource))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+		})
+	})
+
+	When("a resource is successfully updated in the datastore", func() {
+		BeforeEach(func() {
+			d.addInitialResource(d.resource)
+		})
+
+		It("should invoke the OnSuccessfulSync function", func() {
+			d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+
+			expResource = test.NewPodWithImage(d.config.SourceNamespace, "apache")
+			d.federator.VerifyDistribute(test.UpdateResource(d.sourceClient, expResource))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Update)))
+		})
+	})
+
+	When("a resource is successfully deleted from the datastore", func() {
+		BeforeEach(func() {
+			d.addInitialResource(d.resource)
+		})
+
+		It("should invoke the OnSuccessfulSync function", func() {
+			expected := test.GetResource(d.sourceClient, d.resource)
+			d.federator.VerifyDistribute(expected)
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+
+			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+			d.federator.VerifyDelete(expected)
+			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
+		})
+	})
+
+	Context("with transform function", func() {
+		When("a resource is successfully created in the datastore", func() {
+			BeforeEach(func() {
+				expResource = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
+				d.config.Transform = func(from runtime.Object, op syncer.Operation) (runtime.Object, bool) {
+					return expResource, false
+				}
+			})
+
+			It("should invoke the OnSuccessfulSync function with the transformed resource", func() {
+				test.CreateResource(d.sourceClient, d.resource)
+				d.federator.VerifyDistribute(test.ToUnstructured(expResource))
+				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+			})
+		})
+	})
+
+	When("distribute fails", func() {
+		BeforeEach(func() {
+			d.federator.FailOnDistribute = errors.New("fake error")
+			d.federator.ResetOnFailure = false
+		})
+
+		It("should not invoke the OnSuccessfulSync function", func() {
+			test.CreateResource(d.sourceClient, d.resource)
+			Consistently(expOperation, 300*time.Millisecond).ShouldNot(Receive())
+		})
+	})
+
+	When("delete fails", func() {
+		BeforeEach(func() {
+			d.federator.FailOnDelete = errors.New("fake error")
+			d.federator.ResetOnFailure = false
+		})
+
+		It("should not invoke the OnSuccessfulSync function", func() {
+			d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, d.resource))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+
+			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+			Consistently(expOperation, 300*time.Millisecond).ShouldNot(Receive())
+		})
+	})
+}
+
 func testSyncErrors() {
 	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
 
@@ -315,7 +418,7 @@ func testSyncErrors() {
 	})
 
 	When("distribute initially fails", func() {
-		JustBeforeEach(func() {
+		BeforeEach(func() {
 			d.federator.FailOnDistribute = expectedErr
 		})
 
@@ -444,6 +547,8 @@ func newTestDiver(sourceNamespace, localClusterID string, syncDirection syncer.S
 		d.savedErrorHandlers = utilruntime.ErrorHandlers
 		d.handledError = make(chan error, 1000)
 		d.config.Scheme = runtime.NewScheme()
+		d.config.Transform = nil
+		d.config.OnSuccessfulSync = nil
 
 		err := corev1.AddToScheme(d.config.Scheme)
 		Expect(err).To(Succeed())
@@ -470,8 +575,9 @@ func newTestDiver(sourceNamespace, localClusterID string, syncDirection syncer.S
 		Expect(d.syncer.Start(d.stopCh)).To(Succeed())
 	})
 
-	AfterEach(func() {
+	JustAfterEach(func() {
 		close(d.stopCh)
+		d.syncer.AwaitStopped()
 		utilruntime.ErrorHandlers = d.savedErrorHandlers
 	})
 

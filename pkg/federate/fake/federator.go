@@ -12,19 +12,23 @@ type Federator struct {
 	delete           chan runtime.Object
 	FailOnDistribute error
 	FailOnDelete     error
+	ResetOnFailure   bool
 }
 
 func New() *Federator {
 	return &Federator{
-		distribute: make(chan runtime.Object, 100),
-		delete:     make(chan runtime.Object, 100),
+		distribute:     make(chan runtime.Object, 100),
+		delete:         make(chan runtime.Object, 100),
+		ResetOnFailure: true,
 	}
 }
 
 func (f *Federator) Distribute(resource runtime.Object) error {
 	err := f.FailOnDistribute
 	if err != nil {
-		f.FailOnDistribute = nil
+		if f.ResetOnFailure {
+			f.FailOnDistribute = nil
+		}
 		return err
 	}
 
@@ -35,7 +39,9 @@ func (f *Federator) Distribute(resource runtime.Object) error {
 func (f *Federator) Delete(resource runtime.Object) error {
 	err := f.FailOnDelete
 	if err != nil {
-		f.FailOnDelete = nil
+		if f.ResetOnFailure {
+			f.FailOnDelete = nil
+		}
 		return err
 	}
 
