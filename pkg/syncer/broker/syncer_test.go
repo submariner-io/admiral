@@ -163,15 +163,9 @@ var _ = Describe("Broker Syncer", func() {
 		})
 	})
 
-	When("GetBrokerFederatorFor is called for a valid resource type", func() {
+	When("GetBrokerFederatorFor is called", func() {
 		It("should return the Federator", func() {
-			Expect(syncer.GetBrokerFederatorFor(resource)).ToNot(BeNil())
-		})
-	})
-
-	When("GetBrokerFederatorFor is called for an invalid resource type", func() {
-		It("should return nil", func() {
-			Expect(syncer.GetBrokerFederatorFor(&corev1.Service{})).To(BeNil())
+			Expect(syncer.GetBrokerFederator()).ToNot(BeNil())
 		})
 	})
 })
