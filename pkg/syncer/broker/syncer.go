@@ -4,7 +4,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net/url"
-	"reflect"
 
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer"
@@ -58,8 +57,8 @@ type SyncerConfig struct {
 }
 
 type Syncer struct {
-	syncers    []syncer.Interface
-	federators map[reflect.Type]federate.Federator
+	syncers         []syncer.Interface
+	remoteFederator federate.Federator
 }
 
 // NewSyncer creates a Syncer that performs bi-directional syncing of resources between a local source and a central broker.
@@ -130,12 +129,13 @@ func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, broke
 
 func newSyncer(config *SyncerConfig, localClient, brokerClient dynamic.Interface, restMapper meta.RESTMapper) (*Syncer, error) {
 	brokerSyncer := &Syncer{
-		syncers:    []syncer.Interface{},
-		federators: map[reflect.Type]federate.Federator{},
+		syncers: []syncer.Interface{},
 	}
 
+	brokerSyncer.remoteFederator = NewFederator(brokerClient, restMapper, config.BrokerNamespace, config.LocalClusterID)
+	localFederator := NewFederator(localClient, restMapper, config.LocalNamespace, "")
+
 	for _, rc := range config.ResourceConfigs {
-		remoteFederator := NewFederator(brokerClient, restMapper, config.BrokerNamespace, config.LocalClusterID)
 		localSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
 			Name:            fmt.Sprintf("local -> broker for %T", rc.LocalResourceType),
 			SourceClient:    localClient,
@@ -143,7 +143,7 @@ func newSyncer(config *SyncerConfig, localClient, brokerClient dynamic.Interface
 			LocalClusterID:  config.LocalClusterID,
 			Direction:       syncer.LocalToRemote,
 			RestMapper:      restMapper,
-			Federator:       remoteFederator,
+			Federator:       brokerSyncer.remoteFederator,
 			ResourceType:    rc.LocalResourceType,
 			Transform:       rc.LocalTransform,
 		})
@@ -153,9 +153,7 @@ func newSyncer(config *SyncerConfig, localClient, brokerClient dynamic.Interface
 		}
 
 		brokerSyncer.syncers = append(brokerSyncer.syncers, localSyncer)
-		brokerSyncer.federators[reflect.TypeOf(rc.LocalResourceType)] = remoteFederator
 
-		localFederator := NewFederator(localClient, restMapper, config.LocalNamespace, "")
 		remoteSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
 			Name:            fmt.Sprintf("broker -> local for %T", rc.BrokerResourceType),
 			SourceClient:    brokerClient,
@@ -189,11 +187,6 @@ func (s *Syncer) Start(stopCh <-chan struct{}) error {
 	return nil
 }
 
-func (s *Syncer) GetBrokerFederatorFor(resourceType runtime.Object) federate.Federator {
-	f, found := s.federators[reflect.TypeOf(resourceType)]
-	if found {
-		return f
-	}
-
-	return nil
+func (s *Syncer) GetBrokerFederator() federate.Federator {
+	return s.remoteFederator
 }
