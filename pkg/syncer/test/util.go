@@ -90,7 +90,7 @@ func NewPodWithImage(namespace, imageName string) *corev1.Pod {
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
-				corev1.Container{
+				{
 					Image: imageName,
 					Name:  "httpd",
 				},
