@@ -278,20 +278,20 @@ func (r *resourceSyncer) onCreate(resource interface{}) {
 	r.workQueue.Enqueue(resource)
 }
 
-func (r *resourceSyncer) onUpdate(old interface{}, new interface{}) {
-	oldObj := old.(*unstructured.Unstructured)
-	newObj := new.(*unstructured.Unstructured)
+func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
+	oldResource := oldObj.(*unstructured.Unstructured)
+	newResource := newObj.(*unstructured.Unstructured)
 
-	equal := reflect.DeepEqual(oldObj.GetLabels(), newObj.GetLabels()) &&
-		reflect.DeepEqual(oldObj.GetAnnotations(), newObj.GetAnnotations()) &&
-		equality.Semantic.DeepEqual(r.getSpec(oldObj), r.getSpec(newObj))
+	equal := reflect.DeepEqual(oldResource.GetLabels(), newResource.GetLabels()) &&
+		reflect.DeepEqual(oldResource.GetAnnotations(), newResource.GetAnnotations()) &&
+		equality.Semantic.DeepEqual(r.getSpec(oldResource), r.getSpec(newResource))
 	if equal {
 		klog.V(log.TRACE).Infof("Syncer %q: objects equivalent on update - not queueing resource\nOLD: %#v\nNEW: %#v",
-			r.config.Name, old, new)
+			r.config.Name, oldResource, newResource)
 		return
 	}
 
-	r.workQueue.Enqueue(new)
+	r.workQueue.Enqueue(newObj)
 }
 
 func (r *resourceSyncer) getSpec(obj *unstructured.Unstructured) interface{} {
