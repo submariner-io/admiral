@@ -1,0 +1,51 @@
+linters-settings:
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      #- opinionated
+      #- performance
+      #- style
+    disabled-checks:
+      - unlambda
+  gocyclo:
+    min-complexity: 15
+  lll:
+    line-length: 140
+  maligned:
+    suggest-new: true
+linters:
+  disable-all: true
+  enable:
+    - bodyclose
+    - deadcode
+    - depguard
+    - dupl
+    - errcheck
+    - exportloopref
+    #- funlen
+    #- gochecknoglobals
+    #- gochecknoinits
+    - gocritic
+    - gocyclo
+    #- gofmt
+    - goimports
+    #- golint
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - interfacer
+    #- lll
+    - misspell
+    - maligned
+    - nakedret
+    - staticcheck
+    - structcheck
+    #- stylecheck
+    #- testpackage
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+    - whitespace
