@@ -21,7 +21,7 @@ type federator struct {
 
 var keepMetadataFields = map[string]bool{"name": true, "namespace": true, util.LabelsField: true, "annotations": true}
 
-func NewFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, brokerNamespace string, localClusterID string) federate.Federator {
+func NewFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, brokerNamespace, localClusterID string) federate.Federator {
 	return &federator{
 		dynClient:       dynClient,
 		restMapper:      restMapper,

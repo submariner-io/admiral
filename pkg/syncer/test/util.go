@@ -8,7 +8,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
+	metaapi "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,7 +23,7 @@ const RemoteNamespace = "remote-ns"
 const LocalNamespace = "local-ns"
 
 func GetResourceAndError(resourceInterface dynamic.ResourceInterface, obj runtime.Object) (*unstructured.Unstructured, error) {
-	meta, err := meta.Accessor(obj)
+	meta, err := metaapi.Accessor(obj)
 	Expect(err).To(Succeed())
 	return resourceInterface.Get(meta.GetName(), metav1.GetOptions{})
 }
@@ -62,16 +62,16 @@ func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev
 	Expect(actual.GetUID()).NotTo(Equal(expected.GetUID()))
 	Expect(actual.GetResourceVersion()).NotTo(Equal(expected.GetResourceVersion()))
 
-	copy := make(map[string]string)
+	duplicate := make(map[string]string)
 	for k, v := range expected.GetLabels() {
-		copy[k] = v
+		duplicate[k] = v
 	}
 
 	if clusterID != "" {
-		copy[federate.ClusterIDLabelKey] = clusterID
+		duplicate[federate.ClusterIDLabelKey] = clusterID
 	}
 
-	Expect(actual.GetLabels()).To(Equal(copy))
+	Expect(actual.GetLabels()).To(Equal(duplicate))
 }
 
 func NewPod(namespace string) *corev1.Pod {
@@ -99,14 +99,14 @@ func NewPodWithImage(namespace, imageName string) *corev1.Pod {
 	}
 }
 
-func GetRESTMapperAndGroupVersionResourceFor(obj runtime.Object) (meta.RESTMapper, *schema.GroupVersionResource) {
+func GetRESTMapperAndGroupVersionResourceFor(obj runtime.Object) (metaapi.RESTMapper, *schema.GroupVersionResource) {
 	gvks, _, err := scheme.Scheme.ObjectKinds(obj)
 	Expect(err).To(Succeed())
 	Expect(gvks).ToNot(HaveLen(0))
 	gvk := gvks[0]
 
-	restMapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{gvk.GroupVersion()})
-	restMapper.Add(gvk, meta.RESTScopeNamespace)
+	restMapper := metaapi.NewDefaultRESTMapper([]schema.GroupVersion{gvk.GroupVersion()})
+	restMapper.Add(gvk, metaapi.RESTScopeNamespace)
 
 	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	Expect(err).To(Succeed())
@@ -146,7 +146,7 @@ func ToUnstructured(obj runtime.Object) *unstructured.Unstructured {
 }
 
 func SetClusterIDLabel(obj runtime.Object, clusterID string) runtime.Object {
-	meta, err := meta.Accessor(obj)
+	meta, err := metaapi.Accessor(obj)
 	Expect(err).To(Succeed())
 
 	labels := meta.GetLabels()

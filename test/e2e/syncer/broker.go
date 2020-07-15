@@ -13,7 +13,7 @@ import (
 	testV1 "github.com/submariner-io/admiral/test/apis/admiral.submariner.io/v1"
 	"github.com/submariner-io/shipyard/test/e2e/framework"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
+	metaapi "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -133,7 +133,7 @@ func (t *testDriver) newSyncer(cluster framework.ClusterIndex) *broker.Syncer {
 		localClusterID = framework.TestContext.ClusterIDs[cluster]
 	}
 
-	syncer, err := broker.NewSyncer(broker.SyncerConfig{
+	syncerObj, err := broker.NewSyncer(broker.SyncerConfig{
 		LocalRestConfig: framework.RestConfigs[cluster],
 		LocalNamespace:  t.framework.Namespace,
 		LocalClusterID:  localClusterID,
@@ -148,7 +148,7 @@ func (t *testDriver) newSyncer(cluster framework.ClusterIndex) *broker.Syncer {
 	})
 
 	Expect(err).To(Succeed())
-	return syncer
+	return syncerObj
 }
 
 func (t *testDriver) bidirectionalSyncTests() {
@@ -198,7 +198,7 @@ func (t *testDriver) deleteToaster(cluster framework.ClusterIndex, toDelete *tes
 func (t *testDriver) deleteResource(cluster framework.ClusterIndex, gvr *schema.GroupVersionResource, toDelete runtime.Object) {
 	clusterName := framework.TestContext.ClusterIDs[cluster]
 
-	meta, err := meta.Accessor(toDelete)
+	meta, err := metaapi.Accessor(toDelete)
 	Expect(err).To(Succeed())
 
 	msg := fmt.Sprintf("delete %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
@@ -238,7 +238,7 @@ func (t *testDriver) awaitExportedToaster(cluster framework.ClusterIndex, expect
 func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.GroupVersionResource, resource runtime.Object) runtime.Object {
 	clusterName := framework.TestContext.ClusterIDs[cluster]
 
-	meta, err := meta.Accessor(resource)
+	meta, err := metaapi.Accessor(resource)
 	Expect(err).To(Succeed())
 
 	msg := fmt.Sprintf("get %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
@@ -266,7 +266,7 @@ func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.G
 func (t *testDriver) awaitNoResource(cluster framework.ClusterIndex, gvr *schema.GroupVersionResource, resource runtime.Object) {
 	clusterName := framework.TestContext.ClusterIDs[cluster]
 
-	meta, err := meta.Accessor(resource)
+	meta, err := metaapi.Accessor(resource)
 	Expect(err).To(Succeed())
 
 	msg := fmt.Sprintf("get %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
