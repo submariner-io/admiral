@@ -184,14 +184,16 @@ func (t *testDriver) createToaster(cluster framework.ClusterIndex) *testV1.Toast
 
 	By(fmt.Sprintf("Creating Toaster %q in namespace %q in %q", toaster.Name, namespace, framework.TestContext.ClusterIDs[cluster]))
 
-	_, err := t.clusterClients[cluster].Resource(*toasterGVR()).Namespace(namespace).Create(test.ToUnstructured(toaster), metav1.CreateOptions{})
+	_, err := t.clusterClients[cluster].Resource(*toasterGVR()).Namespace(namespace).Create(test.ToUnstructured(toaster),
+		metav1.CreateOptions{})
 	Expect(err).To(Succeed())
 
 	return toaster
 }
 
 func (t *testDriver) deleteToaster(cluster framework.ClusterIndex, toDelete *testV1.Toaster) {
-	By(fmt.Sprintf("Deleting Toaster %q in namespace %q from %q", toDelete.Name, toDelete.Namespace, framework.TestContext.ClusterIDs[cluster]))
+	By(fmt.Sprintf("Deleting Toaster %q in namespace %q from %q", toDelete.Name, toDelete.Namespace,
+		framework.TestContext.ClusterIDs[cluster]))
 	t.deleteResource(cluster, toasterGVR(), toDelete)
 }
 
@@ -235,7 +237,8 @@ func (t *testDriver) awaitExportedToaster(cluster framework.ClusterIndex, expect
 	Expect(actual.Spec).To(Equal(expected.Spec))
 }
 
-func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.GroupVersionResource, resource runtime.Object) runtime.Object {
+func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.GroupVersionResource,
+	resource runtime.Object) runtime.Object {
 	clusterName := framework.TestContext.ClusterIDs[cluster]
 
 	meta, err := metaapi.Accessor(resource)
@@ -300,7 +303,8 @@ func (t *testDriver) deleteAllOf(cluster framework.ClusterIndex, gvr *schema.Gro
 	resource := t.clusterClients[cluster].Resource(*gvr).Namespace(namespace)
 	Expect(resource.DeleteCollection(nil, metav1.ListOptions{})).To(Succeed())
 
-	framework.AwaitUntil(fmt.Sprintf("list %s in namespace %q from %q", gvr.Resource, namespace, clusterName), func() (i interface{}, e error) {
+	framework.AwaitUntil(fmt.Sprintf("list %s in namespace %q from %q", gvr.Resource, namespace, clusterName), func() (i interface{},
+		e error) {
 		return resource.List(metav1.ListOptions{})
 	}, func(result interface{}) (bool, string, error) {
 		list := result.(*unstructured.UnstructuredList)

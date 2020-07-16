@@ -72,7 +72,8 @@ func (f *namespaceableResource) Namespace(namespace string) dynamic.ResourceInte
 	return f.resourceClients[namespace]
 }
 
-func (f *DynamicResourceClient) Create(obj *unstructured.Unstructured, options v1.CreateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+func (f *DynamicResourceClient) Create(obj *unstructured.Unstructured, options v1.CreateOptions,
+	subresources ...string) (*unstructured.Unstructured, error) {
 	f.created <- obj.GetName()
 
 	fail := f.FailOnCreate
@@ -86,7 +87,8 @@ func (f *DynamicResourceClient) Create(obj *unstructured.Unstructured, options v
 	return f.ResourceInterface.Create(obj, options, subresources...)
 }
 
-func (f *DynamicResourceClient) Update(obj *unstructured.Unstructured, options v1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+func (f *DynamicResourceClient) Update(obj *unstructured.Unstructured, options v1.UpdateOptions,
+	subresources ...string) (*unstructured.Unstructured, error) {
 	f.updated <- obj.GetName()
 
 	fail := f.FailOnUpdate

@@ -113,7 +113,8 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 	return newSyncer(&config, localClient, brokerClient, restMapper)
 }
 
-func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, brokerNamespace string, restMapper meta.RESTMapper) (dynamic.Interface, error) {
+func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, brokerNamespace string,
+	restMapper meta.RESTMapper) (dynamic.Interface, error) {
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
 		return nil, err

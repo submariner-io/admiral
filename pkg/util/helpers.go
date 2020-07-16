@@ -35,7 +35,8 @@ func BuildRestMapper(restConfig *rest.Config) (meta.RESTMapper, error) {
 	return restmapper.NewDiscoveryRESTMapper(groupResources), nil
 }
 
-func ToUnstructuredResource(from runtime.Object, restMapper meta.RESTMapper) (*unstructured.Unstructured, *schema.GroupVersionResource, error) {
+func ToUnstructuredResource(from runtime.Object, restMapper meta.RESTMapper) (*unstructured.Unstructured, *schema.GroupVersionResource,
+	error) {
 	to, err := ToUnstructured(from)
 	if err != nil {
 		return nil, nil, err
