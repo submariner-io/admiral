@@ -54,6 +54,9 @@ type SyncerConfig struct {
 
 	// ResourceConfigs the configurations for resources to sync
 	ResourceConfigs []ResourceConfig
+
+	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
+	Scheme *runtime.Scheme
 }
 
 type Syncer struct {
@@ -109,7 +112,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 		}
 	}
 
-	return newSyncer(&config, localClient, brokerClient, restMapper)
+	return NewSyncerWithDetail(&config, localClient, brokerClient, restMapper)
 }
 
 func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, brokerNamespace string,
@@ -130,7 +133,8 @@ func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, broke
 	return client, err
 }
 
-func newSyncer(config *SyncerConfig, localClient, brokerClient dynamic.Interface, restMapper meta.RESTMapper) (*Syncer, error) {
+// NewSyncerWithDetail creates a Syncer with given additional detail. This function is intended for unit tests.
+func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic.Interface, restMapper meta.RESTMapper) (*Syncer, error) {
 	brokerSyncer := &Syncer{
 		syncers: []syncer.Interface{},
 	}
@@ -149,6 +153,7 @@ func newSyncer(config *SyncerConfig, localClient, brokerClient dynamic.Interface
 			Federator:       brokerSyncer.remoteFederator,
 			ResourceType:    rc.LocalResourceType,
 			Transform:       rc.LocalTransform,
+			Scheme:          config.Scheme,
 		})
 
 		if err != nil {
@@ -167,6 +172,7 @@ func newSyncer(config *SyncerConfig, localClient, brokerClient dynamic.Interface
 			Federator:       localFederator,
 			ResourceType:    rc.BrokerResourceType,
 			Transform:       rc.BrokerTransform,
+			Scheme:          config.Scheme,
 		})
 
 		if err != nil {

@@ -104,18 +104,43 @@ func NewPodWithImage(namespace, imageName string) *corev1.Pod {
 }
 
 func GetRESTMapperAndGroupVersionResourceFor(obj runtime.Object) (metaapi.RESTMapper, *schema.GroupVersionResource) {
+	restMapper := GetRESTMapperFor(obj)
+	return restMapper, GetGroupVersionResourceFor(restMapper, obj)
+}
+
+func GetRESTMapperFor(objs ...runtime.Object) metaapi.RESTMapper {
+	var gvs []schema.GroupVersion
+	var gvks []schema.GroupVersionKind
+
+	for _, obj := range objs {
+		gvk := GetGroupVersionKindFor(obj)
+		gvks = append(gvks, gvk)
+		gvs = append(gvs, gvk.GroupVersion())
+	}
+
+	restMapper := metaapi.NewDefaultRESTMapper(gvs)
+
+	for _, gvk := range gvks {
+		restMapper.Add(gvk, metaapi.RESTScopeNamespace)
+	}
+
+	return restMapper
+}
+
+func GetGroupVersionKindFor(obj runtime.Object) schema.GroupVersionKind {
 	gvks, _, err := scheme.Scheme.ObjectKinds(obj)
 	Expect(err).To(Succeed())
 	Expect(gvks).ToNot(HaveLen(0))
-	gvk := gvks[0]
 
-	restMapper := metaapi.NewDefaultRESTMapper([]schema.GroupVersion{gvk.GroupVersion()})
-	restMapper.Add(gvk, metaapi.RESTScopeNamespace)
+	return gvks[0]
+}
 
+func GetGroupVersionResourceFor(restMapper metaapi.RESTMapper, obj runtime.Object) *schema.GroupVersionResource {
+	gvk := GetGroupVersionKindFor(obj)
 	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	Expect(err).To(Succeed())
 
-	return restMapper, &mapping.Resource
+	return &mapping.Resource
 }
 
 func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Object) []runtime.Object {
