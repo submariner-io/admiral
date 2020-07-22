@@ -1,10 +1,11 @@
-package broker
+package broker_test
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/fake"
 	sync "github.com/submariner-io/admiral/pkg/syncer"
+	"github.com/submariner-io/admiral/pkg/syncer/broker"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,8 +14,8 @@ import (
 
 var _ = Describe("Broker Syncer", func() {
 	var (
-		syncer           *Syncer
-		config           *SyncerConfig
+		syncer           *broker.Syncer
+		config           *broker.SyncerConfig
 		localClient      *fake.DynamicResourceClient
 		brokerClient     *fake.DynamicResourceClient
 		resource         *corev1.Pod
@@ -27,11 +28,11 @@ var _ = Describe("Broker Syncer", func() {
 		initialResources = nil
 		stopCh = make(chan struct{})
 		resource = test.NewPod("")
-		config = &SyncerConfig{
+		config = &broker.SyncerConfig{
 			LocalNamespace:  test.LocalNamespace,
 			LocalClusterID:  "east",
 			BrokerNamespace: test.RemoteNamespace,
-			ResourceConfigs: []ResourceConfig{
+			ResourceConfigs: []broker.ResourceConfig{
 				{
 					LocalResourceType:  resource,
 					BrokerResourceType: resource,
@@ -50,7 +51,7 @@ var _ = Describe("Broker Syncer", func() {
 		brokerClient = brokerDynClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)
 
 		var err error
-		syncer, err = newSyncer(config, localDynClient, brokerDynClient, restMapper)
+		syncer, err = broker.NewSyncerWithDetail(config, localDynClient, brokerDynClient, restMapper)
 		Expect(err).To(Succeed())
 
 		Expect(syncer.Start(stopCh)).To(Succeed())
