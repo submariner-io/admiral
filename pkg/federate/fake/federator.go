@@ -29,10 +29,12 @@ func (f *Federator) Distribute(resource runtime.Object) error {
 		if f.ResetOnFailure {
 			f.FailOnDistribute = nil
 		}
+
 		return err
 	}
 
 	f.distribute <- resource
+
 	return nil
 }
 
@@ -42,10 +44,12 @@ func (f *Federator) Delete(resource runtime.Object) error {
 		if f.ResetOnFailure {
 			f.FailOnDelete = nil
 		}
+
 		return err
 	}
 
 	f.delete <- resource
+
 	return nil
 }
 

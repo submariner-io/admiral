@@ -148,6 +148,7 @@ func (t *testDriver) newSyncer(cluster framework.ClusterIndex) *broker.Syncer {
 	})
 
 	Expect(err).To(Succeed())
+
 	return syncerObj
 }
 
