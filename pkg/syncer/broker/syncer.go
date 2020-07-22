@@ -123,8 +123,10 @@ func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, broke
 	if err != nil {
 		return nil, err
 	}
+
 	resourceClient := client.Resource(*gvr).Namespace(brokerNamespace)
 	_, err = resourceClient.List(metav1.ListOptions{})
+
 	return client, err
 }
 

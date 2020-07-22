@@ -33,5 +33,6 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ExportedToasterList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
+
 	return nil
 }

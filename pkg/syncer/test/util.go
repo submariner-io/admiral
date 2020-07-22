@@ -25,24 +25,28 @@ const LocalNamespace = "local-ns"
 func GetResourceAndError(resourceInterface dynamic.ResourceInterface, obj runtime.Object) (*unstructured.Unstructured, error) {
 	meta, err := metaapi.Accessor(obj)
 	Expect(err).To(Succeed())
+
 	return resourceInterface.Get(meta.GetName(), metav1.GetOptions{})
 }
 
 func GetResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
 	resource, err := GetResourceAndError(resourceInterface, obj)
 	Expect(err).To(Succeed())
+
 	return resource
 }
 
 func CreateResource(resourceInterface dynamic.ResourceInterface, resource runtime.Object) *unstructured.Unstructured {
 	obj, err := resourceInterface.Create(ToUnstructured(resource), metav1.CreateOptions{})
 	Expect(err).To(Succeed())
+
 	return obj
 }
 
 func UpdateResource(resourceInterface dynamic.ResourceInterface, resource runtime.Object) *unstructured.Unstructured {
 	obj, err := resourceInterface.Update(ToUnstructured(resource), metav1.UpdateOptions{})
 	Expect(err).To(Succeed())
+
 	return obj
 }
 
@@ -110,11 +114,13 @@ func GetRESTMapperAndGroupVersionResourceFor(obj runtime.Object) (metaapi.RESTMa
 
 	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	Expect(err).To(Succeed())
+
 	return restMapper, &mapping.Resource
 }
 
 func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Object) []runtime.Object {
 	var newObjs []runtime.Object
+
 	for _, obj := range initObjs {
 		raw := ToUnstructured(obj)
 		raw.SetUID(uuid.NewUUID())
@@ -129,6 +135,7 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 			if labels == nil {
 				labels = map[string]string{}
 			}
+
 			labels[federate.ClusterIDLabelKey] = clusterID
 			raw.SetLabels(labels)
 		}
@@ -142,6 +149,7 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 func ToUnstructured(obj runtime.Object) *unstructured.Unstructured {
 	raw, err := util.ToUnstructured(obj)
 	Expect(err).To(Succeed())
+
 	return raw
 }
 
@@ -161,11 +169,13 @@ func SetClusterIDLabel(obj runtime.Object, clusterID string) runtime.Object {
 	}
 
 	meta.SetLabels(labels)
+
 	return obj
 }
 
 func WaitForResource(client dynamic.ResourceInterface, name string) *unstructured.Unstructured {
 	var found *unstructured.Unstructured
+
 	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
 		obj, err := client.Get(name, metav1.GetOptions{})
 		if err != nil {
@@ -180,6 +190,7 @@ func WaitForResource(client dynamic.ResourceInterface, name string) *unstructure
 	})
 
 	Expect(err).To(Succeed())
+
 	return found
 }
 

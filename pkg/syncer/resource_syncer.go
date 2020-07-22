@@ -157,6 +157,7 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 	}()
 
 	klog.Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
+
 	if ok := cache.WaitForCacheSync(stopCh, r.informer.HasSynced); !ok {
 		return fmt.Errorf("failed to wait for informer cache to sync")
 	}
@@ -164,6 +165,7 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 	r.workQueue.Run(stopCh, r.processNextWorkItem)
 
 	klog.Infof("Syncer %q started", r.config.Name)
+
 	return nil
 }
 
@@ -197,6 +199,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 			if !requeue {
 				r.created.Delete(key)
 			}
+
 			return requeue, nil
 		}
 
@@ -213,6 +216,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 	}
 
 	r.created.Delete(key)
+
 	return false, nil
 }
 
@@ -234,6 +238,7 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 			if requeue {
 				r.deleted.Store(key, deletedResource)
 			}
+
 			return requeue, nil
 		}
 

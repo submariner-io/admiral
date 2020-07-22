@@ -21,6 +21,7 @@ func (m *containErrorSubstring) Match(x interface{}) (bool, error) {
 	if !ok {
 		return false, fmt.Errorf("ContainErrorSubstring matcher requires an error.  Got:\n%s", format.Object(x, 1))
 	}
+
 	return strings.Contains(actual.Error(), m.expected.Error()), nil
 }
 

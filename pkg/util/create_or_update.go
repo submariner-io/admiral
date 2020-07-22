@@ -25,6 +25,7 @@ type MutateFn func(existing *unstructured.Unstructured) (*unstructured.Unstructu
 
 func CreateOrUpdate(client dynamic.ResourceInterface, obj *unstructured.Unstructured, mutate MutateFn) (OperationResult, error) {
 	var result OperationResult = OperationResultNone
+
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		existing, err := client.Get(obj.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {

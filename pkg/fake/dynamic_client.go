@@ -37,6 +37,7 @@ type DynamicResourceClient struct {
 
 func NewDynamicClient(objects ...runtime.Object) dynamic.Interface {
 	f := fake.NewSimpleDynamicClient(scheme.Scheme, objects...)
+
 	return &dynamicClient{
 		Interface:              f,
 		namespaceableResources: map[schema.GroupVersionResource]dynamic.NamespaceableResourceInterface{},
@@ -69,6 +70,7 @@ func (f *namespaceableResource) Namespace(namespace string) dynamic.ResourceInte
 		updated:           make(chan string, 10000),
 		deleted:           make(chan string, 10000),
 	}
+
 	return f.resourceClients[namespace]
 }
 
@@ -84,6 +86,7 @@ func (f *DynamicResourceClient) Create(obj *unstructured.Unstructured, options v
 
 	obj.SetUID(uuid.NewUUID())
 	obj.SetResourceVersion("1")
+
 	return f.ResourceInterface.Create(obj, options, subresources...)
 }
 
