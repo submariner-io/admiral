@@ -1,9 +1,11 @@
 package fake
 
 import (
+	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,13 +28,17 @@ type namespaceableResource struct {
 
 type DynamicResourceClient struct {
 	dynamic.ResourceInterface
-	created      chan string
-	updated      chan string
-	deleted      chan string
-	FailOnCreate error
-	FailOnUpdate error
-	FailOnDelete error
-	FailOnGet    error
+	created                chan string
+	updated                chan string
+	deleted                chan string
+	FailOnCreate           error
+	PersistentFailOnCreate atomic.Value
+	FailOnUpdate           error
+	PersistentFailOnUpdate atomic.Value
+	FailOnDelete           error
+	PersistentFailOnDelete atomic.Value
+	FailOnGet              error
+	PersistentFailOnGet    atomic.Value
 }
 
 func NewDynamicClient(objects ...runtime.Object) dynamic.Interface {
@@ -84,6 +90,11 @@ func (f *DynamicResourceClient) Create(obj *unstructured.Unstructured, options v
 		return nil, fail
 	}
 
+	s := f.PersistentFailOnCreate.Load()
+	if s != nil && s.(string) != "" {
+		return nil, errors.New(s.(string))
+	}
+
 	obj.SetUID(uuid.NewUUID())
 	obj.SetResourceVersion("1")
 
@@ -100,6 +111,11 @@ func (f *DynamicResourceClient) Update(obj *unstructured.Unstructured, options v
 		return nil, fail
 	}
 
+	s := f.PersistentFailOnUpdate.Load()
+	if s != nil && s.(string) != "" {
+		return nil, errors.New(s.(string))
+	}
+
 	return f.ResourceInterface.Update(obj, options, subresources...)
 }
 
@@ -112,6 +128,11 @@ func (f *DynamicResourceClient) Delete(name string, options *v1.DeleteOptions, s
 		return fail
 	}
 
+	s := f.PersistentFailOnDelete.Load()
+	if s != nil && s.(string) != "" {
+		return errors.New(s.(string))
+	}
+
 	return f.ResourceInterface.Delete(name, options, subresources...)
 }
 
@@ -120,6 +141,11 @@ func (f *DynamicResourceClient) Get(name string, options v1.GetOptions, subresou
 	if fail != nil {
 		f.FailOnGet = nil
 		return nil, fail
+	}
+
+	s := f.PersistentFailOnGet.Load()
+	if s != nil && s.(string) != "" {
+		return nil, errors.New(s.(string))
 	}
 
 	return f.ResourceInterface.Get(name, options, subresources...)
