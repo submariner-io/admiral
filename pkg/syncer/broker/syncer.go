@@ -25,6 +25,9 @@ type ResourceConfig struct {
 	// LocalTransform function used to transform a local resource to the equivalent broker resource.
 	LocalTransform syncer.TransformFunc
 
+	// OnSuccessfulSync function invoked after a successful sync operation.
+	LocalOnSuccessfulSync syncer.OnSuccessfulSyncFunc
+
 	// BrokerResourceType the type of the broker resources to sync to the local source.
 	BrokerResourceType runtime.Object
 
@@ -144,16 +147,17 @@ func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic
 
 	for _, rc := range config.ResourceConfigs {
 		localSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
-			Name:            fmt.Sprintf("local -> broker for %T", rc.LocalResourceType),
-			SourceClient:    localClient,
-			SourceNamespace: rc.LocalSourceNamespace,
-			LocalClusterID:  config.LocalClusterID,
-			Direction:       syncer.LocalToRemote,
-			RestMapper:      restMapper,
-			Federator:       brokerSyncer.remoteFederator,
-			ResourceType:    rc.LocalResourceType,
-			Transform:       rc.LocalTransform,
-			Scheme:          config.Scheme,
+			Name:             fmt.Sprintf("local -> broker for %T", rc.LocalResourceType),
+			SourceClient:     localClient,
+			SourceNamespace:  rc.LocalSourceNamespace,
+			LocalClusterID:   config.LocalClusterID,
+			Direction:        syncer.LocalToRemote,
+			RestMapper:       restMapper,
+			Federator:        brokerSyncer.remoteFederator,
+			ResourceType:     rc.LocalResourceType,
+			Transform:        rc.LocalTransform,
+			OnSuccessfulSync: rc.LocalOnSuccessfulSync,
+			Scheme:           config.Scheme,
 		})
 
 		if err != nil {
