@@ -9,6 +9,8 @@ linters-settings:
       - unlambda
   gocyclo:
     min-complexity: 15
+  golint:
+    min-confidence: 0
   lll:
     line-length: 140
   maligned:
@@ -29,7 +31,7 @@ linters:
     - gocyclo
     - gofmt
     - goimports
-    #- golint
+    - golint
     - gosec
     - gosimple
     - govet
@@ -41,7 +43,7 @@ linters:
     - nakedret
     - staticcheck
     - structcheck
-    #- stylecheck
+    - stylecheck
     #- testpackage
     - typecheck
     - unconvert
@@ -62,3 +64,17 @@ issues:
     - linters:
         - wsl
       text: "only one cuddle assignment allowed before if statement"
+
+    # Allow dot-imports for Gomega BDD directives per idiomatic Gomega
+    - linters:
+        - stylecheck
+        - golint
+      text: "should not use dot imports"
+      source: ". \"github.com/onsi/gomega\""
+
+    # Allow dot-imports for Ginkgo BDD directives per idiomatic Ginkgo
+    - linters:
+        - stylecheck
+        - golint
+      text: "should not use dot imports"
+      source: ". \"github.com/onsi/ginkgo\""
