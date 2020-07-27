@@ -19,7 +19,7 @@ func ContainErrorSubstring(expected error) gomegaTypes.GomegaMatcher {
 func (m *containErrorSubstring) Match(x interface{}) (bool, error) {
 	actual, ok := x.(error)
 	if !ok {
-		return false, fmt.Errorf("ContainErrorSubstring matcher requires an error.  Got:\n%s", format.Object(x, 1))
+		return false, fmt.Errorf("containErrorSubstring matcher requires an error.  Got:\n%s", format.Object(x, 1))
 	}
 
 	return strings.Contains(actual.Error(), m.expected.Error()), nil
