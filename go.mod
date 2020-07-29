@@ -21,11 +21,11 @@ require (
 	k8s.io/kube-openapi v0.0.0-20200204173128-addea2498afe // indirect
 )
 
-// Pinned to kubernetes-1.16.4
+// Pinned to kubernetes-1.17.0 except client-go (1.17.0-alpha.3)
 replace (
-	k8s.io/api => k8s.io/api v0.16.4
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.16.4
-	k8s.io/apimachinery => k8s.io/apimachinery v0.16.5-beta.1
-	k8s.io/client-go => k8s.io/client-go v0.16.4
-	k8s.io/cloud-provider => k8s.io/cloud-provider v0.16.4
+	k8s.io/api => k8s.io/api v0.17.0
+	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.17.0
+	k8s.io/apimachinery => k8s.io/apimachinery v0.17.0
+	k8s.io/client-go => k8s.io/client-go v0.0.0-20191022230018-87e18d96d65e
+	k8s.io/cloud-provider => k8s.io/cloud-provider v0.17.0
 )
