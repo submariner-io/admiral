@@ -1,0 +1,16 @@
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v**'
+
+name: e2e
+jobs:
+  validate:
+    name: e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - run: make e2e
