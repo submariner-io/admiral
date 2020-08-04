@@ -34,8 +34,9 @@ var _ = Describe("Broker Syncer", func() {
 			BrokerNamespace: test.RemoteNamespace,
 			ResourceConfigs: []broker.ResourceConfig{
 				{
-					LocalResourceType:  resource,
-					BrokerResourceType: resource,
+					LocalSourceNamespace: test.LocalNamespace,
+					LocalResourceType:    resource,
+					BrokerResourceType:   resource,
 				},
 			},
 		}
