@@ -14,7 +14,7 @@ require (
 	github.com/submariner-io/shipyard v0.5.1-0.20200727153411-5c0d49acd978
 	golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59 // indirect
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
-	k8s.io/api v0.17.0
+	k8s.io/api v0.18.6
 	k8s.io/apimachinery v0.17.0
 	k8s.io/client-go v0.17.0
 	k8s.io/klog v1.0.0
