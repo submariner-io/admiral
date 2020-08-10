@@ -329,7 +329,8 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
 
 	equal := reflect.DeepEqual(oldResource.GetLabels(), newResource.GetLabels()) &&
 		reflect.DeepEqual(oldResource.GetAnnotations(), newResource.GetAnnotations()) &&
-		equality.Semantic.DeepEqual(r.getSpec(oldResource), r.getSpec(newResource))
+		equality.Semantic.DeepEqual(r.getSpec(oldResource), r.getSpec(newResource)) &&
+		equality.Semantic.DeepEqual(r.getStatus(oldResource), r.getStatus(newResource))
 	if equal {
 		klog.V(log.TRACE).Infof("Syncer %q: objects equivalent on update - not queueing resource\nOLD: %#v\nNEW: %#v",
 			r.config.Name, oldResource, newResource)
@@ -340,12 +341,20 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
 }
 
 func (r *resourceSyncer) getSpec(obj *unstructured.Unstructured) interface{} {
-	spec, _, err := unstructured.NestedFieldNoCopy(obj.Object, "spec")
+	return r.getNestedField(obj, "spec")
+}
+
+func (r *resourceSyncer) getStatus(obj *unstructured.Unstructured) interface{} {
+	return r.getNestedField(obj, "status")
+}
+
+func (r *resourceSyncer) getNestedField(obj *unstructured.Unstructured, fields ...string) interface{} {
+	nested, _, err := unstructured.NestedFieldNoCopy(obj.Object, fields...)
 	if err != nil {
-		klog.Errorf("Syncer %q: error retrieving spec field for %#v: %v", r.config.Name, obj, err)
+		klog.Errorf("Syncer %q: error retrieving %v field for %#v: %v", r.config.Name, fields, obj, err)
 	}
 
-	return spec
+	return nested
 }
 
 func (r *resourceSyncer) onDelete(obj interface{}) {
