@@ -477,8 +477,8 @@ func testUpdateSuppression() {
 			d.resource.Status.Phase = corev1.PodRunning
 		})
 
-		It("should not distribute it", func() {
-			d.federator.VerifyNoDistribute()
+		It("should distribute it", func() {
+			d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
 		})
 	})
 
