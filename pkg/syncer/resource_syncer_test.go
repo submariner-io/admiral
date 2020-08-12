@@ -477,8 +477,20 @@ func testUpdateSuppression() {
 			d.resource.Status.Phase = corev1.PodRunning
 		})
 
-		It("should distribute it", func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+		When("Status updates are ignored", func() {
+			It("should not distribute it", func() {
+				d.federator.VerifyNoDistribute()
+			})
+		})
+
+		When("Status updates are not ignored", func() {
+			BeforeEach(func() {
+				d.config.ProcessStatusUpdates = true
+			})
+
+			It("should distribute it", func() {
+				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+			})
 		})
 	})
 

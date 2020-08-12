@@ -95,6 +95,9 @@ type ResourceSyncerConfig struct {
 	// OnSuccessfulSync function invoked after a successful sync operation.
 	OnSuccessfulSync OnSuccessfulSyncFunc
 
+	// ProcessStatusUpdates specifies whether or not updates to the Status field should be processed or ignored.
+	ProcessStatusUpdates bool
+
 	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
 	Scheme *runtime.Scheme
 }
@@ -329,8 +332,12 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
 
 	equal := reflect.DeepEqual(oldResource.GetLabels(), newResource.GetLabels()) &&
 		reflect.DeepEqual(oldResource.GetAnnotations(), newResource.GetAnnotations()) &&
-		equality.Semantic.DeepEqual(r.getSpec(oldResource), r.getSpec(newResource)) &&
-		equality.Semantic.DeepEqual(r.getStatus(oldResource), r.getStatus(newResource))
+		equality.Semantic.DeepEqual(r.getSpec(oldResource), r.getSpec(newResource))
+
+	if equal && r.config.ProcessStatusUpdates {
+		equal = equality.Semantic.DeepEqual(r.getStatus(oldResource), r.getStatus(newResource))
+	}
+
 	if equal {
 		klog.V(log.TRACE).Infof("Syncer %q: objects equivalent on update - not queueing resource\nOLD: %#v\nNEW: %#v",
 			r.config.Name, oldResource, newResource)

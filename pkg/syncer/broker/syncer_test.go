@@ -9,6 +9,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -66,11 +67,11 @@ var _ = Describe("Broker Syncer", func() {
 		It("should correctly sync to the broker datastore", func() {
 			test.CreateResource(localClient, resource)
 
-			test.WaitForResource(brokerClient, resource.GetName())
+			test.AwaitResource(brokerClient, resource.GetName())
 			test.VerifyResource(brokerClient, resource, config.BrokerNamespace, config.LocalClusterID)
 
 			Expect(localClient.ResourceInterface.Delete(resource.GetName(), nil)).To(Succeed())
-			test.WaitForNoResource(brokerClient, resource.GetName())
+			test.AwaitNoResource(brokerClient, resource.GetName())
 
 			// Ensure the broker syncer did not try to sync back to the local datastore
 			localClient.VerifyNoUpdate(resource.GetName())
@@ -92,11 +93,11 @@ var _ = Describe("Broker Syncer", func() {
 			test.SetClusterIDLabel(resource, "remote")
 			test.CreateResource(brokerClient, resource)
 
-			test.WaitForResource(localClient, resource.GetName())
+			test.AwaitResource(localClient, resource.GetName())
 			test.VerifyResource(localClient, resource, config.LocalNamespace, "remote")
 
 			Expect(brokerClient.ResourceInterface.Delete(resource.GetName(), nil)).To(Succeed())
-			test.WaitForNoResource(localClient, resource.GetName())
+			test.AwaitNoResource(localClient, resource.GetName())
 
 			// Ensure the local syncer did not try to sync back to the broker datastore
 			brokerClient.VerifyNoUpdate(resource.GetName())
@@ -122,7 +123,7 @@ var _ = Describe("Broker Syncer", func() {
 
 		When("a local resource is created in any namespace", func() {
 			It("should sync to the broker datastore", func() {
-				test.WaitForResource(brokerClient, resource.GetName())
+				test.AwaitResource(brokerClient, resource.GetName())
 				test.VerifyResource(brokerClient, resource, config.BrokerNamespace, config.LocalClusterID)
 			})
 		})
@@ -140,7 +141,7 @@ var _ = Describe("Broker Syncer", func() {
 			It("should sync the transformed resource to the broker datastore", func() {
 				test.CreateResource(localClient, resource)
 
-				test.WaitForResource(brokerClient, resource.GetName())
+				test.AwaitResource(brokerClient, resource.GetName())
 				test.VerifyResource(brokerClient, transformed, config.BrokerNamespace, config.LocalClusterID)
 			})
 		})
@@ -159,8 +160,67 @@ var _ = Describe("Broker Syncer", func() {
 				test.SetClusterIDLabel(resource, "remote")
 				test.CreateResource(brokerClient, resource)
 
-				test.WaitForResource(localClient, resource.GetName())
+				test.AwaitResource(localClient, resource.GetName())
 				test.VerifyResource(localClient, transformed, config.LocalNamespace, "remote")
+			})
+		})
+	})
+
+	When("a local resource's Status is updated in the local datastore", func() {
+		JustBeforeEach(func() {
+			test.CreateResource(localClient, resource)
+			test.AwaitResource(brokerClient, resource.GetName())
+
+			resource.Status.Phase = corev1.PodRunning
+			test.UpdateResource(localClient, resource)
+		})
+
+		When("Status updates are ignored", func() {
+			It("should not sync to the broker datastore", func() {
+				brokerClient.VerifyNoUpdate(resource.GetName())
+			})
+		})
+
+		When("Status updates are not ignored", func() {
+			BeforeEach(func() {
+				config.ResourceConfigs[0].ProcessLocalStatusUpdates = true
+			})
+
+			It("should sync to the broker datastore", func() {
+				test.AwaitAndVerifyResource(brokerClient, resource.GetName(), func(obj *unstructured.Unstructured) bool {
+					v, _, _ := unstructured.NestedString(obj.Object, "status", "phase")
+					return corev1.PodPhase(v) == corev1.PodRunning
+				})
+			})
+		})
+	})
+
+	When("a non-local resource's Status is updated in the broker datastore", func() {
+		JustBeforeEach(func() {
+			test.SetClusterIDLabel(resource, "remote")
+			test.CreateResource(brokerClient, resource)
+			test.AwaitResource(localClient, resource.GetName())
+
+			resource.Status.Phase = corev1.PodRunning
+			test.UpdateResource(brokerClient, resource)
+		})
+
+		When("Status updates are ignored", func() {
+			It("should not sync to the local datastore", func() {
+				localClient.VerifyNoUpdate(resource.GetName())
+			})
+		})
+
+		When("Status updates are not ignored", func() {
+			BeforeEach(func() {
+				config.ResourceConfigs[0].ProcessBrokerStatusUpdates = true
+			})
+
+			It("should sync to the local datastore", func() {
+				test.AwaitAndVerifyResource(localClient, resource.GetName(), func(obj *unstructured.Unstructured) bool {
+					v, _, _ := unstructured.NestedString(obj.Object, "status", "phase")
+					return corev1.PodPhase(v) == corev1.PodRunning
+				})
 			})
 		})
 	})
