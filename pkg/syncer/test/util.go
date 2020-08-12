@@ -198,7 +198,12 @@ func SetClusterIDLabel(obj runtime.Object, clusterID string) runtime.Object {
 	return obj
 }
 
-func WaitForResource(client dynamic.ResourceInterface, name string) *unstructured.Unstructured {
+func AwaitResource(client dynamic.ResourceInterface, name string) *unstructured.Unstructured {
+	return AwaitAndVerifyResource(client, name, nil)
+}
+
+func AwaitAndVerifyResource(client dynamic.ResourceInterface, name string,
+	verify func(*unstructured.Unstructured) bool) *unstructured.Unstructured {
 	var found *unstructured.Unstructured
 
 	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
@@ -210,8 +215,12 @@ func WaitForResource(client dynamic.ResourceInterface, name string) *unstructure
 			return false, err
 		}
 
-		found = obj
-		return true, nil
+		if verify == nil || verify(obj) {
+			found = obj
+			return true, nil
+		}
+
+		return false, nil
 	})
 
 	Expect(err).To(Succeed())
@@ -219,7 +228,7 @@ func WaitForResource(client dynamic.ResourceInterface, name string) *unstructure
 	return found
 }
 
-func WaitForNoResource(client dynamic.ResourceInterface, name string) {
+func AwaitNoResource(client dynamic.ResourceInterface, name string) {
 	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
 		_, err := client.Get(name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
