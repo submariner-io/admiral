@@ -7,7 +7,9 @@ import (
 	sync "github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/broker"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
+	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -175,15 +177,18 @@ var _ = Describe("Broker Syncer", func() {
 			test.UpdateResource(localClient, resource)
 		})
 
-		When("Status updates are ignored", func() {
+		When("the default equivalence is used", func() {
 			It("should not sync to the broker datastore", func() {
 				brokerClient.VerifyNoUpdate(resource.GetName())
 			})
 		})
 
-		When("Status updates are not ignored", func() {
+		When("a custom equivalence is used that compares Status", func() {
 			BeforeEach(func() {
-				config.ResourceConfigs[0].ProcessLocalStatusUpdates = true
+				config.ResourceConfigs[0].LocalResourcesEquivalent = func(obj1, obj2 *unstructured.Unstructured) bool {
+					return equality.Semantic.DeepEqual(util.GetNestedField(obj1, "status"),
+						util.GetNestedField(obj2, "status"))
+				}
 			})
 
 			It("should sync to the broker datastore", func() {
@@ -205,15 +210,18 @@ var _ = Describe("Broker Syncer", func() {
 			test.UpdateResource(brokerClient, resource)
 		})
 
-		When("Status updates are ignored", func() {
+		When("the default equivalence is used", func() {
 			It("should not sync to the local datastore", func() {
 				localClient.VerifyNoUpdate(resource.GetName())
 			})
 		})
 
-		When("Status updates are not ignored", func() {
+		When("a custom equivalence is used that compares Status", func() {
 			BeforeEach(func() {
-				config.ResourceConfigs[0].ProcessBrokerStatusUpdates = true
+				config.ResourceConfigs[0].BrokerResourcesEquivalent = func(obj1, obj2 *unstructured.Unstructured) bool {
+					return equality.Semantic.DeepEqual(util.GetNestedField(obj1, "status"),
+						util.GetNestedField(obj2, "status"))
+				}
 			})
 
 			It("should sync to the local datastore", func() {

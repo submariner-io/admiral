@@ -28,19 +28,19 @@ type ResourceConfig struct {
 	// OnSuccessfulSync function invoked after a successful sync operation.
 	LocalOnSuccessfulSync syncer.OnSuccessfulSyncFunc
 
+	// LocalResourcesEquivalent function to compare two local resources for equivalence. See ResourceSyncerConfig.ResourcesEquivalent
+	// for more details.
+	LocalResourcesEquivalent syncer.ResourceEquivalenceFunc
+
 	// BrokerResourceType the type of the broker resources to sync to the local source.
 	BrokerResourceType runtime.Object
 
 	// BrokerTransform function used to transform a broker resource to the equivalent local resource.
 	BrokerTransform syncer.TransformFunc
 
-	// ProcessLocalStatusUpdates specifies whether or not updates to the Status field for local resources should be
-	// processed or ignored.
-	ProcessLocalStatusUpdates bool
-
-	// ProcessBrokerStatusUpdates specifies whether or not updates to the Status field for broker resources should be
-	// processed or ignored.
-	ProcessBrokerStatusUpdates bool
+	// BrokerResourcesEquivalent function to compare two broker resources for equivalence. See ResourceSyncerConfig.ResourcesEquivalent
+	// for more details.
+	BrokerResourcesEquivalent syncer.ResourceEquivalenceFunc
 }
 
 type SyncerConfig struct {
@@ -155,18 +155,18 @@ func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic
 
 	for _, rc := range config.ResourceConfigs {
 		localSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
-			Name:                 fmt.Sprintf("local -> broker for %T", rc.LocalResourceType),
-			SourceClient:         localClient,
-			SourceNamespace:      rc.LocalSourceNamespace,
-			LocalClusterID:       config.LocalClusterID,
-			Direction:            syncer.LocalToRemote,
-			RestMapper:           restMapper,
-			Federator:            brokerSyncer.remoteFederator,
-			ResourceType:         rc.LocalResourceType,
-			Transform:            rc.LocalTransform,
-			OnSuccessfulSync:     rc.LocalOnSuccessfulSync,
-			ProcessStatusUpdates: rc.ProcessLocalStatusUpdates,
-			Scheme:               config.Scheme,
+			Name:                fmt.Sprintf("local -> broker for %T", rc.LocalResourceType),
+			SourceClient:        localClient,
+			SourceNamespace:     rc.LocalSourceNamespace,
+			LocalClusterID:      config.LocalClusterID,
+			Direction:           syncer.LocalToRemote,
+			RestMapper:          restMapper,
+			Federator:           brokerSyncer.remoteFederator,
+			ResourceType:        rc.LocalResourceType,
+			Transform:           rc.LocalTransform,
+			OnSuccessfulSync:    rc.LocalOnSuccessfulSync,
+			ResourcesEquivalent: rc.LocalResourcesEquivalent,
+			Scheme:              config.Scheme,
 		})
 
 		if err != nil {
@@ -176,17 +176,17 @@ func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic
 		brokerSyncer.syncers = append(brokerSyncer.syncers, localSyncer)
 
 		remoteSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
-			Name:                 fmt.Sprintf("broker -> local for %T", rc.BrokerResourceType),
-			SourceClient:         brokerClient,
-			SourceNamespace:      config.BrokerNamespace,
-			LocalClusterID:       config.LocalClusterID,
-			Direction:            syncer.RemoteToLocal,
-			RestMapper:           restMapper,
-			Federator:            localFederator,
-			ResourceType:         rc.BrokerResourceType,
-			Transform:            rc.BrokerTransform,
-			ProcessStatusUpdates: rc.ProcessBrokerStatusUpdates,
-			Scheme:               config.Scheme,
+			Name:                fmt.Sprintf("broker -> local for %T", rc.BrokerResourceType),
+			SourceClient:        brokerClient,
+			SourceNamespace:     config.BrokerNamespace,
+			LocalClusterID:      config.LocalClusterID,
+			Direction:           syncer.RemoteToLocal,
+			RestMapper:          restMapper,
+			Federator:           localFederator,
+			ResourceType:        rc.BrokerResourceType,
+			Transform:           rc.BrokerTransform,
+			ResourcesEquivalent: rc.BrokerResourcesEquivalent,
+			Scheme:              config.Scheme,
 		})
 
 		if err != nil {
