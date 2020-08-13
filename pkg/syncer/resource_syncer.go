@@ -59,6 +59,8 @@ type TransformFunc func(from runtime.Object, op Operation) (runtime.Object, bool
 // OnSuccessfulSyncFunc is invoked after a successful sync operation.
 type OnSuccessfulSyncFunc func(synced runtime.Object, op Operation)
 
+type ResourceEquivalenceFunc func(obj1, obj2 *unstructured.Unstructured) bool
+
 type ResourceSyncerConfig struct {
 	// Name of this syncer used for logging.
 	Name string
@@ -95,8 +97,10 @@ type ResourceSyncerConfig struct {
 	// OnSuccessfulSync function invoked after a successful sync operation.
 	OnSuccessfulSync OnSuccessfulSyncFunc
 
-	// ProcessStatusUpdates specifies whether or not updates to the Status field should be processed or ignored.
-	ProcessStatusUpdates bool
+	// ResourcesEquivalent function to compare two resources for equivalence. This is invoked on an update notification
+	// to compare the old and new resources. If true is returned, the update is ignored, otherwise the update is processed.
+	// The default is DefaultResourcesEquivalent which checks annotations, labels and the Spec, if present.
+	ResourcesEquivalent ResourceEquivalenceFunc
 
 	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
 	Scheme *runtime.Scheme
@@ -120,6 +124,10 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 
 	if syncer.config.Scheme == nil {
 		syncer.config.Scheme = scheme.Scheme
+	}
+
+	if syncer.config.ResourcesEquivalent == nil {
+		syncer.config.ResourcesEquivalent = DefaultResourcesEquivalent
 	}
 
 	_, gvr, err := util.ToUnstructuredResource(config.ResourceType, config.RestMapper)
@@ -330,38 +338,13 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
 	oldResource := oldObj.(*unstructured.Unstructured)
 	newResource := newObj.(*unstructured.Unstructured)
 
-	equal := reflect.DeepEqual(oldResource.GetLabels(), newResource.GetLabels()) &&
-		reflect.DeepEqual(oldResource.GetAnnotations(), newResource.GetAnnotations()) &&
-		equality.Semantic.DeepEqual(r.getSpec(oldResource), r.getSpec(newResource))
-
-	if equal && r.config.ProcessStatusUpdates {
-		equal = equality.Semantic.DeepEqual(r.getStatus(oldResource), r.getStatus(newResource))
-	}
-
-	if equal {
+	if r.config.ResourcesEquivalent(oldResource, newResource) {
 		klog.V(log.TRACE).Infof("Syncer %q: objects equivalent on update - not queueing resource\nOLD: %#v\nNEW: %#v",
 			r.config.Name, oldResource, newResource)
 		return
 	}
 
 	r.workQueue.Enqueue(newObj)
-}
-
-func (r *resourceSyncer) getSpec(obj *unstructured.Unstructured) interface{} {
-	return r.getNestedField(obj, "spec")
-}
-
-func (r *resourceSyncer) getStatus(obj *unstructured.Unstructured) interface{} {
-	return r.getNestedField(obj, "status")
-}
-
-func (r *resourceSyncer) getNestedField(obj *unstructured.Unstructured, fields ...string) interface{} {
-	nested, _, err := unstructured.NestedFieldNoCopy(obj.Object, fields...)
-	if err != nil {
-		klog.Errorf("Syncer %q: error retrieving %v field for %#v: %v", r.config.Name, fields, obj, err)
-	}
-
-	return nested
 }
 
 func (r *resourceSyncer) onDelete(obj interface{}) {
@@ -409,4 +392,10 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 func getClusterIDLabel(resource *unstructured.Unstructured) (string, bool) {
 	clusterID, found, _ := unstructured.NestedString(resource.Object, util.MetadataField, util.LabelsField, federate.ClusterIDLabelKey)
 	return clusterID, found
+}
+
+func DefaultResourcesEquivalent(obj1, obj2 *unstructured.Unstructured) bool {
+	return reflect.DeepEqual(obj1.GetLabels(), obj2.GetLabels()) &&
+		reflect.DeepEqual(obj1.GetAnnotations(), obj2.GetAnnotations()) &&
+		equality.Semantic.DeepEqual(util.GetSpec(obj1), util.GetSpec(obj2))
 }

@@ -85,3 +85,16 @@ func GetMetadata(from *unstructured.Unstructured) map[string]interface{} {
 
 	return map[string]interface{}{}
 }
+
+func GetSpec(obj *unstructured.Unstructured) interface{} {
+	return GetNestedField(obj, "spec")
+}
+
+func GetNestedField(obj *unstructured.Unstructured, fields ...string) interface{} {
+	nested, _, err := unstructured.NestedFieldNoCopy(obj.Object, fields...)
+	if err != nil {
+		klog.Errorf("Error retrieving %v field for %#v: %v", fields, obj, err)
+	}
+
+	return nested
+}

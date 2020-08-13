@@ -11,10 +11,12 @@ import (
 	. "github.com/submariner-io/admiral/pkg/gomega"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
+	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -477,15 +479,20 @@ func testUpdateSuppression() {
 			d.resource.Status.Phase = corev1.PodRunning
 		})
 
-		When("Status updates are ignored", func() {
+		When("the default equivalence is used", func() {
 			It("should not distribute it", func() {
 				d.federator.VerifyNoDistribute()
 			})
 		})
 
-		When("Status updates are not ignored", func() {
+		When("a custom equivalence is used that compares Status", func() {
 			BeforeEach(func() {
-				d.config.ProcessStatusUpdates = true
+				d.config.ResourcesEquivalent = func(obj1, obj2 *unstructured.Unstructured) bool {
+					defer GinkgoRecover()
+					Expect(syncer.DefaultResourcesEquivalent(obj1, obj2)).To(BeTrue())
+					return equality.Semantic.DeepEqual(util.GetNestedField(obj1, "status"),
+						util.GetNestedField(obj2, "status"))
+				}
 			})
 
 			It("should distribute it", func() {
@@ -561,6 +568,7 @@ func newTestDiver(sourceNamespace, localClusterID string, syncDirection syncer.S
 		d.config.Scheme = runtime.NewScheme()
 		d.config.Transform = nil
 		d.config.OnSuccessfulSync = nil
+		d.config.ResourcesEquivalent = nil
 
 		err := corev1.AddToScheme(d.config.Scheme)
 		Expect(err).To(Succeed())
