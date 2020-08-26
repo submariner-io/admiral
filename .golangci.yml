@@ -1,3 +1,4 @@
+---
 linters-settings:
   gocritic:
     enabled-tags:
@@ -24,9 +25,9 @@ linters:
     - dupl
     - errcheck
     - exportloopref
-    #- funlen
-    #- gochecknoglobals
-    #- gochecknoinits
+    # - funlen
+    # - gochecknoglobals
+    # - gochecknoinits
     - gocritic
     - gocyclo
     - gofmt
@@ -44,7 +45,7 @@ linters:
     - staticcheck
     - structcheck
     - stylecheck
-    #- testpackage
+    # - testpackage
     - typecheck
     - unconvert
     - unparam
