@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net/url"
+	"reflect"
 
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer"
@@ -72,6 +73,7 @@ type SyncerConfig struct {
 
 type Syncer struct {
 	syncers         []syncer.Interface
+	localSyncers    map[reflect.Type]syncer.Interface
 	remoteFederator federate.Federator
 }
 
@@ -147,7 +149,8 @@ func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, broke
 // NewSyncerWithDetail creates a Syncer with given additional detail. This function is intended for unit tests.
 func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic.Interface, restMapper meta.RESTMapper) (*Syncer, error) {
 	brokerSyncer := &Syncer{
-		syncers: []syncer.Interface{},
+		syncers:      []syncer.Interface{},
+		localSyncers: make(map[reflect.Type]syncer.Interface),
 	}
 
 	brokerSyncer.remoteFederator = NewFederator(brokerClient, restMapper, config.BrokerNamespace, config.LocalClusterID)
@@ -174,6 +177,7 @@ func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic
 		}
 
 		brokerSyncer.syncers = append(brokerSyncer.syncers, localSyncer)
+		brokerSyncer.localSyncers[reflect.TypeOf(rc.LocalResourceType)] = localSyncer
 
 		remoteSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
 			Name:                fmt.Sprintf("broker -> local for %T", rc.BrokerResourceType),
@@ -212,4 +216,13 @@ func (s *Syncer) Start(stopCh <-chan struct{}) error {
 
 func (s *Syncer) GetBrokerFederator() federate.Federator {
 	return s.remoteFederator
+}
+
+func (s *Syncer) GetLocalResource(name, namespace string, ofType runtime.Object) (runtime.Object, bool, error) {
+	ls, found := s.localSyncers[reflect.TypeOf(ofType)]
+	if !found {
+		return nil, false, fmt.Errorf("no Syncer found for %#v", ofType)
+	}
+
+	return ls.GetResource(name, namespace)
 }

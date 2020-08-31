@@ -238,4 +238,20 @@ var _ = Describe("Broker Syncer", func() {
 			Expect(syncer.GetBrokerFederator()).ToNot(BeNil())
 		})
 	})
+
+	When("GetLocalResource is called", func() {
+		It("should return the correct resource", func() {
+			test.CreateResource(localClient, resource)
+			test.AwaitResource(brokerClient, resource.GetName())
+
+			obj, exists, err := syncer.GetLocalResource(resource.Name, test.LocalNamespace, resource)
+			Expect(err).To(Succeed())
+			Expect(exists).To(BeTrue())
+
+			pod, ok := obj.(*corev1.Pod)
+			Expect(ok).To(BeTrue())
+			Expect(pod.Name).To(Equal(resource.Name))
+			Expect(pod.Spec).To(Equal(resource.Spec))
+		})
+	})
 })
