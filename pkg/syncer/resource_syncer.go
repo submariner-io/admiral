@@ -184,6 +184,25 @@ func (r *resourceSyncer) AwaitStopped() {
 	<-r.stopped
 }
 
+func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bool, error) {
+	obj, exists, err := r.store.GetByKey(namespace + "/" + name)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if !exists {
+		return nil, false, nil
+	}
+
+	converted := r.config.ResourceType.DeepCopyObject()
+	err = r.config.Scheme.Convert(obj.(*unstructured.Unstructured), converted, nil)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return converted, true, nil
+}
+
 func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error) {
 	obj, exists, err := r.store.GetByKey(key)
 	if err != nil {

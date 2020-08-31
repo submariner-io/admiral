@@ -36,6 +36,7 @@ var _ = Describe("Resource Syncer", func() {
 	Describe("With OnSuccessfulSync Function", testOnSuccessfulSyncFunction)
 	Describe("Sync Errors", testSyncErrors)
 	Describe("Update Suppression", testUpdateSuppression)
+	Describe("GetResource", testGetResource)
 })
 
 func testLocalToRemote() {
@@ -529,6 +530,35 @@ func testUpdateSuppression() {
 
 		It("should distribute it", func() {
 			d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+		})
+	})
+}
+
+func testGetResource() {
+	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	When("the requested resource exists", func() {
+		BeforeEach(func() {
+			d.addInitialResource(d.resource)
+		})
+
+		It("should return the resource", func() {
+			obj, exists, err := d.syncer.GetResource(d.resource.Name, d.resource.Namespace)
+			Expect(err).To(Succeed())
+			Expect(exists).To(BeTrue())
+
+			pod, ok := obj.(*corev1.Pod)
+			Expect(ok).To(BeTrue())
+			Expect(pod.Name).To(Equal(d.resource.Name))
+			Expect(pod.Spec).To(Equal(d.resource.Spec))
+		})
+	})
+
+	When("the requested resource does not exist", func() {
+		It("should return false", func() {
+			_, exists, err := d.syncer.GetResource(d.resource.Name, d.resource.Namespace)
+			Expect(err).To(Succeed())
+			Expect(exists).To(BeFalse())
 		})
 	})
 }
