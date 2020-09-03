@@ -22,28 +22,32 @@ var _ = Describe("Federator", func() {
 
 func testDistribute() {
 	var (
-		f              federate.Federator
-		resource       *corev1.Pod
-		localClusterID string
-		resourceClient *fake.DynamicResourceClient
-		initObjs       []runtime.Object
+		f                  federate.Federator
+		resource           *corev1.Pod
+		localClusterID     string
+		federatorNamespace string
+		targetNamespace    string
+		resourceClient     *fake.DynamicResourceClient
+		initObjs           []runtime.Object
 	)
 
 	BeforeEach(func() {
 		localClusterID = "east"
 		resource = test.NewPod(test.LocalNamespace)
 		initObjs = nil
+		federatorNamespace = test.RemoteNamespace
+		targetNamespace = test.RemoteNamespace
 	})
 
 	JustBeforeEach(func() {
-		f, resourceClient = setupFederator(resource, initObjs, localClusterID)
+		f, resourceClient = setupFederator(resource, initObjs, localClusterID, federatorNamespace, targetNamespace)
 	})
 
 	When("the resource does not already exist in the broker datastore", func() {
 		When("a local cluster ID is specified", func() {
 			It("should create the resource with the cluster ID label", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
+				test.VerifyResource(resourceClient, resource, targetNamespace, localClusterID)
 			})
 		})
 
@@ -54,7 +58,7 @@ func testDistribute() {
 
 			It("should create the resource without the cluster ID label", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
+				test.VerifyResource(resourceClient, resource, targetNamespace, localClusterID)
 			})
 		})
 
@@ -68,7 +72,7 @@ func testDistribute() {
 
 			It("should create the resource with the Status data", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
+				test.VerifyResource(resourceClient, resource, targetNamespace, localClusterID)
 			})
 		})
 
@@ -95,21 +99,23 @@ func testDistribute() {
 
 			It("should update the resource", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
+				test.VerifyResource(resourceClient, resource, targetNamespace, localClusterID)
 			})
 		})
 	})
 
 	When("the resource already exists in the broker datastore", func() {
 		BeforeEach(func() {
-			initObjs = append(initObjs, resource)
+			existing := resource.DeepCopy()
+			existing.SetNamespace(targetNamespace)
+			initObjs = append(initObjs, existing)
 
 			resource = test.NewPodWithImage(test.LocalNamespace, "apache")
 		})
 
 		It("should update the resource", func() {
 			Expect(f.Distribute(resource)).To(Succeed())
-			test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
+			test.VerifyResource(resourceClient, resource, targetNamespace, localClusterID)
 		})
 
 		When("update initially fails due to conflict", func() {
@@ -119,7 +125,7 @@ func testDistribute() {
 
 			It("should retry until it succeeds", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
-				test.VerifyResource(resourceClient, resource, test.RemoteNamespace, localClusterID)
+				test.VerifyResource(resourceClient, resource, targetNamespace, localClusterID)
 			})
 		})
 
@@ -143,29 +149,46 @@ func testDistribute() {
 			Expect(f.Distribute(resource)).ToNot(Succeed())
 		})
 	})
+
+	When("no target namespace is specified", func() {
+		BeforeEach(func() {
+			targetNamespace = "another-ns"
+			federatorNamespace = corev1.NamespaceAll
+			resource.SetNamespace(targetNamespace)
+		})
+
+		It("should create the resource in the source namespace", func() {
+			Expect(f.Distribute(resource)).To(Succeed())
+			test.VerifyResource(resourceClient, resource, targetNamespace, localClusterID)
+		})
+	})
 }
 
 func testDelete() {
 	var (
-		f              federate.Federator
-		resource       *corev1.Pod
-		resourceClient *fake.DynamicResourceClient
-		initObjs       []runtime.Object
+		f                  federate.Federator
+		resource           *corev1.Pod
+		resourceClient     *fake.DynamicResourceClient
+		initObjs           []runtime.Object
+		targetNamespace    string
+		federatorNamespace string
 	)
 
 	BeforeEach(func() {
 		resource = test.NewPod(test.LocalNamespace)
 		initObjs = nil
+		targetNamespace = test.RemoteNamespace
+		federatorNamespace = test.RemoteNamespace
 	})
 
 	JustBeforeEach(func() {
-		f, resourceClient = setupFederator(resource, initObjs, "")
+		f, resourceClient = setupFederator(resource, initObjs, "", federatorNamespace, targetNamespace)
 	})
 
 	When("the resource exists in the broker datastore", func() {
 		BeforeEach(func() {
 			existing := resource.DeepCopy()
-			existing.SetNamespace(test.RemoteNamespace)
+			existing.SetNamespace(targetNamespace)
 			initObjs = append(initObjs, existing)
 		})
 
@@ -185,6 +208,22 @@ func testDelete() {
 				Expect(f.Delete(resource)).ToNot(Succeed())
 			})
 		})
+
+		When("no target namespace is specified", func() {
+			BeforeEach(func() {
+				targetNamespace = "another-ns"
+				federatorNamespace = corev1.NamespaceAll
+				initObjs[0].(*corev1.Pod).SetNamespace(targetNamespace)
+				resource.SetNamespace(targetNamespace)
+			})
+
+			It("should delete the resource from the source namespace", func() {
+				Expect(f.Delete(resource)).To(Succeed())
+
+				_, err := test.GetResourceAndError(resourceClient, resource)
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			})
+		})
 	})
 
 	When("the resource does not exist in the broker datastore", func() {
@@ -194,11 +233,11 @@ func testDelete() {
 	})
 }
 
-func setupFederator(resource *corev1.Pod, initObjs []runtime.Object, localClusterID string) (federate.Federator,
+func setupFederator(resource *corev1.Pod, initObjs []runtime.Object, localClusterID, federatorNS, targetNS string) (federate.Federator,
 	*fake.DynamicResourceClient) {
-	dynClient := fake.NewDynamicClient(test.PrepInitialClientObjs(test.RemoteNamespace, localClusterID, initObjs...)...)
+	dynClient := fake.NewDynamicClient(test.PrepInitialClientObjs("", localClusterID, initObjs...)...)
 	restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(resource)
-	f := broker.NewFederator(dynClient, restMapper, test.RemoteNamespace, localClusterID)
+	f := broker.NewFederator(dynClient, restMapper, federatorNS, localClusterID)
 
-	return f, dynClient.Resource(*gvr).Namespace(test.RemoteNamespace).(*fake.DynamicResourceClient)
+	return f, dynClient.Resource(*gvr).Namespace(targetNS).(*fake.DynamicResourceClient)
 }

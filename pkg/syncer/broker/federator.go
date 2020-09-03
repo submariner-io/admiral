@@ -4,6 +4,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/util"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -15,18 +16,18 @@ import (
 type federator struct {
 	dynClient       dynamic.Interface
 	restMapper      meta.RESTMapper
-	brokerNamespace string
+	targetNamespace string
 	localClusterID  string
 }
 
 var keepMetadataFields = map[string]bool{"name": true, "namespace": true, util.LabelsField: true, "annotations": true}
 
-func NewFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, brokerNamespace,
+func NewFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace,
 	localClusterID string) federate.Federator {
 	return &federator{
 		dynClient:       dynClient,
 		restMapper:      restMapper,
-		brokerNamespace: brokerNamespace,
+		targetNamespace: targetNamespace,
 		localClusterID:  localClusterID,
 	}
 }
@@ -44,7 +45,6 @@ func (f *federator) Distribute(resource runtime.Object) error {
 	}
 
 	f.prepareResourceForSync(toDistribute)
-	toDistribute.SetNamespace(f.brokerNamespace)
 
 	_, err = util.CreateOrUpdate(resourceClient, toDistribute, func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 		// Preserve the existing metadata info (except Labels and Annotations), specifically the ResourceVersion which must
@@ -75,7 +75,14 @@ func (f *federator) toUnstructured(from runtime.Object) (*unstructured.Unstructu
 		return nil, nil, err
 	}
 
-	return to, f.dynClient.Resource(*gvr).Namespace(f.brokerNamespace), nil
+	ns := f.targetNamespace
+	if ns == corev1.NamespaceAll {
+		ns = to.GetNamespace()
+	}
+
+	to.SetNamespace(ns)
+
+	return to, f.dynClient.Resource(*gvr).Namespace(ns), nil
 }
 
 func (f *federator) prepareResourceForSync(resource *unstructured.Unstructured) {
@@ -86,8 +93,6 @@ func (f *federator) prepareResourceForSync(resource *unstructured.Unstructured) 
 			unstructured.RemoveNestedField(resource.Object, util.MetadataField, field)
 		}
 	}
-
-	resource.SetNamespace(f.brokerNamespace)
 }
 
 func setNestedField(to map[string]interface{}, value interface{}, fields ...string) {
