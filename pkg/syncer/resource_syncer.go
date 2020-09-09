@@ -127,7 +127,7 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 	}
 
 	if syncer.config.ResourcesEquivalent == nil {
-		syncer.config.ResourcesEquivalent = DefaultResourcesEquivalent
+		syncer.config.ResourcesEquivalent = ResourcesNotEquivalent
 	}
 
 	_, gvr, err := util.ToUnstructuredResource(config.ResourceType, config.RestMapper)
@@ -417,4 +417,8 @@ func DefaultResourcesEquivalent(obj1, obj2 *unstructured.Unstructured) bool {
 	return reflect.DeepEqual(obj1.GetLabels(), obj2.GetLabels()) &&
 		reflect.DeepEqual(obj1.GetAnnotations(), obj2.GetAnnotations()) &&
 		equality.Semantic.DeepEqual(util.GetSpec(obj1), util.GetSpec(obj2))
+}
+
+func ResourcesNotEquivalent(obj1, obj2 *unstructured.Unstructured) bool {
+	return false
 }
