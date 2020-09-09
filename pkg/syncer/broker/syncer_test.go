@@ -177,13 +177,17 @@ var _ = Describe("Broker Syncer", func() {
 			test.UpdateResource(localClient, resource)
 		})
 
-		When("the default equivalence is used", func() {
+		When("the default equivalence function is specified", func() {
+			BeforeEach(func() {
+				config.ResourceConfigs[0].LocalResourcesEquivalent = sync.DefaultResourcesEquivalent
+			})
+
 			It("should not sync to the broker datastore", func() {
 				brokerClient.VerifyNoUpdate(resource.GetName())
 			})
 		})
 
-		When("a custom equivalence is used that compares Status", func() {
+		When("a custom equivalence function is specified that compares Status", func() {
 			BeforeEach(func() {
 				config.ResourceConfigs[0].LocalResourcesEquivalent = func(obj1, obj2 *unstructured.Unstructured) bool {
 					return equality.Semantic.DeepEqual(util.GetNestedField(obj1, "status"),
@@ -210,13 +214,17 @@ var _ = Describe("Broker Syncer", func() {
 			test.UpdateResource(brokerClient, resource)
 		})
 
-		When("the default equivalence is used", func() {
+		When("the default equivalence function is specified", func() {
+			BeforeEach(func() {
+				config.ResourceConfigs[0].BrokerResourcesEquivalent = sync.DefaultResourcesEquivalent
+			})
+
 			It("should not sync to the local datastore", func() {
 				localClient.VerifyNoUpdate(resource.GetName())
 			})
 		})
 
-		When("a custom equivalence is used that compares Status", func() {
+		When("a custom equivalence function is specified that compares Status", func() {
 			BeforeEach(func() {
 				config.ResourceConfigs[0].BrokerResourcesEquivalent = func(obj1, obj2 *unstructured.Unstructured) bool {
 					return equality.Semantic.DeepEqual(util.GetNestedField(obj1, "status"),

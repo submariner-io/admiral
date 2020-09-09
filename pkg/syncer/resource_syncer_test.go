@@ -475,25 +475,21 @@ func testUpdateSuppression() {
 		test.UpdateResource(d.sourceClient, d.resource)
 	})
 
-	When("the resource's Status is updated in the datastore", func() {
-		BeforeEach(func() {
-			d.resource.Status.Phase = corev1.PodRunning
-		})
+	When("no equivalence function is specified", func() {
+		When("the resource's Status is updated in the datastore", func() {
+			BeforeEach(func() {
+				d.resource.Status.Phase = corev1.PodRunning
+			})
 
-		When("the default equivalence is used", func() {
-			It("should not distribute it", func() {
-				d.federator.VerifyNoDistribute()
+			It("should distribute it", func() {
+				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
 			})
 		})
 
-		When("a custom equivalence is used that compares Status", func() {
+		When("the resource's ObjectMeta is updated in the datastore", func() {
 			BeforeEach(func() {
-				d.config.ResourcesEquivalent = func(obj1, obj2 *unstructured.Unstructured) bool {
-					defer GinkgoRecover()
-					Expect(syncer.DefaultResourcesEquivalent(obj1, obj2)).To(BeTrue())
-					return equality.Semantic.DeepEqual(util.GetNestedField(obj1, "status"),
-						util.GetNestedField(obj2, "status"))
-				}
+				t := metav1.Now()
+				d.resource.ObjectMeta.DeletionTimestamp = &t
 			})
 
 			It("should distribute it", func() {
@@ -502,34 +498,69 @@ func testUpdateSuppression() {
 		})
 	})
 
-	When("the resource's ObjectMeta is updated in the datastore", func() {
+	When("the default equivalence function is specified", func() {
 		BeforeEach(func() {
-			t := metav1.Now()
-			d.resource.ObjectMeta.DeletionTimestamp = &t
+			d.config.ResourcesEquivalent = syncer.DefaultResourcesEquivalent
 		})
 
-		It("should not distribute it", func() {
-			d.federator.VerifyNoDistribute()
+		When("the resource's Status is updated in the datastore", func() {
+			BeforeEach(func() {
+				d.resource.Status.Phase = corev1.PodRunning
+			})
+
+			It("should not distribute it", func() {
+				d.federator.VerifyNoDistribute()
+			})
+		})
+
+		When("the resource's ObjectMeta is updated in the datastore", func() {
+			BeforeEach(func() {
+				t := metav1.Now()
+				d.resource.ObjectMeta.DeletionTimestamp = &t
+			})
+
+			It("should not distribute it", func() {
+				d.federator.VerifyNoDistribute()
+			})
+		})
+
+		When("the resource's Labels are updated in the datastore", func() {
+			BeforeEach(func() {
+				d.resource.SetLabels(map[string]string{"new-label": "value"})
+			})
+
+			It("should distribute it", func() {
+				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+			})
+		})
+
+		When("the resource's Annotations are updated in the datastore", func() {
+			BeforeEach(func() {
+				d.resource.SetAnnotations(map[string]string{"new-annotations": "value"})
+			})
+
+			It("should distribute it", func() {
+				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+			})
 		})
 	})
 
-	When("the resource's Labels are updated in the datastore", func() {
+	When("a custom equivalence function is specified that compares Status", func() {
 		BeforeEach(func() {
-			d.resource.SetLabels(map[string]string{"new-label": "value"})
+			d.config.ResourcesEquivalent = func(obj1, obj2 *unstructured.Unstructured) bool {
+				return equality.Semantic.DeepEqual(util.GetNestedField(obj1, "status"),
+					util.GetNestedField(obj2, "status"))
+			}
 		})
 
-		It("should distribute it", func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
-		})
-	})
+		When("the resource's Status is updated in the datastore", func() {
+			BeforeEach(func() {
+				d.resource.Status.Phase = corev1.PodRunning
+			})
 
-	When("the resource's Annotations are updated in the datastore", func() {
-		BeforeEach(func() {
-			d.resource.SetAnnotations(map[string]string{"new-annotations": "value"})
-		})
-
-		It("should distribute it", func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+			It("should distribute it", func() {
+				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+			})
 		})
 	})
 }
