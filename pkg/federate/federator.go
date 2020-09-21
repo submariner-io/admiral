@@ -23,3 +23,18 @@ type Federator interface {
 	// failed.
 	Delete(resource runtime.Object) error
 }
+
+type noopFederator struct {
+}
+
+func NewNoopFederator() Federator {
+	return &noopFederator{}
+}
+
+func (n noopFederator) Distribute(resource runtime.Object) error {
+	return nil
+}
+
+func (n noopFederator) Delete(resource runtime.Object) error {
+	return nil
+}
