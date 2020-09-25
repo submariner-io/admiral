@@ -71,6 +71,12 @@ type ResourceSyncerConfig struct {
 	// SourceNamespace the namespace of the resources to sync.
 	SourceNamespace string
 
+	// SourceLabelSelector optional selector to restrict the resources to sync by their labels.
+	SourceLabelSelector string
+
+	// SourceFieldSelector optional selector to restrict the resources to sync by their fields.
+	SourceFieldSelector string
+
 	// LocalClusterID the cluster ID of the source client. This is used in conjunction with Direction to avoid
 	// loops when syncing the same resources between the local and remote sources.
 	LocalClusterID string
@@ -140,9 +146,13 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 	resourceClient := config.SourceClient.Resource(*gvr).Namespace(config.SourceNamespace)
 	syncer.store, syncer.informer = cache.NewInformer(&cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return resourceClient.List(metav1.ListOptions{})
+			options.LabelSelector = config.SourceLabelSelector
+			options.FieldSelector = config.SourceFieldSelector
+			return resourceClient.List(options)
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			options.LabelSelector = config.SourceLabelSelector
+			options.FieldSelector = config.SourceFieldSelector
 			return resourceClient.Watch(options)
 		},
 	}, &unstructured.Unstructured{}, 0, cache.ResourceEventHandlerFuncs{

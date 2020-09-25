@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -16,8 +17,11 @@ import (
 	metaapi "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 )
@@ -26,6 +30,8 @@ var _ = Describe("[syncer] Broker bi-directional syncer tests", func() {
 	Context("with a specific source namespace", testWithSpecificSourceNamespace)
 	Context("with source namespace all", testWithSourceNamespaceAll)
 	Context("with local transform", testWithLocalTransform)
+	Context("with a label selector", testWithLabelSelector)
+	Context("with a field selector", testWithFieldSelector)
 })
 
 func testWithSpecificSourceNamespace() {
@@ -71,11 +77,61 @@ func testWithLocalTransform() {
 	})
 }
 
+func testWithLabelSelector() {
+	t := newTestDriver()
+
+	BeforeEach(func() {
+		req, err := labels.NewRequirement("foo", selection.Equals, []string{"bar"})
+		Expect(err).To(Succeed())
+		t.labelSelector = labels.NewSelector().Add(*req).String()
+	})
+
+	When("a label selector is specified", func() {
+		When("Toaster resources are created with and without the label selector criteria", func() {
+			It("should correctly sync or exclude the Toaster resource", func() {
+				By("Creating a Toaster with the label selector criteria")
+				toaster := t.createToasterResource(framework.ClusterA, addLabel(t.newToaster("sync"), "foo", "bar"))
+				t.awaitToaster(framework.ClusterB, toaster)
+
+				By("Creating a Toaster without the label selector criteria")
+				toaster = t.createToasterResource(framework.ClusterA, t.newToaster("no-sync"))
+				time.Sleep(1000 * time.Millisecond)
+				t.awaitNoToaster(framework.ClusterB, toaster)
+			})
+		})
+	})
+}
+
+func testWithFieldSelector() {
+	t := newTestDriver()
+
+	BeforeEach(func() {
+		t.fieldSelector = fields.OneTermEqualSelector("metadata.name", "sync").String()
+	})
+
+	When("a field selector is specified", func() {
+		When("Toaster resources are created with and without the field selector criteria", func() {
+			It("should correctly sync or exclude the Toaster resource", func() {
+				By("Creating a Toaster with the field selector criteria")
+				toaster := t.createToasterResource(framework.ClusterA, t.newToaster("sync"))
+				t.awaitToaster(framework.ClusterB, toaster)
+
+				By("Creating a Toaster without the field selector criteria")
+				toaster = t.createToasterResource(framework.ClusterA, t.newToaster("no-sync"))
+				time.Sleep(1000 * time.Millisecond)
+				t.awaitNoToaster(framework.ClusterB, toaster)
+			})
+		})
+	})
+}
+
 type testDriver struct {
 	framework            *framework.Framework
 	localSourceNamespace string
 	localTransform       func(from runtime.Object, op syncer.Operation) (runtime.Object, bool)
 	brokerResourceType   runtime.Object
+	labelSelector        string
+	fieldSelector        string
 	clusterClients       []dynamic.Interface
 	stopCh               chan struct{}
 }
@@ -139,10 +195,12 @@ func (t *testDriver) newSyncer(cluster framework.ClusterIndex) *broker.Syncer {
 		LocalClusterID:  localClusterID,
 		ResourceConfigs: []broker.ResourceConfig{
 			{
-				LocalResourceType:    localResourceType,
-				LocalSourceNamespace: t.localSourceNamespace,
-				LocalTransform:       t.localTransform,
-				BrokerResourceType:   t.brokerResourceType,
+				LocalResourceType:        localResourceType,
+				LocalSourceNamespace:     t.localSourceNamespace,
+				LocalSourceLabelSelector: t.labelSelector,
+				LocalSourceFieldSelector: t.fieldSelector,
+				LocalTransform:           t.localTransform,
+				BrokerResourceType:       t.brokerResourceType,
 			},
 		},
 	})
@@ -170,22 +228,38 @@ func (t *testDriver) bidirectionalSyncTests() {
 	})
 }
 
-func (t *testDriver) createToaster(cluster framework.ClusterIndex) *testV1.Toaster {
-	namespace := t.framework.Namespace
-	toaster := &testV1.Toaster{
+func addLabel(toaster *testV1.Toaster, key, value string) *testV1.Toaster {
+	if toaster.Labels == nil {
+		toaster.Labels = map[string]string{}
+	}
+
+	toaster.Labels[key] = value
+
+	return toaster
+}
+
+func (t *testDriver) newToaster(name string) *testV1.Toaster {
+	return &testV1.Toaster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      framework.TestContext.ClusterIDs[cluster] + "-toaster",
-			Namespace: namespace,
+			Name:      name,
+			Namespace: t.framework.Namespace,
 		},
 		Spec: testV1.ToasterSpec{
 			Manufacturer: "Cuisinart",
 			ModelNumber:  "1234T",
 		},
 	}
+}
 
-	By(fmt.Sprintf("Creating Toaster %q in namespace %q in %q", toaster.Name, namespace, framework.TestContext.ClusterIDs[cluster]))
+func (t *testDriver) createToaster(cluster framework.ClusterIndex) *testV1.Toaster {
+	return t.createToasterResource(cluster, t.newToaster(framework.TestContext.ClusterIDs[cluster]+"-toaster"))
+}
 
-	_, err := t.clusterClients[cluster].Resource(*toasterGVR()).Namespace(namespace).Create(test.ToUnstructured(toaster),
+func (t *testDriver) createToasterResource(cluster framework.ClusterIndex, toaster *testV1.Toaster) *testV1.Toaster {
+	By(fmt.Sprintf("Creating Toaster %q in namespace %q in %q", toaster.Name, toaster.Namespace,
+		framework.TestContext.ClusterIDs[cluster]))
+
+	_, err := t.clusterClients[cluster].Resource(*toasterGVR()).Namespace(toaster.Namespace).Create(test.ToUnstructured(toaster),
 		metav1.CreateOptions{})
 	Expect(err).To(Succeed())
 
