@@ -20,6 +20,12 @@ type ResourceConfig struct {
 	// SourceNamespace the namespace in the local source from which to retrieve the local resources to sync.
 	LocalSourceNamespace string
 
+	// LocalSourceLabelSelector optional selector to restrict the local resources to sync by their labels.
+	LocalSourceLabelSelector string
+
+	// LocalSourceFieldSelector optional selector to restrict the local resources to sync by their fields.
+	LocalSourceFieldSelector string
+
 	// LocalResourceType the type of the local resources to sync to the broker.
 	LocalResourceType runtime.Object
 
@@ -161,6 +167,8 @@ func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic
 			Name:                fmt.Sprintf("local -> broker for %T", rc.LocalResourceType),
 			SourceClient:        localClient,
 			SourceNamespace:     rc.LocalSourceNamespace,
+			SourceLabelSelector: rc.LocalSourceLabelSelector,
+			SourceFieldSelector: rc.LocalSourceFieldSelector,
 			LocalClusterID:      config.LocalClusterID,
 			Direction:           syncer.LocalToRemote,
 			RestMapper:          restMapper,
@@ -183,6 +191,8 @@ func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic
 			Name:                fmt.Sprintf("broker -> local for %T", rc.BrokerResourceType),
 			SourceClient:        brokerClient,
 			SourceNamespace:     config.BrokerNamespace,
+			SourceLabelSelector: rc.LocalSourceLabelSelector,
+			SourceFieldSelector: rc.LocalSourceFieldSelector,
 			LocalClusterID:      config.LocalClusterID,
 			Direction:           syncer.RemoteToLocal,
 			RestMapper:          restMapper,
