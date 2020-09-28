@@ -14,22 +14,28 @@ import (
 )
 
 type federator struct {
-	dynClient       dynamic.Interface
-	restMapper      meta.RESTMapper
-	targetNamespace string
-	localClusterID  string
+	dynClient          dynamic.Interface
+	restMapper         meta.RESTMapper
+	targetNamespace    string
+	localClusterID     string
+	keepMetadataFields map[string]bool
 }
 
-var keepMetadataFields = map[string]bool{"name": true, "namespace": true, util.LabelsField: true, "annotations": true}
-
 func NewFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace,
-	localClusterID string) federate.Federator {
-	return &federator{
-		dynClient:       dynClient,
-		restMapper:      restMapper,
-		targetNamespace: targetNamespace,
-		localClusterID:  localClusterID,
+	localClusterID string, keepMetadataField ...string) federate.Federator {
+	f := &federator{
+		dynClient:          dynClient,
+		restMapper:         restMapper,
+		targetNamespace:    targetNamespace,
+		localClusterID:     localClusterID,
+		keepMetadataFields: map[string]bool{"name": true, "namespace": true, util.LabelsField: true, "annotations": true},
 	}
+
+	for _, field := range keepMetadataField {
+		f.keepMetadataFields[field] = true
+	}
+
+	return f
 }
 
 func (f *federator) Distribute(resource runtime.Object) error {
@@ -89,7 +95,7 @@ func (f *federator) prepareResourceForSync(resource *unstructured.Unstructured) 
 	//  Remove metadata fields that are set by the API server on creation.
 	metadata := util.GetMetadata(resource)
 	for field := range metadata {
-		if !keepMetadataFields[field] {
+		if !f.keepMetadataFields[field] {
 			unstructured.RemoveNestedField(resource.Object, util.MetadataField, field)
 		}
 	}

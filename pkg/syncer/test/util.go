@@ -60,6 +60,7 @@ func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev
 	Expect(actual.GetName()).To(Equal(expected.GetName()))
 	Expect(actual.GetNamespace()).To(Equal(expNamespace))
 	Expect(actual.GetAnnotations()).To(Equal(expected.GetAnnotations()))
+	Expect(actual.GetOwnerReferences()).To(Equal(expected.GetOwnerReferences()))
 	Expect(actual.Spec).To(Equal(expected.Spec))
 	Expect(actual.Status).To(Equal(expected.Status))
 

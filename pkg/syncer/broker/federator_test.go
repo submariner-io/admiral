@@ -11,6 +11,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -29,18 +30,20 @@ func testDistribute() {
 		targetNamespace    string
 		resourceClient     *fake.DynamicResourceClient
 		initObjs           []runtime.Object
+		keepMetadataFields []string
 	)
 
 	BeforeEach(func() {
 		localClusterID = "east"
 		resource = test.NewPod(test.LocalNamespace)
 		initObjs = nil
+		keepMetadataFields = nil
 		federatorNamespace = test.RemoteNamespace
 		targetNamespace = test.RemoteNamespace
 	})
 
 	JustBeforeEach(func() {
-		f, resourceClient = setupFederator(resource, initObjs, localClusterID, federatorNamespace, targetNamespace)
+		f, resourceClient = setupFederator(resource, initObjs, localClusterID, federatorNamespace, targetNamespace, keepMetadataFields...)
 	})
 
 	When("the resource does not already exist in the broker datastore", func() {
@@ -71,6 +74,23 @@ func testDistribute() {
 			})
 
 			It("should create the resource with the Status data", func() {
+				Expect(f.Distribute(resource)).To(Succeed())
+				test.VerifyResource(resourceClient, resource, targetNamespace, localClusterID)
+			})
+		})
+
+		When("the resource contains OwnerReferences", func() {
+			BeforeEach(func() {
+				keepMetadataFields = []string{"ownerReferences"}
+				resource.OwnerReferences = []metav1.OwnerReference{
+					{
+						Kind: "DaemonSet",
+						Name: "foo",
+					},
+				}
+			})
+
+			It("should create the resource with the OwnerReferences", func() {
 				Expect(f.Distribute(resource)).To(Succeed())
 				test.VerifyResource(resourceClient, resource, targetNamespace, localClusterID)
 			})
@@ -233,11 +253,12 @@ func testDelete() {
 	})
 }
 
-func setupFederator(resource *corev1.Pod, initObjs []runtime.Object, localClusterID, federatorNS, targetNS string) (federate.Federator,
+func setupFederator(resource *corev1.Pod, initObjs []runtime.Object, localClusterID, federatorNS, targetNS string,
+	keepMetadataField ...string) (federate.Federator,
 	*fake.DynamicResourceClient) {
 	dynClient := fake.NewDynamicClient(test.PrepInitialClientObjs("", localClusterID, initObjs...)...)
 	restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(resource)
-	f := broker.NewFederator(dynClient, restMapper, federatorNS, localClusterID)
+	f := broker.NewFederator(dynClient, restMapper, federatorNS, localClusterID, keepMetadataField...)
 
 	return f, dynClient.Resource(*gvr).Namespace(targetNS).(*fake.DynamicResourceClient)
 }
