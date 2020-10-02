@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
 )
 
 var _ = Describe("Broker Syncer", func() {
@@ -48,8 +49,8 @@ var _ = Describe("Broker Syncer", func() {
 	JustBeforeEach(func() {
 		restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(resource)
 
-		localDynClient := fake.NewDynamicClient(test.PrepInitialClientObjs("", "", initialResources...)...)
-		brokerDynClient := fake.NewDynamicClient()
+		localDynClient := fake.NewDynamicClient(scheme.Scheme, test.PrepInitialClientObjs("", "", initialResources...)...)
+		brokerDynClient := fake.NewDynamicClient(scheme.Scheme)
 
 		localClient = localDynClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace).(*fake.DynamicResourceClient)
 		brokerClient = brokerDynClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)

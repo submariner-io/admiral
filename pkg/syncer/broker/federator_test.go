@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes/scheme"
 )
 
 var _ = Describe("Federator", func() {
@@ -256,7 +257,7 @@ func testDelete() {
 func setupFederator(resource *corev1.Pod, initObjs []runtime.Object, localClusterID, federatorNS, targetNS string,
 	keepMetadataField ...string) (federate.Federator,
 	*fake.DynamicResourceClient) {
-	dynClient := fake.NewDynamicClient(test.PrepInitialClientObjs("", localClusterID, initObjs...)...)
+	dynClient := fake.NewDynamicClient(scheme.Scheme, test.PrepInitialClientObjs("", localClusterID, initObjs...)...)
 	restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(resource)
 	f := broker.NewFederator(dynClient, restMapper, federatorNS, localClusterID, keepMetadataField...)
 
