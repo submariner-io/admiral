@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/kubernetes/scheme"
 )
 
 type dynamicClient struct {
@@ -41,8 +40,8 @@ type DynamicResourceClient struct {
 	PersistentFailOnGet    atomic.Value
 }
 
-func NewDynamicClient(objects ...runtime.Object) dynamic.Interface {
-	f := fake.NewSimpleDynamicClient(scheme.Scheme, objects...)
+func NewDynamicClient(scheme *runtime.Scheme, objects ...runtime.Object) dynamic.Interface {
+	f := fake.NewSimpleDynamicClient(scheme, objects...)
 
 	return &dynamicClient{
 		Interface:              f,
