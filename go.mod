@@ -9,10 +9,9 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo v1.14.2
-	github.com/onsi/gomega v1.10.2
+	github.com/onsi/gomega v1.10.3
 	github.com/pkg/errors v0.9.1
 	github.com/submariner-io/shipyard v0.7.1
-	golang.org/x/crypto v0.0.0-20200323165209-0ec3e9974c59 // indirect
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	k8s.io/api v0.17.0
 	k8s.io/apimachinery v0.17.0
