@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
@@ -113,6 +114,9 @@ type ResourceSyncerConfig struct {
 
 	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
 	Scheme *runtime.Scheme
+
+	// ResyncPeriod if non-zero, the period at which resources will be re-synced regardless if anything changed. Default is 0.
+	ResyncPeriod time.Duration
 }
 
 type resourceSyncer struct {
@@ -163,7 +167,7 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 			options.FieldSelector = config.SourceFieldSelector
 			return resourceClient.Watch(options)
 		},
-	}, &unstructured.Unstructured{}, 0, cache.ResourceEventHandlerFuncs{
+	}, &unstructured.Unstructured{}, config.ResyncPeriod, cache.ResourceEventHandlerFuncs{
 		AddFunc:    syncer.onCreate,
 		UpdateFunc: syncer.onUpdate,
 		DeleteFunc: syncer.onDelete,

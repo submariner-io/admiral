@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"time"
 
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer"
@@ -42,6 +43,10 @@ type ResourceConfig struct {
 	// LocalWaitForCacheSync if true, waits for the local informer cache to sync on Start. Default is true.
 	LocalWaitForCacheSync *bool
 
+	// LocalResyncPeriod if non-zero, the period at which local resources will be re-synced regardless if anything changed.
+	// Default is 0.
+	LocalResyncPeriod time.Duration
+
 	// BrokerResourceType the type of the broker resources to sync to the local source.
 	BrokerResourceType runtime.Object
 
@@ -54,6 +59,10 @@ type ResourceConfig struct {
 
 	// BrokerWaitForCacheSync if true, waits for the broker informer cache to sync on Start. Default is false.
 	BrokerWaitForCacheSync *bool
+
+	// BrokerResyncPeriod if non-zero, the period at which broker resources will be re-synced regardless if anything changed.
+	// Default is 0.
+	BrokerResyncPeriod time.Duration
 }
 
 type SyncerConfig struct {
@@ -185,6 +194,7 @@ func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic
 			ResourcesEquivalent: rc.LocalResourcesEquivalent,
 			WaitForCacheSync:    rc.LocalWaitForCacheSync,
 			Scheme:              config.Scheme,
+			ResyncPeriod:        rc.LocalResyncPeriod,
 		})
 
 		if err != nil {
@@ -215,6 +225,7 @@ func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic
 			ResourcesEquivalent: rc.BrokerResourcesEquivalent,
 			WaitForCacheSync:    waitForCacheSync,
 			Scheme:              config.Scheme,
+			ResyncPeriod:        rc.BrokerResyncPeriod,
 		})
 
 		if err != nil {
