@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
@@ -108,8 +109,14 @@ type ResourceSyncerConfig struct {
 	// The default is DefaultResourcesEquivalent which checks annotations, labels and the Spec, if present.
 	ResourcesEquivalent ResourceEquivalenceFunc
 
+	// WaitForCacheSync if true, waits for the informer cache to sync on Start. Default is true.
+	WaitForCacheSync *bool
+
 	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
 	Scheme *runtime.Scheme
+
+	// ResyncPeriod if non-zero, the period at which resources will be re-synced regardless if anything changed. Default is 0.
+	ResyncPeriod time.Duration
 }
 
 type resourceSyncer struct {
@@ -136,6 +143,11 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 		syncer.config.ResourcesEquivalent = ResourcesNotEquivalent
 	}
 
+	if syncer.config.WaitForCacheSync == nil {
+		wait := true
+		syncer.config.WaitForCacheSync = &wait
+	}
+
 	_, gvr, err := util.ToUnstructuredResource(config.ResourceType, config.RestMapper)
 	if err != nil {
 		return nil, err
@@ -155,7 +167,7 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 			options.FieldSelector = config.SourceFieldSelector
 			return resourceClient.Watch(options)
 		},
-	}, &unstructured.Unstructured{}, 0, cache.ResourceEventHandlerFuncs{
+	}, &unstructured.Unstructured{}, config.ResyncPeriod, cache.ResourceEventHandlerFuncs{
 		AddFunc:    syncer.onCreate,
 		UpdateFunc: syncer.onUpdate,
 		DeleteFunc: syncer.onDelete,
@@ -177,10 +189,12 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 		r.informer.Run(stopCh)
 	}()
 
-	klog.Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
+	if *r.config.WaitForCacheSync {
+		klog.Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
 
-	if ok := cache.WaitForCacheSync(stopCh, r.informer.HasSynced); !ok {
-		return fmt.Errorf("failed to wait for informer cache to sync")
+		if ok := cache.WaitForCacheSync(stopCh, r.informer.HasSynced); !ok {
+			return fmt.Errorf("failed to wait for informer cache to sync")
+		}
 	}
 
 	r.workQueue.Run(stopCh, r.processNextWorkItem)

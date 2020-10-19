@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes/scheme"
 )
 
 var _ = Describe("Broker Syncer", func() {
@@ -32,25 +31,31 @@ var _ = Describe("Broker Syncer", func() {
 		initialResources = nil
 		stopCh = make(chan struct{})
 		resource = test.NewPod("")
+
+		wait := true
 		config = &broker.SyncerConfig{
 			LocalNamespace:  test.LocalNamespace,
 			LocalClusterID:  "east",
 			BrokerNamespace: test.RemoteNamespace,
 			ResourceConfigs: []broker.ResourceConfig{
 				{
-					LocalSourceNamespace: test.LocalNamespace,
-					LocalResourceType:    resource,
-					BrokerResourceType:   resource,
+					LocalSourceNamespace:   test.LocalNamespace,
+					LocalResourceType:      resource,
+					BrokerResourceType:     resource,
+					BrokerWaitForCacheSync: &wait,
 				},
 			},
+			Scheme: runtime.NewScheme(),
 		}
 	})
 
 	JustBeforeEach(func() {
+		Expect(corev1.AddToScheme(config.Scheme)).To(Succeed())
+
 		restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(resource)
 
-		localDynClient := fake.NewDynamicClient(scheme.Scheme, test.PrepInitialClientObjs("", "", initialResources...)...)
-		brokerDynClient := fake.NewDynamicClient(scheme.Scheme)
+		localDynClient := fake.NewDynamicClient(config.Scheme, test.PrepInitialClientObjs("", "", initialResources...)...)
+		brokerDynClient := fake.NewDynamicClient(config.Scheme)
 
 		localClient = localDynClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace).(*fake.DynamicResourceClient)
 		brokerClient = brokerDynClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)
