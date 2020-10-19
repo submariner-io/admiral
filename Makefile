@@ -17,8 +17,6 @@ deploy: clusters
 
 e2e: vendor/modules.txt deploy
 	./scripts/$@ $(E2E_ARGS)
-
-test: unit-test
 	
 .PHONY: $(TARGETS) test
 
