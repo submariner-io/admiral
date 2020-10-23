@@ -95,6 +95,7 @@ type SyncerConfig struct {
 type Syncer struct {
 	syncers         []syncer.Interface
 	localSyncers    map[reflect.Type]syncer.Interface
+	localFederator  federate.Federator
 	remoteFederator federate.Federator
 }
 
@@ -175,7 +176,7 @@ func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic
 	}
 
 	brokerSyncer.remoteFederator = NewFederator(brokerClient, restMapper, config.BrokerNamespace, config.LocalClusterID)
-	localFederator := NewFederator(localClient, restMapper, config.LocalNamespace, "")
+	brokerSyncer.localFederator = NewFederator(localClient, restMapper, config.LocalNamespace, "")
 
 	for _, rc := range config.ResourceConfigs {
 		localSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
@@ -219,7 +220,7 @@ func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic
 			LocalClusterID:      config.LocalClusterID,
 			Direction:           syncer.RemoteToLocal,
 			RestMapper:          restMapper,
-			Federator:           localFederator,
+			Federator:           brokerSyncer.localFederator,
 			ResourceType:        rc.BrokerResourceType,
 			Transform:           rc.BrokerTransform,
 			ResourcesEquivalent: rc.BrokerResourcesEquivalent,
@@ -251,6 +252,10 @@ func (s *Syncer) Start(stopCh <-chan struct{}) error {
 
 func (s *Syncer) GetBrokerFederator() federate.Federator {
 	return s.remoteFederator
+}
+
+func (s *Syncer) GetLocalFederator() federate.Federator {
+	return s.localFederator
 }
 
 func (s *Syncer) GetLocalResource(name, namespace string, ofType runtime.Object) (runtime.Object, bool, error) {
