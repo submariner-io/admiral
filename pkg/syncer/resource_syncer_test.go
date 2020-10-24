@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metaapi "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,6 +38,7 @@ var _ = Describe("Resource Syncer", func() {
 	Describe("Sync Errors", testSyncErrors)
 	Describe("Update Suppression", testUpdateSuppression)
 	Describe("GetResource", testGetResource)
+	Describe("ListResources", testListResources)
 })
 
 func testLocalToRemote() {
@@ -591,6 +593,48 @@ func testGetResource() {
 			Expect(err).To(Succeed())
 			Expect(exists).To(BeFalse())
 		})
+	})
+}
+
+func testListResources() {
+	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	var resource2 *corev1.Pod
+
+	BeforeEach(func() {
+		resource2 = &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "apache-pod",
+				Namespace: d.resource.Namespace,
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Image: "apache",
+						Name:  "httpd",
+					},
+				},
+			},
+		}
+
+		d.addInitialResource(d.resource)
+		d.addInitialResource(resource2)
+	})
+
+	It("should return all the resources", func() {
+		list, err := d.syncer.ListResources()
+		Expect(err).To(Succeed())
+
+		expected := map[string]*corev1.PodSpec{d.resource.Name: &d.resource.Spec, resource2.Name: &resource2.Spec}
+
+		Expect(list).To(HaveLen(len(expected)))
+		for _, actual := range list {
+			meta, err := metaapi.Accessor(actual)
+			Expect(err).To(Succeed())
+			Expect(actual).To(BeAssignableToTypeOf(&corev1.Pod{}))
+			Expect(&actual.(*corev1.Pod).Spec).To(Equal(expected[meta.GetName()]))
+			delete(expected, meta.GetName())
+		}
 	})
 }
 

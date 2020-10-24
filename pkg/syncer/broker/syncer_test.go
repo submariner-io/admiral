@@ -268,4 +268,17 @@ var _ = Describe("Broker Syncer", func() {
 			Expect(pod.Spec).To(Equal(resource.Spec))
 		})
 	})
+
+	When("ListLocalResources is called", func() {
+		It("should return the correct resources", func() {
+			test.CreateResource(localClient, resource)
+			test.AwaitResource(brokerClient, resource.GetName())
+
+			list, err := syncer.ListLocalResources(resource)
+			Expect(err).To(Succeed())
+			Expect(list).To(HaveLen(1))
+			Expect(list[0]).To(BeAssignableToTypeOf(&corev1.Pod{}))
+			Expect(&list[0].(*corev1.Pod).Spec).To(Equal(&resource.Spec))
+		})
+	})
 })

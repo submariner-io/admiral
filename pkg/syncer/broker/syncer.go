@@ -261,3 +261,12 @@ func (s *Syncer) GetLocalResource(name, namespace string, ofType runtime.Object)
 
 	return ls.GetResource(name, namespace)
 }
+
+func (s *Syncer) ListLocalResources(ofType runtime.Object) ([]runtime.Object, error) {
+	ls, found := s.localSyncers[reflect.TypeOf(ofType)]
+	if !found {
+		return nil, fmt.Errorf("no Syncer found for %#v", ofType)
+	}
+
+	return ls.ListResources()
+}
