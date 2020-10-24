@@ -8,4 +8,6 @@ type Interface interface {
 	AwaitStopped()
 
 	GetResource(name, namespace string) (runtime.Object, bool, error)
+
+	ListResources() ([]runtime.Object, error)
 }

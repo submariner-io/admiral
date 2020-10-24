@@ -227,6 +227,22 @@ func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bo
 	return converted, true, nil
 }
 
+func (r *resourceSyncer) ListResources() ([]runtime.Object, error) {
+	var retObjects []runtime.Object
+
+	for _, obj := range r.store.List() {
+		converted := r.config.ResourceType.DeepCopyObject()
+		err := r.config.Scheme.Convert(obj.(*unstructured.Unstructured), converted, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		retObjects = append(retObjects, converted)
+	}
+
+	return retObjects, nil
+}
+
 func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error) {
 	obj, exists, err := r.store.GetByKey(key)
 	if err != nil {
