@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	"github.com/submariner-io/admiral/pkg/log"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -71,8 +70,6 @@ func FindGroupVersionResource(from *unstructured.Unstructured, restMapper meta.R
 	if err != nil {
 		return nil, errors.WithMessagef(err, "error getting REST mapper for %#v", gvk)
 	}
-
-	klog.V(log.DEBUG).Infof("Found %#v", mapping.Resource)
 
 	return &mapping.Resource, nil
 }
