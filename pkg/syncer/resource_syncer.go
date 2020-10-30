@@ -261,7 +261,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 		op = Create
 	}
 
-	klog.V(log.DEBUG).Infof("Syncer %q retrieved %sd resource: %#v", r.config.Name, op, resource)
+	klog.V(log.DEBUG).Infof("Syncer %q retrieved %sd resource %q: %#v", r.config.Name, op, resource.GetName(), resource)
 
 	if r.shouldSync(resource) {
 		resource, transformed, requeue := r.transform(resource, op)
@@ -273,7 +273,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 			return requeue, nil
 		}
 
-		klog.V(log.DEBUG).Infof("Syncing resource: %#v", resource)
+		klog.V(log.DEBUG).Infof("Syncer %q syncing resource %q", r.config.Name, resource.GetName())
 
 		err = r.config.Federator.Distribute(resource)
 		if err != nil {
@@ -282,7 +282,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 
 		r.onSuccessfulSync(resource, transformed, op)
 
-		klog.V(log.DEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, key)
+		klog.V(log.DEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, resource.GetName())
 	}
 
 	r.created.Delete(key)
@@ -312,11 +312,11 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 			return requeue, nil
 		}
 
-		klog.V(log.DEBUG).Infof("Syncer %q deleting resource: %#v", r.config.Name, resource)
+		klog.V(log.DEBUG).Infof("Syncer %q deleting resource %q: %#v", r.config.Name, resource.GetName(), resource)
 
 		err := r.config.Federator.Delete(resource)
 		if apierrors.IsNotFound(err) {
-			klog.V(log.DEBUG).Infof("Syncer %q: resource %q not found - ignoring", r.config.Name, key)
+			klog.V(log.DEBUG).Infof("Syncer %q: resource %q not found - ignoring", r.config.Name, resource.GetName())
 			return false, nil
 		}
 
@@ -327,7 +327,7 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 
 		r.onSuccessfulSync(resource, transformed, Delete)
 
-		klog.V(log.DEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, key)
+		klog.V(log.DEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, resource.GetName())
 	}
 
 	return false, nil
@@ -412,13 +412,13 @@ func (r *resourceSyncer) onDelete(obj interface{}) {
 	if resource, ok = obj.(*unstructured.Unstructured); !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			klog.Errorf("Could not convert object %v to DeletedFinalStateUnknown", obj)
+			klog.Errorf("Syncer %q: could not convert object %v to DeletedFinalStateUnknown", r.config.Name, obj)
 			return
 		}
 
 		resource, ok = tombstone.Obj.(*unstructured.Unstructured)
 		if !ok {
-			klog.Errorf("Could not convert object tombstone %v to Unstructured", tombstone.Obj)
+			klog.Errorf("Syncer %q: could not convert object tombstone %v to Unstructured", r.config.Name, tombstone.Obj)
 			return
 		}
 	}
@@ -434,14 +434,15 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 	if r.config.Direction == LocalToRemote && found {
 		// This is the local -> remote case - only sync local resources w/o the label, assuming any resource with the
 		// label originated from a remote source.
-		klog.V(log.DEBUG).Infof("Found cluster ID label %q - not syncing resource %q", clusterID, resource.GetName())
+		klog.V(log.DEBUG).Infof("Syncer %q: found cluster ID label %q - not syncing resource %q", r.config.Name,
+			clusterID, resource.GetName())
 		return false
 	}
 
 	if r.config.Direction == RemoteToLocal && r.config.LocalClusterID != "" && (!found || clusterID == r.config.LocalClusterID) {
 		// This is the remote -> local case - do not sync local resources
-		klog.V(log.DEBUG).Infof("Cluster ID label %q not present or matches local cluster ID %q - not syncing resource %q",
-			clusterID, r.config.LocalClusterID, resource.GetName())
+		klog.V(log.DEBUG).Infof("Syncer %q: cluster ID label %q not present or matches local cluster ID %q - not syncing resource %q",
+			r.config.Name, clusterID, r.config.LocalClusterID, resource.GetName())
 		return false
 	}
 
