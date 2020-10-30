@@ -7,14 +7,17 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/klog"
 )
 
 type ResourceConfig struct {
@@ -129,19 +132,17 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		brokerClient, err = getCheckedBrokerClientset(brokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace, restMapper)
 		if err != nil {
-			if urlError, ok := err.(*url.Error); ok {
-				if _, ok := urlError.Unwrap().(x509.UnknownAuthorityError); ok {
-					// Certificate error, try with the trust chain
-					brokerRestConfig, config.BrokerNamespace, err = BuildBrokerConfigFromEnv(true)
-					if err != nil {
-						return nil, err
-					}
-					brokerClient, err = getCheckedBrokerClientset(brokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace, restMapper)
-				}
+			// Certificate error, try with the trust chain
+			brokerRestConfig, config.BrokerNamespace, err = BuildBrokerConfigFromEnv(true)
+			if err != nil {
+				return nil, err
 			}
+			brokerClient, err = getCheckedBrokerClientset(brokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace, restMapper)
 		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -163,9 +164,21 @@ func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, broke
 	}
 
 	resourceClient := client.Resource(*gvr).Namespace(brokerNamespace)
-	_, err = resourceClient.List(metav1.ListOptions{})
+	_, err = resourceClient.Get("any", metav1.GetOptions{})
 
-	return client, err
+	if err != nil {
+		if urlError, ok := err.(*url.Error); ok {
+			if _, ok := urlError.Unwrap().(x509.UnknownAuthorityError); ok {
+				return client, errors.Wrap(err, "cannot access the broker API server")
+			}
+		}
+
+		if !apierrors.IsNotFound(err) {
+			klog.Errorf("Error accessing the broker API server: %v", err)
+		}
+	}
+
+	return client, nil
 }
 
 // NewSyncerWithDetail creates a Syncer with given additional detail. This function is intended for unit tests.
