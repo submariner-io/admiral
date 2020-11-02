@@ -106,7 +106,7 @@ type ResourceSyncerConfig struct {
 
 	// ResourcesEquivalent function to compare two resources for equivalence. This is invoked on an update notification
 	// to compare the old and new resources. If true is returned, the update is ignored, otherwise the update is processed.
-	// The default is DefaultResourcesEquivalent which checks annotations, labels and the Spec, if present.
+	// By default all updates are processed.
 	ResourcesEquivalent ResourceEquivalenceFunc
 
 	// WaitForCacheSync if true, waits for the informer cache to sync on Start. Default is true.
