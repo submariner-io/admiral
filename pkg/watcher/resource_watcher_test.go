@@ -11,6 +11,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/watcher"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
@@ -18,41 +19,55 @@ import (
 
 var _ = Describe("Resource Watcher", func() {
 	var (
-		config   *watcher.Config
-		client   dynamic.ResourceInterface
-		resource *corev1.Pod
-		created  chan *corev1.Pod
-		updated  chan *corev1.Pod
-		deleted  chan *corev1.Pod
-		stopCh   chan struct{}
+		config          *watcher.Config
+		pods            dynamic.ResourceInterface
+		services        dynamic.ResourceInterface
+		pod             *corev1.Pod
+		createdPods     chan *corev1.Pod
+		updatedPods     chan *corev1.Pod
+		deletedPods     chan *corev1.Pod
+		createdServices chan *corev1.Service
+		stopCh          chan struct{}
 	)
 
 	BeforeEach(func() {
 		stopCh = make(chan struct{})
-		created = make(chan *corev1.Pod, 100)
-		updated = make(chan *corev1.Pod, 100)
-		deleted = make(chan *corev1.Pod, 100)
+		createdPods = make(chan *corev1.Pod, 100)
+		updatedPods = make(chan *corev1.Pod, 100)
+		deletedPods = make(chan *corev1.Pod, 100)
+		createdServices = make(chan *corev1.Service, 100)
 
-		resource = test.NewPod("")
+		pod = test.NewPod("")
 
 		config = &watcher.Config{
-			Name:   "Pod watcher",
 			Scheme: runtime.NewScheme(),
 			ResourceConfigs: []watcher.ResourceConfig{
 				{
+					Name:            "Pod watcher",
 					SourceNamespace: test.LocalNamespace,
 					ResourceType:    &corev1.Pod{},
 					Handler: watcher.EventHandlerFuncs{
 						OnCreateFunc: func(obj runtime.Object) bool {
-							created <- obj.(*corev1.Pod)
+							createdPods <- obj.(*corev1.Pod)
 							return false
 						},
 						OnUpdateFunc: func(obj runtime.Object) bool {
-							updated <- obj.(*corev1.Pod)
+							updatedPods <- obj.(*corev1.Pod)
 							return false
 						},
 						OnDeleteFunc: func(obj runtime.Object) bool {
-							deleted <- obj.(*corev1.Pod)
+							deletedPods <- obj.(*corev1.Pod)
+							return false
+						},
+					},
+				},
+				{
+					Name:            "Node watcher",
+					SourceNamespace: test.LocalNamespace,
+					ResourceType:    &corev1.Service{},
+					Handler: watcher.EventHandlerFuncs{
+						OnCreateFunc: func(obj runtime.Object) bool {
+							createdServices <- obj.(*corev1.Service)
 							return false
 						},
 					},
@@ -64,10 +79,14 @@ var _ = Describe("Resource Watcher", func() {
 	JustBeforeEach(func() {
 		Expect(corev1.AddToScheme(config.Scheme)).To(Succeed())
 
-		restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(resource)
+		restMapper := test.GetRESTMapperFor(&corev1.Pod{}, &corev1.Service{})
 
 		localDynClient := fake.NewDynamicClient(config.Scheme)
-		client = localDynClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].SourceNamespace)
+
+		pods = localDynClient.Resource(*test.GetGroupVersionResourceFor(restMapper, &corev1.Pod{})).Namespace(
+			config.ResourceConfigs[0].SourceNamespace)
+		services = localDynClient.Resource(*test.GetGroupVersionResourceFor(restMapper, &corev1.Service{})).Namespace(
+			config.ResourceConfigs[0].SourceNamespace)
 
 		resourceWatcher, err := watcher.NewWithDetail(config, restMapper, localDynClient)
 		Expect(err).To(Succeed())
@@ -79,26 +98,43 @@ var _ = Describe("Resource Watcher", func() {
 		close(stopCh)
 	})
 
-	When("a resource is created, updated and deleted", func() {
-		It("should notify the handler of each event", func() {
-			obj := test.CreateResource(client, resource)
-			resource.Namespace = obj.GetNamespace()
-			resource.ResourceVersion = obj.GetResourceVersion()
-			resource.UID = obj.GetUID()
+	When("a Pod is created, updated and deleted", func() {
+		It("should notify the appropriate handler of each event", func() {
+			obj := test.CreateResource(pods, pod)
+			pod.Namespace = obj.GetNamespace()
+			pod.ResourceVersion = obj.GetResourceVersion()
+			pod.UID = obj.GetUID()
 
-			Eventually(created).Should(Receive(Equal(resource)))
-			Consistently(created).ShouldNot(Receive())
+			Eventually(createdPods).Should(Receive(Equal(pod)))
+			Consistently(createdPods).ShouldNot(Receive())
 
-			resource.Spec.Containers[0].Image = "apache"
-			test.UpdateResource(client, resource)
+			pod.Spec.Containers[0].Image = "apache"
+			test.UpdateResource(pods, pod)
 
-			Eventually(updated).Should(Receive(Equal(resource)))
-			Consistently(updated).ShouldNot(Receive())
+			Eventually(updatedPods).Should(Receive(Equal(pod)))
+			Consistently(updatedPods).ShouldNot(Receive())
 
-			Expect(client.Delete(resource.GetName(), nil)).To(Succeed())
+			Expect(pods.Delete(pod.GetName(), nil)).To(Succeed())
 
-			Eventually(deleted).Should(Receive(Equal(resource)))
-			Consistently(deleted).ShouldNot(Receive())
+			Eventually(deletedPods).Should(Receive(Equal(pod)))
+			Consistently(deletedPods).ShouldNot(Receive())
+		})
+	})
+
+	When("a Service is created", func() {
+		It("should notify the appropriate handler", func() {
+			service := &corev1.Service{
+				ObjectMeta: v1.ObjectMeta{
+					Name: "test-service",
+				},
+			}
+
+			obj := test.CreateResource(services, service)
+			service.Namespace = obj.GetNamespace()
+			service.ResourceVersion = obj.GetResourceVersion()
+			service.UID = obj.GetUID()
+
+			Eventually(createdServices).Should(Receive(Equal(service)))
 		})
 	})
 
@@ -110,15 +146,15 @@ var _ = Describe("Resource Watcher", func() {
 			}
 		})
 
-		When("the resource's Status is updated", func() {
+		When("the Pod's Status is updated", func() {
 			It("should not notify of the update", func() {
-				test.CreateResource(client, resource)
-				Eventually(created).Should(Receive())
+				test.CreateResource(pods, pod)
+				Eventually(createdPods).Should(Receive())
 
-				resource.Status.Phase = corev1.PodRunning
-				test.UpdateResource(client, resource)
+				pod.Status.Phase = corev1.PodRunning
+				test.UpdateResource(pods, pod)
 
-				Consistently(updated, 300*time.Millisecond).ShouldNot(Receive())
+				Consistently(updatedPods, 300*time.Millisecond).ShouldNot(Receive())
 			})
 		})
 	})
