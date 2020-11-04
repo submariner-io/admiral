@@ -35,6 +35,9 @@ type EventHandlerFuncs struct {
 }
 
 type ResourceConfig struct {
+	// Name of this watcher used for logging.
+	Name string
+
 	// ResourceType the types of the resources to watch.
 	ResourceType runtime.Object
 
@@ -57,9 +60,6 @@ type ResourceConfig struct {
 }
 
 type Config struct {
-	// Name of this watcher used for logging.
-	Name string
-
 	// RestConfig the REST config used to access the resources to watch.
 	RestConfig *rest.Config
 
@@ -103,8 +103,9 @@ func NewWithDetail(config *Config, restMapper meta.RESTMapper, client dynamic.In
 	watcher := &resourceWatcher{syncers: []Interface{}}
 
 	for _, rc := range config.ResourceConfigs {
+		handler := rc.Handler
 		s, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
-			Name:                config.Name,
+			Name:                rc.Name,
 			SourceClient:        client,
 			SourceNamespace:     rc.SourceNamespace,
 			SourceLabelSelector: rc.SourceLabelSelector,
@@ -116,11 +117,11 @@ func NewWithDetail(config *Config, restMapper meta.RESTMapper, client dynamic.In
 			Transform: func(obj runtime.Object, op syncer.Operation) (runtime.Object, bool) {
 				switch op {
 				case syncer.Create:
-					return nil, rc.Handler.OnCreate(obj)
+					return nil, handler.OnCreate(obj)
 				case syncer.Update:
-					return nil, rc.Handler.OnUpdate(obj)
+					return nil, handler.OnUpdate(obj)
 				case syncer.Delete:
-					return nil, rc.Handler.OnDelete(obj)
+					return nil, handler.OnDelete(obj)
 				}
 
 				return nil, false
