@@ -45,14 +45,6 @@ type ResourceConfig struct {
 	// to compare the old and new resources. If true is returned, the update is ignored, otherwise the update is processed.
 	// By default all updates are processed.
 	ResourcesEquivalent syncer.ResourceEquivalenceFunc
-}
-
-type Config struct {
-	// Name of this watcher used for logging.
-	Name string
-
-	// RestConfig the REST config used to access the resources to watch.
-	RestConfig *rest.Config
 
 	// SourceNamespace the namespace of the resources to watch.
 	SourceNamespace string
@@ -62,6 +54,14 @@ type Config struct {
 
 	// SourceFieldSelector optional selector to restrict the resources to watch by their fields.
 	SourceFieldSelector string
+}
+
+type Config struct {
+	// Name of this watcher used for logging.
+	Name string
+
+	// RestConfig the REST config used to access the resources to watch.
+	RestConfig *rest.Config
 
 	// WaitForCacheSync if true, waits for the informer cache to sync on Start. Default is true.
 	WaitForCacheSync *bool
@@ -106,9 +106,9 @@ func NewWithDetail(config *Config, restMapper meta.RESTMapper, client dynamic.In
 		s, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
 			Name:                config.Name,
 			SourceClient:        client,
-			SourceNamespace:     config.SourceNamespace,
-			SourceLabelSelector: config.SourceLabelSelector,
-			SourceFieldSelector: config.SourceFieldSelector,
+			SourceNamespace:     rc.SourceNamespace,
+			SourceLabelSelector: rc.SourceLabelSelector,
+			SourceFieldSelector: rc.SourceFieldSelector,
 			Direction:           syncer.RemoteToLocal,
 			RestMapper:          restMapper,
 			Federator:           federate.NewNoopFederator(),
