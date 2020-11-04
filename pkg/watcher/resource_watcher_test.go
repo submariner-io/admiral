@@ -36,12 +36,12 @@ var _ = Describe("Resource Watcher", func() {
 		resource = test.NewPod("")
 
 		config = &watcher.Config{
-			Name:            "Pod watcher",
-			SourceNamespace: test.LocalNamespace,
-			Scheme:          runtime.NewScheme(),
+			Name:   "Pod watcher",
+			Scheme: runtime.NewScheme(),
 			ResourceConfigs: []watcher.ResourceConfig{
 				{
-					ResourceType: &corev1.Pod{},
+					SourceNamespace: test.LocalNamespace,
+					ResourceType:    &corev1.Pod{},
 					Handler: watcher.EventHandlerFuncs{
 						OnCreateFunc: func(obj runtime.Object) bool {
 							created <- obj.(*corev1.Pod)
@@ -67,7 +67,7 @@ var _ = Describe("Resource Watcher", func() {
 		restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(resource)
 
 		localDynClient := fake.NewDynamicClient(config.Scheme)
-		client = localDynClient.Resource(*gvr).Namespace(config.SourceNamespace)
+		client = localDynClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].SourceNamespace)
 
 		resourceWatcher, err := watcher.NewWithDetail(config, restMapper, localDynClient)
 		Expect(err).To(Succeed())
