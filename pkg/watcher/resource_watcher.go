@@ -63,6 +63,14 @@ type Config struct {
 	// RestConfig the REST config used to access the resources to watch.
 	RestConfig *rest.Config
 
+	// RestMapper used to obtain GroupVersionResources. This is optional and is provided for unit testing in lieu of the
+	// RestConfig. If not specified, one is created from the RestConfig.
+	RestMapper meta.RESTMapper
+
+	// Client the client used to access the resources to watch. This is optional and is provided for unit testing in lieu
+	// of the RestConfig. If not specified, one is created from the RestConfig.
+	Client dynamic.Interface
+
 	// WaitForCacheSync if true, waits for the informer cache to sync on Start. Default is true.
 	WaitForCacheSync *bool
 
@@ -81,25 +89,26 @@ type resourceWatcher struct {
 }
 
 func New(config *Config) (Interface, error) {
+	var err error
+
 	if len(config.ResourceConfigs) == 0 {
 		return nil, fmt.Errorf("no resources to watch")
 	}
 
-	restMapper, err := util.BuildRestMapper(config.RestConfig)
-	if err != nil {
-		return nil, err
+	restMapper := config.RestMapper
+	if restMapper == nil {
+		if restMapper, err = util.BuildRestMapper(config.RestConfig); err != nil {
+			return nil, err
+		}
 	}
 
-	client, err := dynamic.NewForConfig(config.RestConfig)
-	if err != nil {
-		return nil, fmt.Errorf("error creating dynamic client: %v", err)
+	client := config.Client
+	if client == nil {
+		if client, err = dynamic.NewForConfig(config.RestConfig); err != nil {
+			return nil, fmt.Errorf("error creating dynamic client: %v", err)
+		}
 	}
 
-	return NewWithDetail(config, restMapper, client)
-}
-
-// NewWithDetail is intended for unit tests.
-func NewWithDetail(config *Config, restMapper meta.RESTMapper, client dynamic.Interface) (Interface, error) {
 	watcher := &resourceWatcher{syncers: []Interface{}}
 
 	for _, rc := range config.ResourceConfigs {
