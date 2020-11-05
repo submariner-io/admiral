@@ -79,16 +79,16 @@ var _ = Describe("Resource Watcher", func() {
 	JustBeforeEach(func() {
 		Expect(corev1.AddToScheme(config.Scheme)).To(Succeed())
 
-		restMapper := test.GetRESTMapperFor(&corev1.Pod{}, &corev1.Service{})
+		config.RestMapper = test.GetRESTMapperFor(&corev1.Pod{}, &corev1.Service{})
 
-		localDynClient := fake.NewDynamicClient(config.Scheme)
+		config.Client = fake.NewDynamicClient(config.Scheme)
 
-		pods = localDynClient.Resource(*test.GetGroupVersionResourceFor(restMapper, &corev1.Pod{})).Namespace(
+		pods = config.Client.Resource(*test.GetGroupVersionResourceFor(config.RestMapper, &corev1.Pod{})).Namespace(
 			config.ResourceConfigs[0].SourceNamespace)
-		services = localDynClient.Resource(*test.GetGroupVersionResourceFor(restMapper, &corev1.Service{})).Namespace(
+		services = config.Client.Resource(*test.GetGroupVersionResourceFor(config.RestMapper, &corev1.Service{})).Namespace(
 			config.ResourceConfigs[0].SourceNamespace)
 
-		resourceWatcher, err := watcher.NewWithDetail(config, restMapper, localDynClient)
+		resourceWatcher, err := watcher.New(config)
 		Expect(err).To(Succeed())
 
 		Expect(resourceWatcher.Start(stopCh)).To(Succeed())
