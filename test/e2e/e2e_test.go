@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	testV1 "github.com/submariner-io/admiral/test/apis/admiral.submariner.io/v1"
 	_ "github.com/submariner-io/admiral/test/e2e/syncer"
+	_ "github.com/submariner-io/admiral/test/e2e/watcher"
 	"github.com/submariner-io/shipyard/test/e2e"
 	"github.com/submariner-io/shipyard/test/e2e/framework"
 	"k8s.io/client-go/kubernetes/scheme"
