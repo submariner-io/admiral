@@ -10,8 +10,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/broker"
-	"github.com/submariner-io/admiral/pkg/syncer/test"
 	testV1 "github.com/submariner-io/admiral/test/apis/admiral.submariner.io/v1"
+	"github.com/submariner-io/admiral/test/e2e/util"
 	"github.com/submariner-io/shipyard/test/e2e/framework"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metaapi "k8s.io/apimachinery/pkg/api/meta"
@@ -90,7 +90,7 @@ func testWithLabelSelector() {
 		When("Toaster resources are created with and without the label selector criteria", func() {
 			It("should correctly sync or exclude the Toaster resource", func() {
 				By("Creating a Toaster with the label selector criteria")
-				toaster := t.createToasterResource(framework.ClusterA, addLabel(t.newToaster("sync"), "foo", "bar"))
+				toaster := t.createToasterResource(framework.ClusterA, util.AddLabel(t.newToaster("sync"), "foo", "bar"))
 				t.awaitToaster(framework.ClusterB, toaster)
 
 				By("Creating a Toaster without the label selector criteria")
@@ -228,27 +228,8 @@ func (t *testDriver) bidirectionalSyncTests() {
 	})
 }
 
-func addLabel(toaster *testV1.Toaster, key, value string) *testV1.Toaster {
-	if toaster.Labels == nil {
-		toaster.Labels = map[string]string{}
-	}
-
-	toaster.Labels[key] = value
-
-	return toaster
-}
-
 func (t *testDriver) newToaster(name string) *testV1.Toaster {
-	return &testV1.Toaster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: t.framework.Namespace,
-		},
-		Spec: testV1.ToasterSpec{
-			Manufacturer: "Cuisinart",
-			ModelNumber:  "1234T",
-		},
-	}
+	return util.NewToaster(name, t.framework.Namespace)
 }
 
 func (t *testDriver) createToaster(cluster framework.ClusterIndex) *testV1.Toaster {
@@ -256,43 +237,22 @@ func (t *testDriver) createToaster(cluster framework.ClusterIndex) *testV1.Toast
 }
 
 func (t *testDriver) createToasterResource(cluster framework.ClusterIndex, toaster *testV1.Toaster) *testV1.Toaster {
-	By(fmt.Sprintf("Creating Toaster %q in namespace %q in %q", toaster.Name, toaster.Namespace,
-		framework.TestContext.ClusterIDs[cluster]))
-
-	_, err := t.clusterClients[cluster].Resource(*toasterGVR()).Namespace(toaster.Namespace).Create(test.ToUnstructured(toaster),
-		metav1.CreateOptions{})
-	Expect(err).To(Succeed())
-
-	return toaster
+	return util.CreateToaster(t.clusterClients[cluster], toaster, framework.TestContext.ClusterIDs[cluster])
 }
 
 func (t *testDriver) deleteToaster(cluster framework.ClusterIndex, toDelete *testV1.Toaster) {
-	By(fmt.Sprintf("Deleting Toaster %q in namespace %q from %q", toDelete.Name, toDelete.Namespace,
-		framework.TestContext.ClusterIDs[cluster]))
-	t.deleteResource(cluster, toasterGVR(), toDelete)
-}
-
-func (t *testDriver) deleteResource(cluster framework.ClusterIndex, gvr *schema.GroupVersionResource, toDelete runtime.Object) {
-	clusterName := framework.TestContext.ClusterIDs[cluster]
-
-	meta, err := metaapi.Accessor(toDelete)
-	Expect(err).To(Succeed())
-
-	msg := fmt.Sprintf("delete %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
-	framework.AwaitUntil(msg, func() (i interface{}, e error) {
-		return nil, t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Delete(meta.GetName(), nil)
-	}, framework.NoopCheckResult)
+	util.DeleteToaster(t.clusterClients[cluster], toDelete, framework.TestContext.ClusterIDs[cluster])
 }
 
 func (t *testDriver) awaitToaster(cluster framework.ClusterIndex, expected *testV1.Toaster) {
 	By(fmt.Sprintf("Waiting for Toaster %q to be synced to %q", expected.Name, framework.TestContext.ClusterIDs[cluster]))
-	actual := t.awaitResource(cluster, toasterGVR(), expected).(*testV1.Toaster)
+	actual := t.awaitResource(cluster, util.ToasterGVR(), expected).(*testV1.Toaster)
 	Expect(actual.Spec).To(Equal(expected.Spec))
 }
 
 func (t *testDriver) awaitNoToaster(cluster framework.ClusterIndex, lookup *testV1.Toaster) {
 	By(fmt.Sprintf("Waiting for Toaster %q to be removed from %q", lookup.Name, framework.TestContext.ClusterIDs[cluster]))
-	t.awaitNoResource(cluster, toasterGVR(), lookup)
+	t.awaitNoResource(cluster, util.ToasterGVR(), lookup)
 }
 
 func (t *testDriver) awaitNoExportedToaster(cluster framework.ClusterIndex, lookup *testV1.Toaster) {
@@ -364,39 +324,11 @@ func (t *testDriver) awaitNoResource(cluster framework.ClusterIndex, gvr *schema
 }
 
 func (t *testDriver) deleteAllToasters(cluster framework.ClusterIndex, namespace string) {
-	t.deleteAllOf(cluster, toasterGVR(), namespace)
+	util.DeleteAllToasters(t.clusterClients[cluster], namespace, framework.TestContext.ClusterIDs[cluster])
 }
 
 func (t *testDriver) deleteAllExportedToasters(cluster framework.ClusterIndex, namespace string) {
-	t.deleteAllOf(cluster, exportedToasterGVR(), namespace)
-}
-
-func (t *testDriver) deleteAllOf(cluster framework.ClusterIndex, gvr *schema.GroupVersionResource, namespace string) {
-	clusterName := framework.TestContext.ClusterIDs[cluster]
-	By(fmt.Sprintf("Deleting all %s in namespace %q from %q", gvr.Resource, namespace, clusterName))
-
-	resource := t.clusterClients[cluster].Resource(*gvr).Namespace(namespace)
-	Expect(resource.DeleteCollection(nil, metav1.ListOptions{})).To(Succeed())
-
-	framework.AwaitUntil(fmt.Sprintf("list %s in namespace %q from %q", gvr.Resource, namespace, clusterName), func() (i interface{},
-		e error) {
-		return resource.List(metav1.ListOptions{})
-	}, func(result interface{}) (bool, string, error) {
-		list := result.(*unstructured.UnstructuredList)
-		if len(list.Items) != 0 {
-			return false, fmt.Sprintf("%d Toasters still remain", len(list.Items)), nil
-		}
-
-		return true, "", nil
-	})
-}
-
-func toasterGVR() *schema.GroupVersionResource {
-	return &schema.GroupVersionResource{
-		Group:    testV1.SchemeGroupVersion.Group,
-		Version:  testV1.SchemeGroupVersion.Version,
-		Resource: "toasters",
-	}
+	util.DeleteAllOf(t.clusterClients[cluster], exportedToasterGVR(), namespace, framework.TestContext.ClusterIDs[cluster])
 }
 
 func exportedToasterGVR() *schema.GroupVersionResource {
