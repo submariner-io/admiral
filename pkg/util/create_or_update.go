@@ -29,11 +29,11 @@ func CreateOrUpdate(client dynamic.ResourceInterface, obj *unstructured.Unstruct
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		existing, err := client.Get(obj.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
-			klog.V(log.DEBUG).Infof("Creating resource: %#v", obj)
+			klog.V(log.LIBTRACE).Infof("Creating resource: %#v", obj)
 
 			_, err := client.Create(obj, metav1.CreateOptions{})
 			if apierrors.IsAlreadyExists(err) {
-				klog.V(log.DEBUG).Infof("Resource %q already exists - retrying", obj.GetName())
+				klog.V(log.LIBDEBUG).Infof("Resource %q already exists - retrying", obj.GetName())
 				return apierrors.NewConflict(schema.GroupResource{Resource: obj.GetKind()}, obj.GetName(), err)
 			}
 
@@ -60,7 +60,7 @@ func CreateOrUpdate(client dynamic.ResourceInterface, obj *unstructured.Unstruct
 			return nil
 		}
 
-		klog.V(log.DEBUG).Infof("Updating resource: %#v", obj)
+		klog.V(log.LIBTRACE).Infof("Updating resource: %#v", obj)
 
 		result = OperationResultUpdated
 		_, err = client.Update(toUpdate, metav1.UpdateOptions{})
