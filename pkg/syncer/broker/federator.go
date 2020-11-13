@@ -39,7 +39,7 @@ func NewFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targe
 }
 
 func (f *federator) Distribute(resource runtime.Object) error {
-	klog.V(log.DEBUG).Infof("In Distribute for %#v", resource)
+	klog.V(log.LIBTRACE).Infof("In Distribute for %#v", resource)
 
 	toDistribute, resourceClient, err := f.toUnstructured(resource)
 	if err != nil {
@@ -70,7 +70,7 @@ func (f *federator) Delete(resource runtime.Object) error {
 		return err
 	}
 
-	klog.V(log.DEBUG).Infof("Deleting resource: %#v", toDelete)
+	klog.V(log.LIBTRACE).Infof("Deleting resource: %#v", toDelete)
 
 	return resourceClient.Delete(toDelete.GetName(), &metav1.DeleteOptions{})
 }

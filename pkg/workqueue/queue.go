@@ -49,7 +49,7 @@ func (q *queueType) Enqueue(obj interface{}) {
 		return
 	}
 
-	klog.V(log.TRACE).Infof("%s: enqueueing key %q for %T object", q.name, key, obj)
+	klog.V(log.LIBTRACE).Infof("%s: enqueueing key %q for %T object", q.name, key, obj)
 	q.AddRateLimited(key)
 }
 
@@ -85,7 +85,7 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 
 	if requeue {
 		q.AddRateLimited(key)
-		klog.V(log.DEBUG).Infof("%s: enqueued %q for retry - # of times re-queued: %d", q.name, key, q.NumRequeues(key))
+		klog.V(log.LIBDEBUG).Infof("%s: enqueued %q for retry - # of times re-queued: %d", q.name, key, q.NumRequeues(key))
 	} else {
 		q.Forget(key)
 	}

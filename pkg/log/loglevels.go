@@ -17,9 +17,13 @@ const (
 	// DEBUG : used to provide logs for often occurring events that could be helpful
 	//        for debugging errors.
 	DEBUG = 2
+	// LIBDEBUG:  like DEBUG but for submariner internal libraries like admiral.
+	LIBDEBUG = 3
 	// TRACE : used for logging that occurs often or may dump a lot of information
 	//         which generally would be less useful for debugging but can be useful
 	//         in some cases, for example tracing function entry/exit, parameters,
 	//         structures, etc..
-	TRACE = 3
+	TRACE = 4
+	// LIBTRACE:  like TRACE but for submariner internal libraries like admiral.
+	LIBTRACE = 5
 )
