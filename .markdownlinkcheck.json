@@ -4,6 +4,9 @@
       "pattern": "^https://github.com/\\S+/\\S+/(issues|pull)/[0-9]+"
     },
     {
+      "pattern": "^https://github.com/submariner-io/admiral/workflows/(.*)/badge.svg"
+    },
+    {
       "pattern": "^http://localhost:"
     }
   ]
