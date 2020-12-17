@@ -6,6 +6,7 @@ import (
 
 type Interface interface {
 	Add(s string) bool
+	AddAll(s ...string)
 	Remove(s string) bool
 	RemoveAll()
 	Contains(s string) bool
@@ -23,16 +24,19 @@ type synchronized struct {
 	syncMutex sync.Mutex
 }
 
-func New() Interface {
-	return newSetType()
+func New(s ...string) Interface {
+	return newSetType(s...)
 }
 
-func NewSynchronized() Interface {
-	return &synchronized{setType: newSetType()}
+func NewSynchronized(s ...string) Interface {
+	return &synchronized{setType: newSetType(s...)}
 }
 
-func newSetType() *setType {
-	return &setType{set: make(map[string]bool)}
+func newSetType(s ...string) *setType {
+	set := &setType{set: make(map[string]bool, len(s))}
+	set.AddAll(s...)
+
+	return set
 }
 
 func (set *setType) Add(s string) bool {
@@ -40,6 +44,12 @@ func (set *setType) Add(s string) bool {
 	set.set[s] = true
 
 	return !found
+}
+
+func (set *setType) AddAll(str ...string) {
+	for _, s := range str {
+		set.Add(s)
+	}
 }
 
 func (set *setType) Contains(s string) bool {

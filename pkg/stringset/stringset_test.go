@@ -21,11 +21,11 @@ var _ = Describe("Synchronized set", func() {
 	test(stringset.NewSynchronized, stringset.New)
 })
 
-func test(creator, creator2 func() stringset.Interface) {
+func test(creator, creator2 func(s ...string) stringset.Interface) {
 	var set stringset.Interface
 
 	BeforeEach(func() {
-		set = newSet(creator, "one", "two")
+		set = creator("one", "two")
 	})
 
 	It("should return the correct size", func() {
@@ -45,12 +45,28 @@ func test(creator, creator2 func() stringset.Interface) {
 		})
 	})
 
+	When("adding a string that does not exist", func() {
+		It("should add it and return true", func() {
+			Expect(set.Add("three")).To(BeTrue())
+			Expect(set.Size()).To(Equal(3))
+			Expect(set.Contains("three")).To(BeTrue())
+		})
+	})
+
 	When("adding a string that already exists", func() {
 		It("should not add it again", func() {
 			Expect(set.Add("one")).To(BeFalse())
 			Expect(set.Size()).To(Equal(2))
 			Expect(set.Contains("one")).To(BeTrue())
 		})
+	})
+
+	It("should add multiple strings", func() {
+		set.AddAll("three", "four", "five")
+		Expect(set.Size()).To(Equal(5))
+		Expect(set.Contains("three")).To(BeTrue())
+		Expect(set.Contains("four")).To(BeTrue())
+		Expect(set.Contains("five")).To(BeTrue())
 	})
 
 	When("an existing string is removed", func() {
@@ -99,8 +115,8 @@ func test(creator, creator2 func() stringset.Interface) {
 	})
 
 	It("should calculate the difference correctly", func() {
-		set2 := newSet(creator, "one", "three")
-		set3 := newSet(creator2, "one", "three")
+		set2 := creator("one", "three")
+		set3 := creator2("one", "three")
 
 		containsElements(set.Difference(set2), "three")
 		containsElements(set.Difference(set3), "three")
@@ -116,14 +132,4 @@ func containsElements(actual []string, exp ...string) {
 	}
 
 	Expect(actual).To(HaveLen(len(exp)))
-}
-
-func newSet(creator func() stringset.Interface, add ...string) stringset.Interface {
-	set := creator()
-
-	for _, s := range add {
-		Expect(set.Add(s)).To(BeTrue())
-	}
-
-	return set
 }
