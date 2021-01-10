@@ -33,6 +33,8 @@ type ProcessFunc func(key, name, namespace string) (bool, error)
 type Interface interface {
 	Enqueue(obj interface{})
 
+	NumRequeues(key string) int
+
 	Run(stopCh <-chan struct{}, process ProcessFunc)
 
 	ShutDown()
@@ -106,4 +108,8 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 	}
 
 	return true
+}
+
+func (q *queueType) NumRequeues(key string) int {
+	return q.RateLimitingInterface.NumRequeues(key)
 }

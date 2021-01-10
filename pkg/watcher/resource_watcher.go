@@ -36,17 +36,17 @@ type Interface interface {
 // notification method indicates whether or not the resource should be re-queued to be retried later, typically in case
 // of an error.
 type EventHandler interface {
-	OnCreate(obj runtime.Object) bool
-	OnUpdate(obj runtime.Object) bool
-	OnDelete(obj runtime.Object) bool
+	OnCreate(obj runtime.Object, numRequeues int) bool
+	OnUpdate(obj runtime.Object, numRequeues int) bool
+	OnDelete(obj runtime.Object, numRequeues int) bool
 }
 
 // EventHandlerFuncs is an adaptor to let you easily specify as many or as few of the notification functions as you want
 // while still implementing EventHandler.
 type EventHandlerFuncs struct {
-	OnCreateFunc func(obj runtime.Object) bool
-	OnUpdateFunc func(obj runtime.Object) bool
-	OnDeleteFunc func(obj runtime.Object) bool
+	OnCreateFunc func(obj runtime.Object, numRequeues int) bool
+	OnUpdateFunc func(obj runtime.Object, numRequeues int) bool
+	OnDeleteFunc func(obj runtime.Object, numRequeues int) bool
 }
 
 type ResourceConfig struct {
@@ -138,14 +138,14 @@ func New(config *Config) (Interface, error) {
 			RestMapper:          restMapper,
 			Federator:           federate.NewNoopFederator(),
 			ResourceType:        rc.ResourceType,
-			Transform: func(obj runtime.Object, op syncer.Operation) (runtime.Object, bool) {
+			Transform: func(obj runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 				switch op {
 				case syncer.Create:
-					return nil, handler.OnCreate(obj)
+					return nil, handler.OnCreate(obj, numRequeues)
 				case syncer.Update:
-					return nil, handler.OnUpdate(obj)
+					return nil, handler.OnUpdate(obj, numRequeues)
 				case syncer.Delete:
-					return nil, handler.OnDelete(obj)
+					return nil, handler.OnDelete(obj, numRequeues)
 				}
 
 				return nil, false
@@ -177,25 +177,25 @@ func (r *resourceWatcher) Start(stopCh <-chan struct{}) error {
 	return nil
 }
 
-func (r EventHandlerFuncs) OnCreate(obj runtime.Object) bool {
+func (r EventHandlerFuncs) OnCreate(obj runtime.Object, numRequeues int) bool {
 	if r.OnCreateFunc != nil {
-		return r.OnCreateFunc(obj)
+		return r.OnCreateFunc(obj, numRequeues)
 	}
 
 	return false
 }
 
-func (r EventHandlerFuncs) OnUpdate(obj runtime.Object) bool {
+func (r EventHandlerFuncs) OnUpdate(obj runtime.Object, numRequeues int) bool {
 	if r.OnUpdateFunc != nil {
-		return r.OnUpdateFunc(obj)
+		return r.OnUpdateFunc(obj, numRequeues)
 	}
 
 	return false
 }
 
-func (r EventHandlerFuncs) OnDelete(obj runtime.Object) bool {
+func (r EventHandlerFuncs) OnDelete(obj runtime.Object, numRequeues int) bool {
 	if r.OnDeleteFunc != nil {
-		return r.OnDeleteFunc(obj)
+		return r.OnDeleteFunc(obj, numRequeues)
 	}
 
 	return false
