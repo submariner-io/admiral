@@ -62,15 +62,15 @@ var _ = Describe("Resource Watcher", func() {
 					SourceNamespace: test.LocalNamespace,
 					ResourceType:    &corev1.Pod{},
 					Handler: watcher.EventHandlerFuncs{
-						OnCreateFunc: func(obj runtime.Object) bool {
+						OnCreateFunc: func(obj runtime.Object, numRequeues int) bool {
 							createdPods <- obj.(*corev1.Pod)
 							return false
 						},
-						OnUpdateFunc: func(obj runtime.Object) bool {
+						OnUpdateFunc: func(obj runtime.Object, numRequeues int) bool {
 							updatedPods <- obj.(*corev1.Pod)
 							return false
 						},
-						OnDeleteFunc: func(obj runtime.Object) bool {
+						OnDeleteFunc: func(obj runtime.Object, numRequeues int) bool {
 							deletedPods <- obj.(*corev1.Pod)
 							return false
 						},
@@ -81,7 +81,7 @@ var _ = Describe("Resource Watcher", func() {
 					SourceNamespace: test.LocalNamespace,
 					ResourceType:    &corev1.Service{},
 					Handler: watcher.EventHandlerFuncs{
-						OnCreateFunc: func(obj runtime.Object) bool {
+						OnCreateFunc: func(obj runtime.Object, numRequeues int) bool {
 							createdServices <- obj.(*corev1.Service)
 							return false
 						},

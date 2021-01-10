@@ -161,7 +161,7 @@ func testTransformFunction() {
 	BeforeEach(func() {
 		expOperation = make(chan syncer.Operation, 20)
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
-		d.config.Transform = func(from runtime.Object, op syncer.Operation) (runtime.Object, bool) {
+		d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 			defer GinkgoRecover()
 			pod, ok := from.(*corev1.Pod)
 			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", from)
@@ -246,7 +246,7 @@ func testTransformFunction() {
 
 		BeforeEach(func() {
 			atomic.StoreInt32(&count, 0)
-			d.config.Transform = func(from runtime.Object, op syncer.Operation) (runtime.Object, bool) {
+			d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 				atomic.AddInt32(&count, 1)
 				expOperation <- op
 				return nil, false
@@ -287,7 +287,7 @@ func testTransformFunction() {
 		BeforeEach(func() {
 			transformFuncRet = &atomic.Value{}
 			transformFuncRet.Store(nilResource)
-			d.config.Transform = func(from runtime.Object, op syncer.Operation) (runtime.Object, bool) {
+			d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 				var ret runtime.Object
 				v := transformFuncRet.Load()
 				if v != nilResource {
@@ -387,7 +387,7 @@ func testOnSuccessfulSyncFunction() {
 		When("a resource is successfully created in the datastore", func() {
 			BeforeEach(func() {
 				expResource = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
-				d.config.Transform = func(from runtime.Object, op syncer.Operation) (runtime.Object, bool) {
+				d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 					return expResource, false
 				}
 			})

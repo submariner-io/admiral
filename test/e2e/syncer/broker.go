@@ -68,7 +68,7 @@ func testWithLocalTransform() {
 
 	BeforeEach(func() {
 		t.brokerResourceType = &testV1.ExportedToaster{}
-		t.localTransform = func(from runtime.Object, op syncer.Operation) (runtime.Object, bool) {
+		t.localTransform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 			toaster := from.(*testV1.Toaster)
 			return &testV1.ExportedToaster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -143,7 +143,7 @@ func testWithFieldSelector() {
 type testDriver struct {
 	framework            *framework.Framework
 	localSourceNamespace string
-	localTransform       func(from runtime.Object, op syncer.Operation) (runtime.Object, bool)
+	localTransform       func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool)
 	brokerResourceType   runtime.Object
 	labelSelector        string
 	fieldSelector        string

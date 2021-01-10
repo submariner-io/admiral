@@ -70,7 +70,7 @@ func (o Operation) String() string {
 // TransformFunc is invoked prior to syncing to transform the resource or evaluate if it should be synced.
 // If nil is returned, the resource is not synced and, if the second return value is true, the resource is re-queued
 // to be retried later.
-type TransformFunc func(from runtime.Object, op Operation) (runtime.Object, bool)
+type TransformFunc func(from runtime.Object, numRequeues int, op Operation) (runtime.Object, bool)
 
 // OnSuccessfulSyncFunc is invoked after a successful sync operation.
 type OnSuccessfulSyncFunc func(synced runtime.Object, op Operation)
@@ -279,7 +279,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 	klog.V(log.LIBTRACE).Infof("Syncer %q retrieved %sd resource %q: %#v", r.config.Name, op, resource.GetName(), resource)
 
 	if r.shouldSync(resource) {
-		resource, transformed, requeue := r.transform(resource, op)
+		resource, transformed, requeue := r.transform(resource, key, op)
 		if resource == nil {
 			if !requeue {
 				r.created.Delete(key)
@@ -318,7 +318,7 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 
 	deletedResource := obj.(*unstructured.Unstructured)
 	if r.shouldSync(deletedResource) {
-		resource, transformed, requeue := r.transform(deletedResource, Delete)
+		resource, transformed, requeue := r.transform(deletedResource, key, Delete)
 		if resource == nil {
 			if requeue {
 				r.deleted.Store(key, deletedResource)
@@ -348,7 +348,8 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 	return false, nil
 }
 
-func (r *resourceSyncer) transform(from *unstructured.Unstructured, op Operation) (*unstructured.Unstructured, runtime.Object, bool) {
+func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
+	op Operation) (*unstructured.Unstructured, runtime.Object, bool) {
 	if r.config.Transform == nil {
 		return from, nil, false
 	}
@@ -362,7 +363,7 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, op Operation
 		return nil, nil, false
 	}
 
-	transformed, requeue := r.config.Transform(converted, op)
+	transformed, requeue := r.config.Transform(converted, r.workQueue.NumRequeues(key), op)
 	if transformed == nil {
 		klog.V(log.LIBDEBUG).Infof("Syncer %q: transform function returned nil - not syncing - requeue: %v", r.config.Name, requeue)
 		return nil, nil, requeue
