@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 var _ = Describe("Broker Syncer", func() {
@@ -67,16 +68,18 @@ var _ = Describe("Broker Syncer", func() {
 	JustBeforeEach(func() {
 		Expect(corev1.AddToScheme(config.Scheme)).To(Succeed())
 
-		restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(resource)
+		var gvr *schema.GroupVersionResource
 
-		localDynClient := fake.NewDynamicClient(config.Scheme, test.PrepInitialClientObjs("", "", initialResources...)...)
-		brokerDynClient := fake.NewDynamicClient(config.Scheme)
+		config.RestMapper, gvr = test.GetRESTMapperAndGroupVersionResourceFor(resource)
 
-		localClient = localDynClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace).(*fake.DynamicResourceClient)
-		brokerClient = brokerDynClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)
+		config.LocalClient = fake.NewDynamicClient(config.Scheme, test.PrepInitialClientObjs("", "", initialResources...)...)
+		config.BrokerClient = fake.NewDynamicClient(config.Scheme)
+
+		localClient = config.LocalClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace).(*fake.DynamicResourceClient)
+		brokerClient = config.BrokerClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)
 
 		var err error
-		syncer, err = broker.NewSyncerWithDetail(config, localDynClient, brokerDynClient, restMapper)
+		syncer, err = broker.NewSyncer(*config)
 		Expect(err).To(Succeed())
 
 		Expect(syncer.Start(stopCh)).To(Succeed())
