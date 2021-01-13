@@ -87,6 +87,10 @@ type SyncerConfig struct {
 	// LocalRestConfig the REST config used to access the local resources to sync.
 	LocalRestConfig *rest.Config
 
+	// LocalClient the client used to access local resources to sync. This is optional and is provided for unit testing
+	// in lieu of the LocalRestConfig. If not specified, one is created from the LocalRestConfig.
+	LocalClient dynamic.Interface
+
 	// LocalNamespace the namespace in the local source to which resources from the broker will be synced.
 	LocalNamespace string
 
@@ -95,9 +99,17 @@ type SyncerConfig struct {
 	// specify an empty LocalClusterID to disable this loop protection.
 	LocalClusterID string
 
-	// BrokerRestConfig the REST config used to access the broker resources to sync. If not specified, the config is
-	// built from environment variables via BuildBrokerConfigFromEnv.
+	// RestMapper used to obtain GroupVersionResources. This is optional and is provided for unit testing. If not specified,
+	// one is created from the LocalRestConfig.
+	RestMapper meta.RESTMapper
+
+	// BrokerRestConfig the REST config used to access the broker resources to sync. If not specified and the BrokerClient
+	// is not specified, the config is built from environment variables via BuildBrokerConfigFromEnv.
 	BrokerRestConfig *rest.Config
+
+	// BrokerClient the client used to access local resources to sync. This is optional and is provided for unit testing
+	// in lieu of the BrokerRestConfig. If not specified, one is created from the BrokerRestConfig.
+	BrokerClient dynamic.Interface
 
 	// BrokerNamespace the namespace in the broker to which resources from the local source will be synced. If not
 	// specified, the namespace is obtained from an environment variable via BuildBrokerConfigFromEnv.
@@ -123,47 +135,133 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 		return nil, fmt.Errorf("no resources to sync")
 	}
 
-	restMapper, err := util.BuildRestMapper(config.LocalRestConfig)
-	if err != nil {
-		return nil, err
-	}
+	var err error
 
-	localClient, err := dynamic.NewForConfig(config.LocalRestConfig)
-	if err != nil {
-		return nil, fmt.Errorf("error creating dynamic client: %v", err)
-	}
-
-	var brokerClient dynamic.Interface
-	if config.BrokerRestConfig != nil {
-		// We have an existing REST configuration, assume it’s correct (but check it anyway)
-		brokerClient, err = getCheckedBrokerClientset(config.BrokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace, restMapper)
+	if config.RestMapper == nil {
+		config.RestMapper, err = util.BuildRestMapper(config.LocalRestConfig)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	if config.LocalClient == nil {
+		config.LocalClient, err = dynamic.NewForConfig(config.LocalRestConfig)
+		if err != nil {
+			return nil, fmt.Errorf("error creating dynamic client: %v", err)
+		}
+	}
+
+	if config.BrokerClient == nil {
+		if err := createBrokerClient(&config); err != nil {
+			return nil, err
+		}
+	}
+
+	brokerSyncer := &Syncer{
+		syncers:      []syncer.Interface{},
+		localSyncers: make(map[reflect.Type]syncer.Interface),
+	}
+
+	brokerSyncer.remoteFederator = NewFederator(config.BrokerClient, config.RestMapper, config.BrokerNamespace, config.LocalClusterID)
+	brokerSyncer.localFederator = NewFederator(config.LocalClient, config.RestMapper, config.LocalNamespace, "")
+
+	for _, rc := range config.ResourceConfigs {
+		localSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
+			Name:                fmt.Sprintf("local -> broker for %T", rc.LocalResourceType),
+			SourceClient:        config.LocalClient,
+			SourceNamespace:     rc.LocalSourceNamespace,
+			SourceLabelSelector: rc.LocalSourceLabelSelector,
+			SourceFieldSelector: rc.LocalSourceFieldSelector,
+			LocalClusterID:      config.LocalClusterID,
+			Direction:           syncer.LocalToRemote,
+			RestMapper:          config.RestMapper,
+			Federator:           brokerSyncer.remoteFederator,
+			ResourceType:        rc.LocalResourceType,
+			Transform:           rc.LocalTransform,
+			OnSuccessfulSync:    rc.LocalOnSuccessfulSync,
+			ResourcesEquivalent: rc.LocalResourcesEquivalent,
+			WaitForCacheSync:    rc.LocalWaitForCacheSync,
+			Scheme:              config.Scheme,
+			ResyncPeriod:        rc.LocalResyncPeriod,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		brokerSyncer.syncers = append(brokerSyncer.syncers, localSyncer)
+		brokerSyncer.localSyncers[reflect.TypeOf(rc.LocalResourceType)] = localSyncer
+
+		waitForCacheSync := rc.BrokerWaitForCacheSync
+		if waitForCacheSync == nil {
+			f := false
+			waitForCacheSync = &f
+		}
+
+		remoteSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
+			Name:                fmt.Sprintf("broker -> local for %T", rc.BrokerResourceType),
+			SourceClient:        config.BrokerClient,
+			SourceNamespace:     config.BrokerNamespace,
+			SourceLabelSelector: rc.LocalSourceLabelSelector,
+			SourceFieldSelector: rc.LocalSourceFieldSelector,
+			LocalClusterID:      config.LocalClusterID,
+			Direction:           syncer.RemoteToLocal,
+			RestMapper:          config.RestMapper,
+			Federator:           brokerSyncer.localFederator,
+			ResourceType:        rc.BrokerResourceType,
+			Transform:           rc.BrokerTransform,
+			ResourcesEquivalent: rc.BrokerResourcesEquivalent,
+			WaitForCacheSync:    waitForCacheSync,
+			Scheme:              config.Scheme,
+			ResyncPeriod:        rc.BrokerResyncPeriod,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		brokerSyncer.syncers = append(brokerSyncer.syncers, remoteSyncer)
+	}
+
+	return brokerSyncer, nil
+}
+
+func createBrokerClient(config *SyncerConfig) error {
+	var err error
+
+	if config.BrokerRestConfig != nil {
+		// We have an existing REST configuration, assume it’s correct (but check it anyway)
+		config.BrokerClient, err = getCheckedBrokerClientset(config.BrokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace,
+			config.RestMapper)
+		if err != nil {
+			return err
 		}
 	} else {
 		var brokerRestConfig *rest.Config
 		// We’ll build a REST configuration from the environment, checking whether we need to provide an explicit trust anchor
 		brokerRestConfig, config.BrokerNamespace, err = BuildBrokerConfigFromEnv(false)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		brokerClient, err = getCheckedBrokerClientset(brokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace, restMapper)
+		config.BrokerClient, err = getCheckedBrokerClientset(brokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace,
+			config.RestMapper)
 		if err != nil {
 			// Certificate error, try with the trust chain
 			brokerRestConfig, config.BrokerNamespace, err = BuildBrokerConfigFromEnv(true)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			brokerClient, err = getCheckedBrokerClientset(brokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace, restMapper)
+			config.BrokerClient, err = getCheckedBrokerClientset(brokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace,
+				config.RestMapper)
 		}
 
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return NewSyncerWithDetail(&config, localClient, brokerClient, restMapper)
+	return nil
 }
 
 func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, brokerNamespace string,
@@ -194,77 +292,6 @@ func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, broke
 	}
 
 	return client, nil
-}
-
-// NewSyncerWithDetail creates a Syncer with given additional detail. This function is intended for unit tests.
-func NewSyncerWithDetail(config *SyncerConfig, localClient, brokerClient dynamic.Interface, restMapper meta.RESTMapper) (*Syncer, error) {
-	brokerSyncer := &Syncer{
-		syncers:      []syncer.Interface{},
-		localSyncers: make(map[reflect.Type]syncer.Interface),
-	}
-
-	brokerSyncer.remoteFederator = NewFederator(brokerClient, restMapper, config.BrokerNamespace, config.LocalClusterID)
-	brokerSyncer.localFederator = NewFederator(localClient, restMapper, config.LocalNamespace, "")
-
-	for _, rc := range config.ResourceConfigs {
-		localSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
-			Name:                fmt.Sprintf("local -> broker for %T", rc.LocalResourceType),
-			SourceClient:        localClient,
-			SourceNamespace:     rc.LocalSourceNamespace,
-			SourceLabelSelector: rc.LocalSourceLabelSelector,
-			SourceFieldSelector: rc.LocalSourceFieldSelector,
-			LocalClusterID:      config.LocalClusterID,
-			Direction:           syncer.LocalToRemote,
-			RestMapper:          restMapper,
-			Federator:           brokerSyncer.remoteFederator,
-			ResourceType:        rc.LocalResourceType,
-			Transform:           rc.LocalTransform,
-			OnSuccessfulSync:    rc.LocalOnSuccessfulSync,
-			ResourcesEquivalent: rc.LocalResourcesEquivalent,
-			WaitForCacheSync:    rc.LocalWaitForCacheSync,
-			Scheme:              config.Scheme,
-			ResyncPeriod:        rc.LocalResyncPeriod,
-		})
-
-		if err != nil {
-			return nil, err
-		}
-
-		brokerSyncer.syncers = append(brokerSyncer.syncers, localSyncer)
-		brokerSyncer.localSyncers[reflect.TypeOf(rc.LocalResourceType)] = localSyncer
-
-		waitForCacheSync := rc.BrokerWaitForCacheSync
-		if waitForCacheSync == nil {
-			f := false
-			waitForCacheSync = &f
-		}
-
-		remoteSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
-			Name:                fmt.Sprintf("broker -> local for %T", rc.BrokerResourceType),
-			SourceClient:        brokerClient,
-			SourceNamespace:     config.BrokerNamespace,
-			SourceLabelSelector: rc.LocalSourceLabelSelector,
-			SourceFieldSelector: rc.LocalSourceFieldSelector,
-			LocalClusterID:      config.LocalClusterID,
-			Direction:           syncer.RemoteToLocal,
-			RestMapper:          restMapper,
-			Federator:           brokerSyncer.localFederator,
-			ResourceType:        rc.BrokerResourceType,
-			Transform:           rc.BrokerTransform,
-			ResourcesEquivalent: rc.BrokerResourcesEquivalent,
-			WaitForCacheSync:    waitForCacheSync,
-			Scheme:              config.Scheme,
-			ResyncPeriod:        rc.BrokerResyncPeriod,
-		})
-
-		if err != nil {
-			return nil, err
-		}
-
-		brokerSyncer.syncers = append(brokerSyncer.syncers, remoteSyncer)
-	}
-
-	return brokerSyncer, nil
 }
 
 func (s *Syncer) Start(stopCh <-chan struct{}) error {
