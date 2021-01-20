@@ -50,6 +50,7 @@ var _ = Describe("Resource Syncer", func() {
 
 	Describe("With Transform Function", testTransformFunction)
 	Describe("With OnSuccessfulSync Function", testOnSuccessfulSyncFunction)
+	Describe("With ShouldProcess Function", testShouldProcessFunction)
 	Describe("Sync Errors", testSyncErrors)
 	Describe("Update Suppression", testUpdateSuppression)
 	Describe("GetResource", testGetResource)
@@ -424,6 +425,118 @@ func testOnSuccessfulSyncFunction() {
 
 			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
 			Consistently(expOperation, 300*time.Millisecond).ShouldNot(Receive())
+		})
+	})
+}
+
+func testShouldProcessFunction() {
+	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	var (
+		expResource   *corev1.Pod
+		expOperation  chan syncer.Operation
+		shouldProcess bool
+	)
+
+	BeforeEach(func() {
+		expOperation = make(chan syncer.Operation, 20)
+		expResource = d.resource
+		shouldProcess = true
+		d.config.ShouldProcess = func(obj *unstructured.Unstructured, op syncer.Operation) bool {
+			defer GinkgoRecover()
+			pod := &corev1.Pod{}
+			Expect(d.config.Scheme.Convert(obj, pod, nil)).To(Succeed())
+			Expect(equality.Semantic.DeepDerivative(expResource.Spec, pod.Spec)).To(BeTrue(),
+				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, expResource.Spec)
+			expOperation <- op
+			return shouldProcess
+		}
+	})
+
+	When("a resource is created in the datastore", func() {
+		When("the ShouldProcess function returns true", func() {
+			It("should distribute it", func() {
+				d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, d.resource))
+				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+			})
+		})
+
+		When("the ShouldProcess function returns false", func() {
+			BeforeEach(func() {
+				shouldProcess = false
+			})
+
+			It("should not distribute it", func() {
+				test.CreateResource(d.sourceClient, d.resource)
+				d.federator.VerifyNoDistribute()
+				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+			})
+		})
+	})
+
+	When("a resource is updated in the datastore", func() {
+		BeforeEach(func() {
+			d.addInitialResource(d.resource)
+		})
+
+		When("the ShouldProcess function returns true", func() {
+			It("should distribute it", func() {
+				d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
+				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+
+				expResource = test.NewPodWithImage(d.config.SourceNamespace, "apache")
+				d.federator.VerifyDistribute(test.UpdateResource(d.sourceClient, expResource))
+				Eventually(expOperation).Should(Receive(Equal(syncer.Update)))
+			})
+		})
+
+		When("the ShouldProcess function returns false", func() {
+			BeforeEach(func() {
+				shouldProcess = false
+			})
+
+			It("should not distribute it", func() {
+				d.federator.VerifyNoDistribute()
+				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+
+				expResource = test.NewPodWithImage(d.config.SourceNamespace, "apache")
+				test.UpdateResource(d.sourceClient, expResource)
+				d.federator.VerifyNoDistribute()
+				Eventually(expOperation).Should(Receive(Equal(syncer.Update)))
+			})
+		})
+	})
+
+	When("a resource is deleted from the datastore", func() {
+		BeforeEach(func() {
+			d.addInitialResource(d.resource)
+		})
+
+		When("the ShouldProcess function returns true", func() {
+			It("should delete it", func() {
+				expected := test.GetResource(d.sourceClient, d.resource)
+				d.federator.VerifyDistribute(expected)
+				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+
+				Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+				d.federator.VerifyDelete(expected)
+				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
+			})
+		})
+
+		When("the ShouldProcess function returns false", func() {
+			BeforeEach(func() {
+				shouldProcess = false
+			})
+
+			It("should not delete it", func() {
+				d.federator.VerifyNoDistribute()
+				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+
+				Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+				d.federator.VerifyNoDelete()
+				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
+			})
 		})
 	})
 }
