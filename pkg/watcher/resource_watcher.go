@@ -64,6 +64,9 @@ type ResourceConfig struct {
 	// By default all updates are processed.
 	ResourcesEquivalent syncer.ResourceEquivalenceFunc
 
+	// ShouldProcess function invoked to determine if a resource should be processed.
+	ShouldProcess syncer.ShouldProcessFunc
+
 	// SourceNamespace the namespace of the resources to watch.
 	SourceNamespace string
 
@@ -151,6 +154,7 @@ func New(config *Config) (Interface, error) {
 				return nil, false
 			},
 			ResourcesEquivalent: rc.ResourcesEquivalent,
+			ShouldProcess:       rc.ShouldProcess,
 			WaitForCacheSync:    config.WaitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        config.ResyncPeriod,

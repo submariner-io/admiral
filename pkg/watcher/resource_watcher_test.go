@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/fake"
+	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	"github.com/submariner-io/admiral/pkg/util"
 	"github.com/submariner-io/admiral/pkg/watcher"
@@ -170,6 +171,21 @@ var _ = Describe("Resource Watcher", func() {
 				test.UpdateResource(pods, pod)
 
 				Consistently(updatedPods, 300*time.Millisecond).ShouldNot(Receive())
+			})
+		})
+	})
+
+	When("a ShouldProcess function is specified that returns false", func() {
+		BeforeEach(func() {
+			config.ResourceConfigs[0].ShouldProcess = func(obj *unstructured.Unstructured, op syncer.Operation) bool {
+				return false
+			}
+		})
+
+		When("a Pod is created", func() {
+			It("should not notify of the event", func() {
+				test.CreateResource(pods, pod)
+				Consistently(createdPods, 300*time.Millisecond).ShouldNot(Receive())
 			})
 		})
 	})

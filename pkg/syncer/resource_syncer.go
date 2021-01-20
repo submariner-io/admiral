@@ -77,6 +77,8 @@ type OnSuccessfulSyncFunc func(synced runtime.Object, op Operation)
 
 type ResourceEquivalenceFunc func(obj1, obj2 *unstructured.Unstructured) bool
 
+type ShouldProcessFunc func(obj *unstructured.Unstructured, op Operation) bool
+
 type ResourceSyncerConfig struct {
 	// Name of this syncer used for logging.
 	Name string
@@ -123,6 +125,9 @@ type ResourceSyncerConfig struct {
 	// to compare the old and new resources. If true is returned, the update is ignored, otherwise the update is processed.
 	// By default all updates are processed.
 	ResourcesEquivalent ResourceEquivalenceFunc
+
+	// ShouldProcess function invoked to determine if a resource should be processed.
+	ShouldProcess ShouldProcessFunc
 
 	// WaitForCacheSync if true, waits for the informer cache to sync on Start. Default is true.
 	WaitForCacheSync *bool
@@ -348,6 +353,17 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 	return false, nil
 }
 
+func (r *resourceSyncer) convert(from interface{}) runtime.Object {
+	converted := r.config.ResourceType.DeepCopyObject()
+	err := r.config.Scheme.Convert(from, converted, nil)
+	if err != nil {
+		klog.Errorf("Syncer %q: error converting %#v to %T: %v", r.config.Name, from, r.config.ResourceType, err)
+		return nil
+	}
+
+	return converted
+}
+
 func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 	op Operation) (*unstructured.Unstructured, runtime.Object, bool) {
 	if r.config.Transform == nil {
@@ -356,10 +372,8 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 
 	clusterID, _ := getClusterIDLabel(from)
 
-	converted := r.config.ResourceType.DeepCopyObject()
-	err := r.config.Scheme.Convert(from, converted, nil)
-	if err != nil {
-		klog.Errorf("Syncer %q: error converting %#v to %T: %v", r.config.Name, from, r.config.ResourceType, err)
+	converted := r.convert(from)
+	if converted == nil {
 		return nil, nil, false
 	}
 
@@ -389,10 +403,8 @@ func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op
 	}
 
 	if converted == nil {
-		converted = r.config.ResourceType.DeepCopyObject()
-		err := r.config.Scheme.Convert(resource, converted, nil)
-		if err != nil {
-			klog.Errorf("Syncer %q: error converting %#v to %T: %v", r.config.Name, resource, r.config.ResourceType, err)
+		converted = r.convert(resource)
+		if converted == nil {
 			return
 		}
 	}
@@ -403,6 +415,10 @@ func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op
 }
 
 func (r *resourceSyncer) onCreate(resource interface{}) {
+	if !r.shouldProcess(resource.(*unstructured.Unstructured), Create) {
+		return
+	}
+
 	key, _ := cache.MetaNamespaceKeyFunc(resource)
 	v := true
 	r.created.Store(key, &v)
@@ -410,6 +426,10 @@ func (r *resourceSyncer) onCreate(resource interface{}) {
 }
 
 func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
+	if !r.shouldProcess(newObj.(*unstructured.Unstructured), Update) {
+		return
+	}
+
 	oldResource := oldObj.(*unstructured.Unstructured)
 	newResource := newObj.(*unstructured.Unstructured)
 
@@ -439,10 +459,22 @@ func (r *resourceSyncer) onDelete(obj interface{}) {
 		}
 	}
 
+	if !r.shouldProcess(resource, Delete) {
+		return
+	}
+
 	key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	r.deleted.Store(key, resource)
 
 	r.workQueue.Enqueue(obj)
+}
+
+func (r *resourceSyncer) shouldProcess(resource *unstructured.Unstructured, op Operation) bool {
+	if r.config.ShouldProcess != nil && !r.config.ShouldProcess(resource, op) {
+		return false
+	}
+
+	return true
 }
 
 func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {

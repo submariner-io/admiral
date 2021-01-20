@@ -58,6 +58,9 @@ type ResourceConfig struct {
 	// for more details.
 	LocalResourcesEquivalent syncer.ResourceEquivalenceFunc
 
+	// LocalShouldProcess function invoked to determine if a local resource should be processed.
+	LocalShouldProcess syncer.ShouldProcessFunc
+
 	// LocalWaitForCacheSync if true, waits for the local informer cache to sync on Start. Default is true.
 	LocalWaitForCacheSync *bool
 
@@ -180,6 +183,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 			Transform:           rc.LocalTransform,
 			OnSuccessfulSync:    rc.LocalOnSuccessfulSync,
 			ResourcesEquivalent: rc.LocalResourcesEquivalent,
+			ShouldProcess:       rc.LocalShouldProcess,
 			WaitForCacheSync:    rc.LocalWaitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.LocalResyncPeriod,
