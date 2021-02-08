@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -48,6 +49,17 @@ const (
 	RemoteToLocal
 )
 
+func (d SyncDirection) String() string {
+	switch d {
+	case LocalToRemote:
+		return "localToRemote"
+	case RemoteToLocal:
+		return "remoteToLocal"
+	default:
+		return "none"
+	}
+}
+
 type Operation int
 
 const (
@@ -66,6 +78,12 @@ func (o Operation) String() string {
 		return "delete"
 	}
 }
+
+const (
+	directionLabel  = "direction"
+	operationLable  = "operation"
+	syncerNameLabel = "syncer_name"
+)
 
 // TransformFunc is invoked prior to syncing to transform the resource or evaluate if it should be synced.
 // If nil is returned, the resource is not synced and, if the second return value is true, the resource is re-queued
@@ -137,16 +155,20 @@ type ResourceSyncerConfig struct {
 
 	// ResyncPeriod if non-zero, the period at which resources will be re-synced regardless if anything changed. Default is 0.
 	ResyncPeriod time.Duration
+
+	// MetricOpts used to pass name and help text to resource syncer Gauge
+	MetricOpts *prometheus.GaugeOpts
 }
 
 type resourceSyncer struct {
-	workQueue workqueue.Interface
-	informer  cache.Controller
-	store     cache.Store
-	config    ResourceSyncerConfig
-	deleted   sync.Map
-	created   sync.Map
-	stopped   chan struct{}
+	workQueue   workqueue.Interface
+	informer    cache.Controller
+	store       cache.Store
+	config      ResourceSyncerConfig
+	deleted     sync.Map
+	created     sync.Map
+	stopped     chan struct{}
+	metricGauge *prometheus.GaugeVec
 }
 
 func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
@@ -171,6 +193,18 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 	_, gvr, err := util.ToUnstructuredResource(config.ResourceType, config.RestMapper)
 	if err != nil {
 		return nil, err
+	}
+
+	if syncer.config.MetricOpts != nil {
+		syncer.metricGauge = prometheus.NewGaugeVec(
+			*syncer.config.MetricOpts,
+			[]string{
+				directionLabel,
+				operationLable,
+				syncerNameLabel,
+			},
+		)
+		prometheus.MustRegister(syncer.metricGauge)
 	}
 
 	syncer.workQueue = workqueue.New(config.Name)
@@ -302,6 +336,14 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 
 		r.onSuccessfulSync(resource, transformed, op)
 
+		if r.metricGauge != nil {
+			r.metricGauge.With(prometheus.Labels{
+				directionLabel:  r.config.Direction.String(),
+				operationLable:  op.String(),
+				syncerNameLabel: r.config.Name,
+			}).Inc()
+		}
+
 		klog.V(log.LIBDEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, resource.GetName())
 	}
 
@@ -346,6 +388,14 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 		}
 
 		r.onSuccessfulSync(resource, transformed, Delete)
+
+		if r.metricGauge != nil {
+			r.metricGauge.With(prometheus.Labels{
+				directionLabel:  r.config.Direction.String(),
+				operationLable:  Delete.String(),
+				syncerNameLabel: r.config.Name,
+			}).Inc()
+		}
 
 		klog.V(log.LIBDEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, resource.GetName())
 	}
