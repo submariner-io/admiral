@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -84,6 +85,9 @@ type ResourceConfig struct {
 	// BrokerResyncPeriod if non-zero, the period at which broker resources will be re-synced regardless if anything changed.
 	// Default is 0.
 	BrokerResyncPeriod time.Duration
+
+	// MetricOpts used to pass name and help text to resource syncer Gauge
+	MetricOpts *prometheus.GaugeOpts
 }
 
 type SyncerConfig struct {
@@ -187,6 +191,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 			WaitForCacheSync:    rc.LocalWaitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.LocalResyncPeriod,
+			MetricOpts:          rc.MetricOpts,
 		})
 
 		if err != nil {
@@ -218,6 +223,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 			WaitForCacheSync:    waitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.BrokerResyncPeriod,
+			MetricOpts:          rc.MetricOpts,
 		})
 
 		if err != nil {
