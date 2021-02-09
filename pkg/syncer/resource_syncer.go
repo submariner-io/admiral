@@ -81,7 +81,7 @@ func (o Operation) String() string {
 
 const (
 	directionLabel  = "direction"
-	operationLable  = "operation"
+	operationLabel  = "operation"
 	syncerNameLabel = "syncer_name"
 )
 
@@ -168,7 +168,7 @@ type resourceSyncer struct {
 	deleted     sync.Map
 	created     sync.Map
 	stopped     chan struct{}
-	metricGauge *prometheus.GaugeVec
+	syncCounter *prometheus.GaugeVec
 }
 
 func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
@@ -196,15 +196,15 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 	}
 
 	if syncer.config.MetricOpts != nil {
-		syncer.metricGauge = prometheus.NewGaugeVec(
+		syncer.syncCounter = prometheus.NewGaugeVec(
 			*syncer.config.MetricOpts,
 			[]string{
 				directionLabel,
-				operationLable,
+				operationLabel,
 				syncerNameLabel,
 			},
 		)
-		prometheus.MustRegister(syncer.metricGauge)
+		prometheus.MustRegister(syncer.syncCounter)
 	}
 
 	syncer.workQueue = workqueue.New(config.Name)
@@ -336,10 +336,10 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 
 		r.onSuccessfulSync(resource, transformed, op)
 
-		if r.metricGauge != nil {
-			r.metricGauge.With(prometheus.Labels{
+		if r.syncCounter != nil {
+			r.syncCounter.With(prometheus.Labels{
 				directionLabel:  r.config.Direction.String(),
-				operationLable:  op.String(),
+				operationLabel:  op.String(),
 				syncerNameLabel: r.config.Name,
 			}).Inc()
 		}
@@ -389,10 +389,10 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 
 		r.onSuccessfulSync(resource, transformed, Delete)
 
-		if r.metricGauge != nil {
-			r.metricGauge.With(prometheus.Labels{
+		if r.syncCounter != nil {
+			r.syncCounter.With(prometheus.Labels{
 				directionLabel:  r.config.Direction.String(),
-				operationLable:  Delete.String(),
+				operationLabel:  Delete.String(),
 				syncerNameLabel: r.config.Name,
 			}).Inc()
 		}
