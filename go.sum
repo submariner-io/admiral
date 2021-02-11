@@ -150,8 +150,8 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/stretchr/testify v1.6.1 h1:hDPOHmpOpP40lSULcqw7IrRb/u7w6RpDC9399XyoNd0=
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
-github.com/submariner-io/shipyard v0.8.0 h1:HKvVDJ4VbEz2CFK5h7fhBCz0z421hoykp7Al7j3kE3Y=
-github.com/submariner-io/shipyard v0.8.0/go.mod h1:kPqFCYY2F9vMEzEr6YwYQ1dhwL+uXgezG0aLey5rXD0=
+github.com/submariner-io/shipyard v0.8.1 h1:N13p25RquAqLHmP3dEOhYPCFT58OrpcKM2Hu+NNK+FU=
+github.com/submariner-io/shipyard v0.8.1/go.mod h1:kPqFCYY2F9vMEzEr6YwYQ1dhwL+uXgezG0aLey5rXD0=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
 golang.org/x/crypto v0.0.0-20190211182817-74369b46fc67/go.mod h1:6SG95UA2DQfeDnfUPMdvaQW0Q7yPrPDi9nlGo2tz2b4=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
