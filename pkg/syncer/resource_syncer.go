@@ -80,9 +80,9 @@ func (o Operation) String() string {
 }
 
 const (
-	directionLabel  = "direction"
-	operationLabel  = "operation"
-	syncerNameLabel = "syncer_name"
+	DirectionLabel  = "direction"
+	OperationLabel  = "operation"
+	SyncerNameLabel = "syncer_name"
 )
 
 // TransformFunc is invoked prior to syncing to transform the resource or evaluate if it should be synced.
@@ -158,6 +158,9 @@ type ResourceSyncerConfig struct {
 
 	// MetricOpts used to pass name and help text to resource syncer Gauge
 	MetricOpts *prometheus.GaugeOpts
+
+	// When used from broker.syncer, SyncCounter will be shared by several resourceSyncer
+	SyncCounter *prometheus.GaugeVec
 }
 
 type resourceSyncer struct {
@@ -199,12 +202,14 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 		syncer.syncCounter = prometheus.NewGaugeVec(
 			*syncer.config.MetricOpts,
 			[]string{
-				directionLabel,
-				operationLabel,
-				syncerNameLabel,
+				DirectionLabel,
+				OperationLabel,
+				SyncerNameLabel,
 			},
 		)
 		prometheus.MustRegister(syncer.syncCounter)
+	} else if syncer.config.SyncCounter != nil {
+		syncer.syncCounter = syncer.config.SyncCounter
 	}
 
 	syncer.workQueue = workqueue.New(config.Name)
@@ -338,9 +343,9 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 
 		if r.syncCounter != nil {
 			r.syncCounter.With(prometheus.Labels{
-				directionLabel:  r.config.Direction.String(),
-				operationLabel:  op.String(),
-				syncerNameLabel: r.config.Name,
+				DirectionLabel:  r.config.Direction.String(),
+				OperationLabel:  op.String(),
+				SyncerNameLabel: r.config.Name,
 			}).Inc()
 		}
 
@@ -391,9 +396,9 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 
 		if r.syncCounter != nil {
 			r.syncCounter.With(prometheus.Labels{
-				directionLabel:  r.config.Direction.String(),
-				operationLabel:  Delete.String(),
-				syncerNameLabel: r.config.Name,
+				DirectionLabel:  r.config.Direction.String(),
+				OperationLabel:  Delete.String(),
+				SyncerNameLabel: r.config.Name,
 			}).Inc()
 		}
 

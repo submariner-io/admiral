@@ -173,6 +173,19 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 	brokerSyncer.localFederator = NewFederator(config.LocalClient, config.RestMapper, config.LocalNamespace, "")
 
 	for _, rc := range config.ResourceConfigs {
+		var syncCounter *prometheus.GaugeVec
+		if rc.MetricOpts != nil {
+			syncCounter = prometheus.NewGaugeVec(
+				*rc.MetricOpts,
+				[]string{
+					syncer.DirectionLabel,
+					syncer.OperationLabel,
+					syncer.SyncerNameLabel,
+				},
+			)
+			prometheus.MustRegister(syncCounter)
+		}
+
 		localSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
 			Name:                fmt.Sprintf("local -> broker for %T", rc.LocalResourceType),
 			SourceClient:        config.LocalClient,
@@ -191,7 +204,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 			WaitForCacheSync:    rc.LocalWaitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.LocalResyncPeriod,
-			MetricOpts:          rc.MetricOpts,
+			SyncCounter:         syncCounter,
 		})
 
 		if err != nil {
@@ -223,7 +236,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 			WaitForCacheSync:    waitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.BrokerResyncPeriod,
-			MetricOpts:          rc.MetricOpts,
+			SyncCounter:         syncCounter,
 		})
 
 		if err != nil {
