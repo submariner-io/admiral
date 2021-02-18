@@ -156,11 +156,13 @@ type ResourceSyncerConfig struct {
 	// ResyncPeriod if non-zero, the period at which resources will be re-synced regardless if anything changed. Default is 0.
 	ResyncPeriod time.Duration
 
-	// MetricOpts used to pass name and help text to resource syncer Gauge
+	// MetricOpts if specified, used to create a gauge to record counter metrics.
+	// Alternatively the gauge can be created directly and passed via the MetricGauge field,
+	// in which case MetricOpts is ignored.
 	MetricOpts *prometheus.GaugeOpts
 
-	// When used from broker.syncer, SyncCounter will be shared by several resourceSyncer
-	SyncCounter *prometheus.GaugeVec
+	// MetricGauge if specified, used to record counter metrics.
+	MetricGauge *prometheus.GaugeVec
 }
 
 type resourceSyncer struct {
@@ -198,7 +200,9 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 		return nil, err
 	}
 
-	if syncer.config.MetricOpts != nil {
+	if syncer.config.MetricGauge != nil {
+		syncer.syncCounter = syncer.config.MetricGauge
+	} else if syncer.config.MetricOpts != nil {
 		syncer.syncCounter = prometheus.NewGaugeVec(
 			*syncer.config.MetricOpts,
 			[]string{
@@ -208,8 +212,6 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 			},
 		)
 		prometheus.MustRegister(syncer.syncCounter)
-	} else if syncer.config.SyncCounter != nil {
-		syncer.syncCounter = syncer.config.SyncCounter
 	}
 
 	syncer.workQueue = workqueue.New(config.Name)

@@ -204,7 +204,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 			WaitForCacheSync:    rc.LocalWaitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.LocalResyncPeriod,
-			SyncCounter:         syncCounter,
+			MetricGauge:         syncCounter,
 		})
 
 		if err != nil {
@@ -236,7 +236,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 			WaitForCacheSync:    waitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.BrokerResyncPeriod,
-			SyncCounter:         syncCounter,
+			MetricGauge:         syncCounter,
 		})
 
 		if err != nil {
