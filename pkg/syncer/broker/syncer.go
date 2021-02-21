@@ -86,8 +86,8 @@ type ResourceConfig struct {
 	// Default is 0.
 	BrokerResyncPeriod time.Duration
 
-	// MetricOpts used to pass name and help text to resource syncer Gauge
-	MetricOpts *prometheus.GaugeOpts
+	// SyncCounterOpts used to pass name and help text to resource syncer Gauge
+	SyncCounterOpts *prometheus.GaugeOpts
 }
 
 type SyncerConfig struct {
@@ -174,9 +174,9 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 
 	for _, rc := range config.ResourceConfigs {
 		var syncCounter *prometheus.GaugeVec
-		if rc.MetricOpts != nil {
+		if rc.SyncCounterOpts != nil {
 			syncCounter = prometheus.NewGaugeVec(
-				*rc.MetricOpts,
+				*rc.SyncCounterOpts,
 				[]string{
 					syncer.DirectionLabel,
 					syncer.OperationLabel,
@@ -204,7 +204,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 			WaitForCacheSync:    rc.LocalWaitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.LocalResyncPeriod,
-			MetricGauge:         syncCounter,
+			SyncCounter:         syncCounter,
 		})
 
 		if err != nil {
@@ -236,7 +236,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 			WaitForCacheSync:    waitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.BrokerResyncPeriod,
-			MetricGauge:         syncCounter,
+			SyncCounter:         syncCounter,
 		})
 
 		if err != nil {
