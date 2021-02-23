@@ -16,11 +16,14 @@ limitations under the License.
 package fake
 
 import (
+	"fmt"
+	"strconv"
 	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -42,17 +45,18 @@ type namespaceableResource struct {
 
 type DynamicResourceClient struct {
 	dynamic.ResourceInterface
-	created                chan string
-	updated                chan string
-	deleted                chan string
-	FailOnCreate           error
-	PersistentFailOnCreate atomic.Value
-	FailOnUpdate           error
-	PersistentFailOnUpdate atomic.Value
-	FailOnDelete           error
-	PersistentFailOnDelete atomic.Value
-	FailOnGet              error
-	PersistentFailOnGet    atomic.Value
+	created                      chan string
+	updated                      chan string
+	deleted                      chan string
+	FailOnCreate                 error
+	PersistentFailOnCreate       atomic.Value
+	FailOnUpdate                 error
+	PersistentFailOnUpdate       atomic.Value
+	CheckResourceVersionOnUpdate bool
+	FailOnDelete                 error
+	PersistentFailOnDelete       atomic.Value
+	FailOnGet                    error
+	PersistentFailOnGet          atomic.Value
 }
 
 func NewDynamicClient(scheme *runtime.Scheme, objects ...runtime.Object) dynamic.Interface {
@@ -146,6 +150,20 @@ func (f *DynamicResourceClient) Update(obj *unstructured.Unstructured, options v
 	fail = getError(f.PersistentFailOnUpdate)
 	if fail != nil {
 		return nil, fail
+	}
+
+	if f.CheckResourceVersionOnUpdate {
+		existing, _ := f.ResourceInterface.Get(obj.GetName(), v1.GetOptions{})
+		if existing != nil && existing.GetResourceVersion() != obj.GetResourceVersion() {
+			return nil, apierrors.NewConflict(schema.GroupResource{}, obj.GetName(),
+				fmt.Errorf("resource version %q does not match expected %q", obj.GetResourceVersion(),
+					existing.GetResourceVersion()))
+		}
+
+		if existing != nil && existing.GetResourceVersion() != "" {
+			v, _ := strconv.Atoi(existing.GetResourceVersion())
+			obj.SetResourceVersion(strconv.Itoa(v + 1))
+		}
 	}
 
 	return f.ResourceInterface.Update(obj, options, subresources...)
