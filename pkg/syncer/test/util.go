@@ -66,11 +66,7 @@ func UpdateResource(resourceInterface dynamic.ResourceInterface, resource runtim
 }
 
 func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev1.Pod, expNamespace, clusterID string) {
-	raw := GetResource(resourceInterface, expected)
-
-	actual := &corev1.Pod{}
-	err := scheme.Scheme.Convert(raw, actual, nil)
-	Expect(err).To(Succeed())
+	actual := GetPod(resourceInterface, expected)
 
 	Expect(actual.GetName()).To(Equal(expected.GetName()))
 	Expect(actual.GetNamespace()).To(Equal(expNamespace))
@@ -92,6 +88,16 @@ func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev
 	}
 
 	Expect(actual.GetLabels()).To(Equal(duplicate))
+}
+
+func GetPod(resourceInterface dynamic.ResourceInterface, from *corev1.Pod) *corev1.Pod {
+	actual := &corev1.Pod{}
+
+	raw := GetResource(resourceInterface, from)
+	err := scheme.Scheme.Convert(raw, actual, nil)
+	Expect(err).To(Succeed())
+
+	return actual
 }
 
 func NewPod(namespace string) *corev1.Pod {

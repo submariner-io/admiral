@@ -94,6 +94,24 @@ func (f *namespaceableResource) Namespace(namespace string) dynamic.ResourceInte
 	return f.resourceClients[namespace]
 }
 
+func getError(from atomic.Value) error {
+	o := from.Load()
+	if o == nil {
+		return nil
+	}
+
+	switch v := o.(type) {
+	case string:
+		if v != "" {
+			return errors.New(v)
+		}
+	case error:
+		return v
+	}
+
+	return nil
+}
+
 func (f *DynamicResourceClient) Create(obj *unstructured.Unstructured, options v1.CreateOptions,
 	subresources ...string) (*unstructured.Unstructured, error) {
 	f.created <- obj.GetName()
@@ -104,9 +122,9 @@ func (f *DynamicResourceClient) Create(obj *unstructured.Unstructured, options v
 		return nil, fail
 	}
 
-	s := f.PersistentFailOnCreate.Load()
-	if s != nil && s.(string) != "" {
-		return nil, errors.New(s.(string))
+	fail = getError(f.PersistentFailOnCreate)
+	if fail != nil {
+		return nil, fail
 	}
 
 	obj.SetUID(uuid.NewUUID())
@@ -125,9 +143,9 @@ func (f *DynamicResourceClient) Update(obj *unstructured.Unstructured, options v
 		return nil, fail
 	}
 
-	s := f.PersistentFailOnUpdate.Load()
-	if s != nil && s.(string) != "" {
-		return nil, errors.New(s.(string))
+	fail = getError(f.PersistentFailOnUpdate)
+	if fail != nil {
+		return nil, fail
 	}
 
 	return f.ResourceInterface.Update(obj, options, subresources...)
@@ -142,9 +160,9 @@ func (f *DynamicResourceClient) Delete(name string, options *v1.DeleteOptions, s
 		return fail
 	}
 
-	s := f.PersistentFailOnDelete.Load()
-	if s != nil && s.(string) != "" {
-		return errors.New(s.(string))
+	fail = getError(f.PersistentFailOnDelete)
+	if fail != nil {
+		return fail
 	}
 
 	return f.ResourceInterface.Delete(name, options, subresources...)
@@ -157,9 +175,9 @@ func (f *DynamicResourceClient) Get(name string, options v1.GetOptions, subresou
 		return nil, fail
 	}
 
-	s := f.PersistentFailOnGet.Load()
-	if s != nil && s.(string) != "" {
-		return nil, errors.New(s.(string))
+	fail = getError(f.PersistentFailOnGet)
+	if fail != nil {
+		return nil, fail
 	}
 
 	return f.ResourceInterface.Get(name, options, subresources...)

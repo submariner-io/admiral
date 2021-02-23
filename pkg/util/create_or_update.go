@@ -16,14 +16,19 @@ limitations under the License.
 package util
 
 import (
+	"time"
+
 	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/log"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 )
@@ -37,6 +42,13 @@ const (
 )
 
 type MutateFn func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error)
+
+var backOff wait.Backoff = wait.Backoff{
+	Steps:    10,
+	Duration: 500 * time.Millisecond,
+	Factor:   1.5,
+	Cap:      20 * time.Second,
+}
 
 func CreateOrUpdate(client dynamic.ResourceInterface, obj *unstructured.Unstructured, mutate MutateFn) (OperationResult, error) {
 	var result OperationResult = OperationResultNone
@@ -87,4 +99,34 @@ func CreateOrUpdate(client dynamic.ResourceInterface, obj *unstructured.Unstruct
 	}
 
 	return result, nil
+}
+
+// CreateAnew creates a resource, first deleting an existing instance if one exists.
+func CreateAnew(client dynamic.ResourceInterface, obj runtime.Object) error {
+	toCreate := &unstructured.Unstructured{}
+	err := scheme.Scheme.Convert(obj, toCreate, nil)
+	if err != nil {
+		return err
+	}
+
+	return wait.ExponentialBackoff(backOff, func() (bool, error) {
+		_, err := client.Create(toCreate, metav1.CreateOptions{})
+		if !apierrors.IsAlreadyExists(err) {
+			return true, err
+		}
+
+		err = client.Delete(toCreate.GetName(), &metav1.DeleteOptions{})
+		if apierrors.IsNotFound(err) {
+			err = nil
+		}
+
+		return false, errors.WithMessagef(err, "failed to delete pre-existing instance %q", toCreate.GetName())
+	})
+}
+
+func SetBackoff(b wait.Backoff) wait.Backoff {
+	prev := backOff
+	backOff = b
+
+	return prev
 }
