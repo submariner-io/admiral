@@ -77,11 +77,14 @@ func CreateOrUpdate(client dynamic.ResourceInterface, obj *unstructured.Unstruct
 		}
 
 		copy := existing.DeepCopyObject()
+		resourceVersion := existing.GetResourceVersion()
 
 		toUpdate, err := mutate(existing)
 		if err != nil {
 			return err
 		}
+
+		toUpdate.SetResourceVersion(resourceVersion)
 
 		if equality.Semantic.DeepEqual(toUpdate, copy) {
 			return nil
@@ -129,4 +132,10 @@ func SetBackoff(b wait.Backoff) wait.Backoff {
 	backOff = b
 
 	return prev
+}
+
+func Replace(with *unstructured.Unstructured) MutateFn {
+	return func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+		return with, nil
+	}
 }

@@ -51,6 +51,8 @@ var _ = Describe("", func() {
 			Resource: "pods",
 		}).Namespace("test").(*fake.DynamicResourceClient)
 
+		client.CheckResourceVersionOnUpdate = true
+
 		pod = test.NewPod("")
 
 		origBackoff = util.SetBackoff(wait.Backoff{
@@ -134,10 +136,9 @@ var _ = Describe("", func() {
 
 		BeforeEach(func() {
 			mutateFn = func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
-				newSpec, _, _ := unstructured.NestedFieldNoCopy(test.ToUnstructured(pod).Object, "spec")
-				_ = unstructured.SetNestedField(existing.Object, newSpec, "spec")
-
-				return existing, nil
+				obj := test.ToUnstructured(pod)
+				obj.SetUID(existing.GetUID())
+				return util.Replace(obj)(nil)
 			}
 		})
 
