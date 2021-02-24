@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
+	resourceUtil "github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/util"
 	"github.com/submariner-io/admiral/pkg/workqueue"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -440,7 +441,7 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 		return nil, nil, requeue
 	}
 
-	result, err := util.ToUnstructured(transformed)
+	result, err := resourceUtil.ToUnstructured(transformed)
 	if err != nil {
 		klog.Errorf("Syncer %q: error converting transform function result: %v", r.config.Name, err)
 		return nil, nil, false

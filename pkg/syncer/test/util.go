@@ -20,7 +20,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/federate"
-	"github.com/submariner-io/admiral/pkg/util"
+	resourceUtil "github.com/submariner-io/admiral/pkg/resource"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metaapi "k8s.io/apimachinery/pkg/api/meta"
@@ -194,7 +194,7 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 }
 
 func ToUnstructured(obj runtime.Object) *unstructured.Unstructured {
-	raw, err := util.ToUnstructured(obj)
+	raw, err := resourceUtil.ToUnstructured(obj)
 	Expect(err).To(Succeed())
 
 	return raw
