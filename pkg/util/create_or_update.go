@@ -20,15 +20,13 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/log"
+	"github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 )
@@ -41,7 +39,7 @@ const (
 	OperationResultUpdated OperationResult = "updated"
 )
 
-type MutateFn func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error)
+type MutateFn func(existing runtime.Object) (runtime.Object, error)
 
 var backOff wait.Backoff = wait.Backoff{
 	Steps:    10,
@@ -50,18 +48,20 @@ var backOff wait.Backoff = wait.Backoff{
 	Cap:      20 * time.Second,
 }
 
-func CreateOrUpdate(client dynamic.ResourceInterface, obj *unstructured.Unstructured, mutate MutateFn) (OperationResult, error) {
+func CreateOrUpdate(client resource.Interface, obj runtime.Object, mutate MutateFn) (OperationResult, error) {
 	var result OperationResult = OperationResultNone
 
+	objMeta := resource.ToMeta(obj)
+
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		existing, err := client.Get(obj.GetName(), metav1.GetOptions{})
+		existing, err := client.Get(objMeta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			klog.V(log.LIBTRACE).Infof("Creating resource: %#v", obj)
 
-			_, err := client.Create(obj, metav1.CreateOptions{})
+			_, err := client.Create(obj)
 			if apierrors.IsAlreadyExists(err) {
-				klog.V(log.LIBDEBUG).Infof("Resource %q already exists - retrying", obj.GetName())
-				return apierrors.NewConflict(schema.GroupResource{Resource: obj.GetKind()}, obj.GetName(), err)
+				klog.V(log.LIBDEBUG).Infof("Resource %q already exists - retrying", objMeta.GetName())
+				return apierrors.NewConflict(schema.GroupResource{}, objMeta.GetName(), err)
 			}
 
 			if err != nil {
@@ -73,18 +73,18 @@ func CreateOrUpdate(client dynamic.ResourceInterface, obj *unstructured.Unstruct
 		}
 
 		if err != nil {
-			return errors.WithMessagef(err, "error retrieving %q", obj.GetName())
+			return errors.WithMessagef(err, "error retrieving %q", objMeta.GetName())
 		}
 
 		copy := existing.DeepCopyObject()
-		resourceVersion := existing.GetResourceVersion()
+		resourceVersion := resource.ToMeta(existing).GetResourceVersion()
 
 		toUpdate, err := mutate(existing)
 		if err != nil {
 			return err
 		}
 
-		toUpdate.SetResourceVersion(resourceVersion)
+		resource.ToMeta(toUpdate).SetResourceVersion(resourceVersion)
 
 		if equality.Semantic.DeepEqual(toUpdate, copy) {
 			return nil
@@ -93,7 +93,8 @@ func CreateOrUpdate(client dynamic.ResourceInterface, obj *unstructured.Unstruct
 		klog.V(log.LIBTRACE).Infof("Updating resource: %#v", obj)
 
 		result = OperationResultUpdated
-		_, err = client.Update(toUpdate, metav1.UpdateOptions{})
+		_, err = client.Update(toUpdate)
+
 		return err
 	})
 
@@ -109,25 +110,21 @@ func CreateOrUpdate(client dynamic.ResourceInterface, obj *unstructured.Unstruct
 // this will wait for the deletion to be complete before creating the new object:
 // with foreground propagation, Get will continue to return the object being deleted
 // and Create will fail with “already exists” until deletion is complete.
-func CreateAnew(client dynamic.ResourceInterface, obj runtime.Object, deleteOptions *metav1.DeleteOptions) error {
-	toCreate := &unstructured.Unstructured{}
-	err := scheme.Scheme.Convert(obj, toCreate, nil)
-	if err != nil {
-		return err
-	}
+func CreateAnew(client resource.Interface, obj runtime.Object, deleteOptions *metav1.DeleteOptions) error {
+	name := resource.ToMeta(obj).GetName()
 
 	return wait.ExponentialBackoff(backOff, func() (bool, error) {
-		_, err := client.Create(toCreate, metav1.CreateOptions{})
+		_, err := client.Create(obj)
 		if !apierrors.IsAlreadyExists(err) {
 			return true, err
 		}
 
-		err = client.Delete(toCreate.GetName(), deleteOptions)
+		err = client.Delete(name, deleteOptions)
 		if apierrors.IsNotFound(err) {
 			err = nil
 		}
 
-		return false, errors.WithMessagef(err, "failed to delete pre-existing instance %q", toCreate.GetName())
+		return false, errors.WithMessagef(err, "failed to delete pre-existing instance %q", name)
 	})
 }
 
@@ -138,8 +135,8 @@ func SetBackoff(b wait.Backoff) wait.Backoff {
 	return prev
 }
 
-func Replace(with *unstructured.Unstructured) MutateFn {
-	return func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+func Replace(with runtime.Object) MutateFn {
+	return func(existing runtime.Object) (runtime.Object, error) {
 		return with, nil
 	}
 }
