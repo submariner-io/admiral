@@ -105,7 +105,11 @@ func CreateOrUpdate(client dynamic.ResourceInterface, obj *unstructured.Unstruct
 }
 
 // CreateAnew creates a resource, first deleting an existing instance if one exists.
-func CreateAnew(client dynamic.ResourceInterface, obj runtime.Object) error {
+// If the delete options specify that deletion should be propagated in the foreground,
+// this will wait for the deletion to be complete before creating the new object:
+// with foreground propagation, Get will continue to return the object being deleted
+// and Create will fail with “already exists” until deletion is complete.
+func CreateAnew(client dynamic.ResourceInterface, obj runtime.Object, deleteOptions *metav1.DeleteOptions) error {
 	toCreate := &unstructured.Unstructured{}
 	err := scheme.Scheme.Convert(obj, toCreate, nil)
 	if err != nil {
@@ -118,7 +122,7 @@ func CreateAnew(client dynamic.ResourceInterface, obj runtime.Object) error {
 			return true, err
 		}
 
-		err = client.Delete(toCreate.GetName(), &metav1.DeleteOptions{})
+		err = client.Delete(toCreate.GetName(), deleteOptions)
 		if apierrors.IsNotFound(err) {
 			err = nil
 		}

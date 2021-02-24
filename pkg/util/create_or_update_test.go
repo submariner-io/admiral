@@ -27,6 +27,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -68,7 +69,7 @@ var _ = Describe("", func() {
 	Describe("CreateAnew function", func() {
 		When("no existing resource exists", func() {
 			It("should successfully create the resource", func() {
-				Expect(util.CreateAnew(client, pod)).To(Succeed())
+				Expect(util.CreateAnew(client, pod, &metav1.DeleteOptions{})).To(Succeed())
 				verifyPod(client, pod)
 			})
 		})
@@ -82,7 +83,7 @@ var _ = Describe("", func() {
 			})
 
 			It("should delete the existing resource and create a new one", func() {
-				Expect(util.CreateAnew(client, pod)).To(Succeed())
+				Expect(util.CreateAnew(client, pod, &metav1.DeleteOptions{})).To(Succeed())
 				verifyPod(client, existing)
 			})
 
@@ -92,7 +93,7 @@ var _ = Describe("", func() {
 				})
 
 				It("should successfully create the resource", func() {
-					Expect(util.CreateAnew(client, pod)).To(Succeed())
+					Expect(util.CreateAnew(client, pod, &metav1.DeleteOptions{})).To(Succeed())
 					verifyPod(client, existing)
 				})
 			})
@@ -104,7 +105,7 @@ var _ = Describe("", func() {
 				})
 
 				It("should return an error", func() {
-					Expect(util.CreateAnew(client, pod)).To(ContainErrorSubstring(expectedErr))
+					Expect(util.CreateAnew(client, pod, &metav1.DeleteOptions{})).To(ContainErrorSubstring(expectedErr))
 				})
 			})
 
@@ -114,7 +115,7 @@ var _ = Describe("", func() {
 				})
 
 				It("should return an error", func() {
-					Expect(util.CreateAnew(client, pod)).ToNot(Succeed())
+					Expect(util.CreateAnew(client, pod, &metav1.DeleteOptions{})).ToNot(Succeed())
 				})
 			})
 		})
@@ -126,7 +127,7 @@ var _ = Describe("", func() {
 			})
 
 			It("should return an error", func() {
-				Expect(util.CreateAnew(client, pod)).To(ContainErrorSubstring(expectedErr))
+				Expect(util.CreateAnew(client, pod, &metav1.DeleteOptions{})).To(ContainErrorSubstring(expectedErr))
 			})
 		})
 	})
