@@ -18,6 +18,7 @@ package broker
 import (
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
+	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -53,10 +54,10 @@ func NewFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targe
 	return f
 }
 
-func (f *federator) Distribute(resource runtime.Object) error {
-	klog.V(log.LIBTRACE).Infof("In Distribute for %#v", resource)
+func (f *federator) Distribute(obj runtime.Object) error {
+	klog.V(log.LIBTRACE).Infof("In Distribute for %#v", obj)
 
-	toDistribute, resourceClient, err := f.toUnstructured(resource)
+	toDistribute, resourceClient, err := f.toUnstructured(obj)
 	if err != nil {
 		return err
 	}
@@ -67,9 +68,10 @@ func (f *federator) Distribute(resource runtime.Object) error {
 
 	f.prepareResourceForSync(toDistribute)
 
-	_, err = util.CreateOrUpdate(resourceClient, toDistribute, func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	_, err = util.CreateOrUpdate(resource.ForDynamic(resourceClient), toDistribute, func(obj runtime.Object) (runtime.Object, error) {
 		// Preserve the existing metadata info (except Labels and Annotations), specifically the ResourceVersion which must
 		// be set on an update operation.
+		existing := obj.(*unstructured.Unstructured)
 		existing.SetLabels(toDistribute.GetLabels())
 		existing.SetAnnotations(toDistribute.GetAnnotations())
 		setNestedField(toDistribute.Object, util.GetMetadata(existing), util.MetadataField)
@@ -79,8 +81,8 @@ func (f *federator) Distribute(resource runtime.Object) error {
 	return err
 }
 
-func (f *federator) Delete(resource runtime.Object) error {
-	toDelete, resourceClient, err := f.toUnstructured(resource)
+func (f *federator) Delete(obj runtime.Object) error {
+	toDelete, resourceClient, err := f.toUnstructured(obj)
 	if err != nil {
 		return err
 	}
@@ -106,12 +108,12 @@ func (f *federator) toUnstructured(from runtime.Object) (*unstructured.Unstructu
 	return to, f.dynClient.Resource(*gvr).Namespace(ns), nil
 }
 
-func (f *federator) prepareResourceForSync(resource *unstructured.Unstructured) {
+func (f *federator) prepareResourceForSync(obj *unstructured.Unstructured) {
 	//  Remove metadata fields that are set by the API server on creation.
-	metadata := util.GetMetadata(resource)
+	metadata := util.GetMetadata(obj)
 	for field := range metadata {
 		if !f.keepMetadataFields[field] {
-			unstructured.RemoveNestedField(resource.Object, util.MetadataField, field)
+			unstructured.RemoveNestedField(obj.Object, util.MetadataField, field)
 		}
 	}
 }
