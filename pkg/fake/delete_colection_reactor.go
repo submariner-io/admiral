@@ -31,12 +31,12 @@ import (
 )
 
 type DeleteCollectionReactor struct {
-	kind     string
+	gvk      schema.GroupVersionKind
 	reactors []testing.Reactor
 }
 
-func AddDeleteCollectionReactor(f *testing.Fake, kind string) {
-	r := &DeleteCollectionReactor{kind: kind, reactors: f.ReactionChain[0:]}
+func AddDeleteCollectionReactor(f *testing.Fake, gvk schema.GroupVersionKind) {
+	r := &DeleteCollectionReactor{gvk: gvk, reactors: f.ReactionChain[0:]}
 	chain := []testing.Reactor{&testing.SimpleReactor{Verb: "delete-collection", Resource: "*", Reaction: r.react}}
 	f.ReactionChain = append(chain, f.ReactionChain...)
 }
@@ -46,13 +46,7 @@ func (r *DeleteCollectionReactor) react(action testing.Action) (bool, runtime.Ob
 	case testing.DeleteCollectionActionImpl:
 		defer GinkgoRecover()
 
-		gvk := schema.GroupVersionKind{
-			Group:   action.GetResource().Group,
-			Version: action.GetResource().Version,
-			Kind:    r.kind,
-		}
-
-		obj, err := r.invoke(testing.NewListAction(action.GetResource(), gvk, action.GetNamespace(), metav1.ListOptions{
+		obj, err := r.invoke(testing.NewListAction(action.GetResource(), r.gvk, action.GetNamespace(), metav1.ListOptions{
 			LabelSelector: dc.ListRestrictions.Labels.String(),
 			FieldSelector: dc.ListRestrictions.Fields.String(),
 		}))

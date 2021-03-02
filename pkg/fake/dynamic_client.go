@@ -33,8 +33,8 @@ import (
 	"k8s.io/client-go/dynamic/fake"
 )
 
-type dynamicClient struct {
-	dynamic.Interface
+type DynamicClient struct {
+	*fake.FakeDynamicClient
 	namespaceableResources map[schema.GroupVersionResource]dynamic.NamespaceableResourceInterface
 }
 
@@ -59,23 +59,25 @@ type DynamicResourceClient struct {
 	PersistentFailOnGet          atomic.Value
 }
 
-func NewDynamicClient(scheme *runtime.Scheme, objects ...runtime.Object) dynamic.Interface {
+func NewDynamicClient(scheme *runtime.Scheme, objects ...runtime.Object) *DynamicClient {
 	f := fake.NewSimpleDynamicClient(scheme, objects...)
 
-	return &dynamicClient{
-		Interface:              f,
+	AddDeleteCollectionReactor(&f.Fake, schema.GroupVersionKind{Group: "fake-dynamic-client-group", Version: "v1", Kind: ""})
+
+	return &DynamicClient{
+		FakeDynamicClient:      f,
 		namespaceableResources: map[schema.GroupVersionResource]dynamic.NamespaceableResourceInterface{},
 	}
 }
 
-func (f *dynamicClient) Resource(gvr schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
+func (f *DynamicClient) Resource(gvr schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
 	i := f.namespaceableResources[gvr]
 	if i != nil {
 		return i
 	}
 
 	f.namespaceableResources[gvr] = &namespaceableResource{
-		NamespaceableResourceInterface: f.Interface.Resource(gvr),
+		NamespaceableResourceInterface: f.FakeDynamicClient.Resource(gvr),
 		resourceClients:                map[string]dynamic.ResourceInterface{},
 	}
 
