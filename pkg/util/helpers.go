@@ -19,12 +19,12 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	resourceUtil "github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/klog"
@@ -51,7 +51,7 @@ func BuildRestMapper(restConfig *rest.Config) (meta.RESTMapper, error) {
 
 func ToUnstructuredResource(from runtime.Object, restMapper meta.RESTMapper) (*unstructured.Unstructured, *schema.GroupVersionResource,
 	error) {
-	to, err := ToUnstructured(from)
+	to, err := resourceUtil.ToUnstructured(from)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -62,21 +62,6 @@ func ToUnstructuredResource(from runtime.Object, restMapper meta.RESTMapper) (*u
 	}
 
 	return to, gvr, nil
-}
-
-func ToUnstructured(from runtime.Object) (*unstructured.Unstructured, error) {
-	switch f := from.(type) {
-	case *unstructured.Unstructured:
-		return f.DeepCopy(), nil
-	default:
-		to := &unstructured.Unstructured{}
-		err := scheme.Scheme.Convert(from, to, nil)
-		if err != nil {
-			return nil, errors.WithMessagef(err, "error converting %#v to unstructured.Unstructured", from)
-		}
-
-		return to, nil
-	}
 }
 
 func FindGroupVersionResource(from *unstructured.Unstructured, restMapper meta.RESTMapper) (*schema.GroupVersionResource, error) {

@@ -23,11 +23,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/fake"
 	. "github.com/submariner-io/admiral/pkg/gomega"
+	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
@@ -65,10 +66,14 @@ var _ = Describe("", func() {
 		util.SetBackoff(origBackoff)
 	})
 
+	createAnew := func() error {
+		return util.CreateAnew(resource.ForDynamic(client), pod, nil)
+	}
+
 	Describe("CreateAnew function", func() {
 		When("no existing resource exists", func() {
 			It("should successfully create the resource", func() {
-				Expect(util.CreateAnew(client, pod)).To(Succeed())
+				Expect(createAnew()).To(Succeed())
 				verifyPod(client, pod)
 			})
 		})
@@ -82,7 +87,7 @@ var _ = Describe("", func() {
 			})
 
 			It("should delete the existing resource and create a new one", func() {
-				Expect(util.CreateAnew(client, pod)).To(Succeed())
+				Expect(createAnew()).To(Succeed())
 				verifyPod(client, existing)
 			})
 
@@ -92,7 +97,7 @@ var _ = Describe("", func() {
 				})
 
 				It("should successfully create the resource", func() {
-					Expect(util.CreateAnew(client, pod)).To(Succeed())
+					Expect(createAnew()).To(Succeed())
 					verifyPod(client, existing)
 				})
 			})
@@ -104,7 +109,7 @@ var _ = Describe("", func() {
 				})
 
 				It("should return an error", func() {
-					Expect(util.CreateAnew(client, pod)).To(ContainErrorSubstring(expectedErr))
+					Expect(createAnew()).To(ContainErrorSubstring(expectedErr))
 				})
 			})
 
@@ -114,7 +119,7 @@ var _ = Describe("", func() {
 				})
 
 				It("should return an error", func() {
-					Expect(util.CreateAnew(client, pod)).ToNot(Succeed())
+					Expect(createAnew()).ToNot(Succeed())
 				})
 			})
 		})
@@ -126,7 +131,7 @@ var _ = Describe("", func() {
 			})
 
 			It("should return an error", func() {
-				Expect(util.CreateAnew(client, pod)).To(ContainErrorSubstring(expectedErr))
+				Expect(createAnew()).To(ContainErrorSubstring(expectedErr))
 			})
 		})
 	})
@@ -135,22 +140,26 @@ var _ = Describe("", func() {
 		var mutateFn util.MutateFn
 
 		BeforeEach(func() {
-			mutateFn = func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+			mutateFn = func(existing runtime.Object) (runtime.Object, error) {
 				obj := test.ToUnstructured(pod)
-				obj.SetUID(existing.GetUID())
+				obj.SetUID(resource.ToMeta(existing).GetUID())
 				return util.Replace(obj)(nil)
 			}
 		})
 
+		createOrUpdate := func() (util.OperationResult, error) {
+			return util.CreateOrUpdate(resource.ForDynamic(client), test.ToUnstructured(pod), mutateFn)
+		}
+
 		testCreateOrUpdateErr := func() {
-			result, err := util.CreateOrUpdate(client, test.ToUnstructured(pod), mutateFn)
+			result, err := createOrUpdate()
 			Expect(err).To(ContainErrorSubstring(expectedErr))
 			Expect(result).To(Equal(util.OperationResultNone))
 		}
 
 		When("no existing resource exists", func() {
 			It("should successfully create the resource", func() {
-				Expect(util.CreateOrUpdate(client, test.ToUnstructured(pod), mutateFn)).To(Equal(util.OperationResultCreated))
+				Expect(createOrUpdate()).To(Equal(util.OperationResultCreated))
 				verifyPod(client, pod)
 			})
 
@@ -177,7 +186,7 @@ var _ = Describe("", func() {
 				})
 
 				It("should eventually update the resource", func() {
-					Expect(util.CreateOrUpdate(client, test.ToUnstructured(pod), mutateFn)).To(Equal(util.OperationResultUpdated))
+					Expect(createOrUpdate()).To(Equal(util.OperationResultUpdated))
 					verifyPod(client, pod)
 				})
 			})
@@ -190,7 +199,7 @@ var _ = Describe("", func() {
 			})
 
 			It("should update the resource", func() {
-				Expect(util.CreateOrUpdate(client, test.ToUnstructured(pod), mutateFn)).To(Equal(util.OperationResultUpdated))
+				Expect(createOrUpdate()).To(Equal(util.OperationResultUpdated))
 				verifyPod(client, pod)
 			})
 
@@ -200,7 +209,7 @@ var _ = Describe("", func() {
 				})
 
 				It("should eventually update the resource", func() {
-					Expect(util.CreateOrUpdate(client, test.ToUnstructured(pod), mutateFn)).To(Equal(util.OperationResultUpdated))
+					Expect(createOrUpdate()).To(Equal(util.OperationResultUpdated))
 					verifyPod(client, pod)
 				})
 			})
@@ -218,13 +227,13 @@ var _ = Describe("", func() {
 
 			Context("and the resource to update is the same", func() {
 				BeforeEach(func() {
-					mutateFn = func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+					mutateFn = func(existing runtime.Object) (runtime.Object, error) {
 						return existing, nil
 					}
 				})
 
 				It("should not update the resource", func() {
-					result, err := util.CreateOrUpdate(client, test.ToUnstructured(pod), mutateFn)
+					result, err := createOrUpdate()
 					Expect(err).To(Succeed())
 					Expect(result).To(Equal(util.OperationResultNone))
 				})
@@ -233,7 +242,7 @@ var _ = Describe("", func() {
 			Context("and the mutate function returns an error", func() {
 				BeforeEach(func() {
 					expectedErr = errors.New("mutate failure")
-					mutateFn = func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+					mutateFn = func(existing runtime.Object) (runtime.Object, error) {
 						return nil, expectedErr
 					}
 				})
