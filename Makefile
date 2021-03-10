@@ -1,3 +1,5 @@
+BASE_BRANCH ?= devel
+export BASE_BRANCH
 
 ifneq (,$(DAPPER_HOST_ARCH))
 
@@ -24,9 +26,13 @@ else
 
 # Not running in Dapper
 
+Makefile.dapper:
+	@echo Downloading $@
+	@curl -sfLO https://raw.githubusercontent.com/submariner-io/shipyard/$(BASE_BRANCH)/$@
+
 include Makefile.dapper
 
 endif
 
 # Disable rebuilding Makefile
-Makefile Makefile.dapper Makefile.inc: ;
+Makefile Makefile.inc: ;

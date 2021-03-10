@@ -2,6 +2,7 @@
 .dapper
 /bin
 dist
+Makefile.dapper
 output
 /vendor
 *.coverprofile
