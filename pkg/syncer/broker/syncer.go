@@ -16,20 +16,16 @@ limitations under the License.
 package broker
 
 import (
-	"crypto/x509"
 	"fmt"
-	"net/url"
 	"reflect"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
+	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -250,71 +246,43 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 }
 
 func createBrokerClient(config *SyncerConfig) error {
+	_, gvr, e := util.ToUnstructuredResource(config.ResourceConfigs[0].BrokerResourceType, config.RestMapper)
+	if e != nil {
+		return e
+	}
+
+	var authorized bool
 	var err error
 
 	if config.BrokerRestConfig != nil {
 		// We have an existing REST configuration, assume it’s correct (but check it anyway)
-		config.BrokerClient, err = getCheckedBrokerClientset(config.BrokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace,
-			config.RestMapper)
-		if err != nil {
-			return err
-		}
+		authorized, err = resource.IsAuthorizedFor(config.BrokerRestConfig, *gvr)
 	} else {
-		var brokerRestConfig *rest.Config
-		// We’ll build a REST configuration from the environment, checking whether we need to provide an explicit trust anchor
-		brokerRestConfig, config.BrokerNamespace, err = BuildBrokerConfigFromEnv(false)
-		if err != nil {
-			return err
+		spec, e := getBrokerSpecification()
+		if e != nil {
+			return e
 		}
 
-		config.BrokerClient, err = getCheckedBrokerClientset(brokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace,
-			config.RestMapper)
-		if err != nil {
-			// Certificate error, try with the trust chain
-			brokerRestConfig, config.BrokerNamespace, err = BuildBrokerConfigFromEnv(true)
-			if err != nil {
-				return err
-			}
-			config.BrokerClient, err = getCheckedBrokerClientset(brokerRestConfig, config.ResourceConfigs[0], config.BrokerNamespace,
-				config.RestMapper)
-		}
+		config.BrokerNamespace = spec.RemoteNamespace
 
-		if err != nil {
-			return err
-		}
+		config.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfig(spec.APIServer, spec.APIServerToken, spec.Ca,
+			rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr)
+	}
+
+	if !authorized {
+		return err
+	}
+
+	if err != nil {
+		klog.Errorf("Error accessing the broker API server: %v", err)
+	}
+
+	config.BrokerClient, err = dynamic.NewForConfig(config.BrokerRestConfig)
+	if err != nil {
+		return err
 	}
 
 	return nil
-}
-
-func getCheckedBrokerClientset(restConfig *rest.Config, rc ResourceConfig, brokerNamespace string,
-	restMapper meta.RESTMapper) (dynamic.Interface, error) {
-	client, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, err
-	}
-	// Try retrieving the resource
-	_, gvr, err := util.ToUnstructuredResource(rc.BrokerResourceType, restMapper)
-	if err != nil {
-		return nil, err
-	}
-
-	resourceClient := client.Resource(*gvr).Namespace(brokerNamespace)
-	_, err = resourceClient.Get("any", metav1.GetOptions{})
-
-	if err != nil {
-		if urlError, ok := err.(*url.Error); ok {
-			if _, ok := urlError.Unwrap().(x509.UnknownAuthorityError); ok {
-				return client, errors.Wrap(err, "cannot access the broker API server")
-			}
-		}
-
-		if !apierrors.IsNotFound(err) {
-			klog.Errorf("Error accessing the broker API server: %v", err)
-		}
-	}
-
-	return client, nil
 }
 
 func (s *Syncer) Start(stopCh <-chan struct{}) error {

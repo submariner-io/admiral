@@ -16,11 +16,7 @@ limitations under the License.
 package broker
 
 import (
-	"encoding/base64"
-	"fmt"
-
 	"github.com/kelseyhightower/envconfig"
-	"k8s.io/client-go/rest"
 )
 
 type brokerSpecification struct {
@@ -31,27 +27,13 @@ type brokerSpecification struct {
 	Ca              string
 }
 
-func BuildBrokerConfigFromEnv(useTokenCAForEndpoint bool) (*rest.Config, string, error) {
+func getBrokerSpecification() (*brokerSpecification, error) {
 	brokerSpec := brokerSpecification{}
+
 	err := envconfig.Process("broker_k8s", &brokerSpec)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	tlsClientConfig := rest.TLSClientConfig{}
-	if brokerSpec.Insecure {
-		tlsClientConfig.Insecure = true
-	} else if useTokenCAForEndpoint {
-		caDecoded, err := base64.StdEncoding.DecodeString(brokerSpec.Ca)
-		if err != nil {
-			return nil, "", fmt.Errorf("error decoding CA data: %v", err)
-		}
-		tlsClientConfig.CAData = caDecoded
-	}
-
-	return &rest.Config{
-		Host:            fmt.Sprintf("https://%s", brokerSpec.APIServer),
-		TLSClientConfig: tlsClientConfig,
-		BearerToken:     brokerSpec.APIServerToken,
-	}, brokerSpec.RemoteNamespace, nil
+	return &brokerSpec, nil
 }
