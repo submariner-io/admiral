@@ -256,7 +256,7 @@ func createBrokerClient(config *SyncerConfig) error {
 
 	if config.BrokerRestConfig != nil {
 		// We have an existing REST configuration, assume it’s correct (but check it anyway)
-		authorized, err = resource.IsAuthorizedFor(config.BrokerRestConfig, *gvr)
+		authorized, err = resource.IsAuthorizedFor(config.BrokerRestConfig, *gvr, config.BrokerNamespace)
 	} else {
 		spec, e := getBrokerSpecification()
 		if e != nil {
@@ -266,7 +266,7 @@ func createBrokerClient(config *SyncerConfig) error {
 		config.BrokerNamespace = spec.RemoteNamespace
 
 		config.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfig(spec.APIServer, spec.APIServerToken, spec.Ca,
-			rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr)
+			rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 	}
 
 	if !authorized {

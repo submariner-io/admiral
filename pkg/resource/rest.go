@@ -30,14 +30,14 @@ import (
 )
 
 func GetAuthorizedRestConfig(apiServer, apiServerToken, caData string, tls rest.TLSClientConfig,
-	gvr schema.GroupVersionResource) (restConfig *rest.Config, authorized bool, err error) {
+	gvr schema.GroupVersionResource, namespace string) (restConfig *rest.Config, authorized bool, err error) {
 	// First try a REST config without the CA trust chain
 	restConfig, err = BuildRestConfig(apiServer, apiServerToken, "", tls)
 	if err != nil {
 		return
 	}
 
-	authorized, err = IsAuthorizedFor(restConfig, gvr)
+	authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
 	if !authorized {
 		// Now try with the trust chain
 		restConfig, err = BuildRestConfig(apiServer, apiServerToken, caData, tls)
@@ -45,7 +45,7 @@ func GetAuthorizedRestConfig(apiServer, apiServerToken, caData string, tls rest.
 			return
 		}
 
-		authorized, err = IsAuthorizedFor(restConfig, gvr)
+		authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
 	}
 
 	return
@@ -68,13 +68,13 @@ func BuildRestConfig(apiServer, apiServerToken, caData string, tls rest.TLSClien
 	}, nil
 }
 
-func IsAuthorizedFor(restConfig *rest.Config, gvr schema.GroupVersionResource) (bool, error) {
+func IsAuthorizedFor(restConfig *rest.Config, gvr schema.GroupVersionResource, namespace string) (bool, error) {
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
 		return false, err
 	}
 
-	_, err = client.Resource(gvr).Namespace("").Get("any", metav1.GetOptions{})
+	_, err = client.Resource(gvr).Namespace(namespace).Get("any", metav1.GetOptions{})
 	if IsUnknownAuthorityError(err) {
 		return false, errors.Wrapf(err, "cannot access the API server %q", restConfig.Host)
 	}
