@@ -1,7 +1,7 @@
 ARG BASE_BRANCH
 FROM quay.io/submariner/shipyard-dapper-base:${BASE_BRANCH}
 
-ENV DAPPER_ENV=REPO DAPPER_ENV=TAG \
+ENV DAPPER_ENV="MAKEFLAGS REPO TAG" \
     DAPPER_SOURCE=/go/src/github.com/submariner-io/admiral DAPPER_DOCKER_SOCKET=true
 ENV DAPPER_OUTPUT=${DAPPER_SOURCE}/output
 
