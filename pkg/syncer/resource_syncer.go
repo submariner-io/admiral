@@ -290,9 +290,10 @@ func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bo
 }
 
 func (r *resourceSyncer) ListResources() ([]runtime.Object, error) {
-	var retObjects []runtime.Object
+	list := r.store.List()
+	retObjects := make([]runtime.Object, 0, len(list))
 
-	for _, obj := range r.store.List() {
+	for _, obj := range list {
 		converted := r.config.ResourceType.DeepCopyObject()
 		err := r.config.Scheme.Convert(obj.(*unstructured.Unstructured), converted, nil)
 		if err != nil {
