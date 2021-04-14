@@ -131,8 +131,8 @@ func GetRESTMapperAndGroupVersionResourceFor(obj runtime.Object) (metaapi.RESTMa
 }
 
 func GetRESTMapperFor(objs ...runtime.Object) metaapi.RESTMapper {
-	var gvs []schema.GroupVersion
-	var gvks []schema.GroupVersionKind
+	gvs := make([]schema.GroupVersion, 0, len(objs))
+	gvks := make([]schema.GroupVersionKind, 0, len(objs))
 
 	for _, obj := range objs {
 		gvk := GetGroupVersionKindFor(obj)
@@ -166,7 +166,7 @@ func GetGroupVersionResourceFor(restMapper metaapi.RESTMapper, obj runtime.Objec
 }
 
 func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Object) []runtime.Object {
-	var newObjs []runtime.Object
+	newObjs := make([]runtime.Object, 0, len(initObjs))
 
 	for _, obj := range initObjs {
 		raw := ToUnstructured(obj)
