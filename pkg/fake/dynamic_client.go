@@ -18,6 +18,7 @@ package fake
 import (
 	"fmt"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,11 +36,13 @@ import (
 
 type DynamicClient struct {
 	*fake.FakeDynamicClient
+	sync.Mutex
 	namespaceableResources map[schema.GroupVersionResource]dynamic.NamespaceableResourceInterface
 }
 
 type namespaceableResource struct {
 	dynamic.NamespaceableResourceInterface
+	sync.Mutex
 	resourceClients map[string]dynamic.ResourceInterface
 }
 
@@ -71,6 +74,9 @@ func NewDynamicClient(scheme *runtime.Scheme, objects ...runtime.Object) *Dynami
 }
 
 func (f *DynamicClient) Resource(gvr schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
+	f.Lock()
+	defer f.Unlock()
+
 	i := f.namespaceableResources[gvr]
 	if i != nil {
 		return i
@@ -85,6 +91,9 @@ func (f *DynamicClient) Resource(gvr schema.GroupVersionResource) dynamic.Namesp
 }
 
 func (f *namespaceableResource) Namespace(namespace string) dynamic.ResourceInterface {
+	f.Lock()
+	defer f.Unlock()
+
 	i := f.resourceClients[namespace]
 	if i != nil {
 		return i

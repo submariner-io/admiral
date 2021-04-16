@@ -16,6 +16,8 @@ limitations under the License.
 package broker_test
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/fake"
@@ -33,18 +35,20 @@ import (
 
 var _ = Describe("Broker Syncer", func() {
 	var (
-		syncer           *broker.Syncer
-		config           *broker.SyncerConfig
-		localClient      *fake.DynamicResourceClient
-		brokerClient     *fake.DynamicResourceClient
-		resource         *corev1.Pod
-		transformed      *corev1.Pod
-		initialResources []runtime.Object
-		stopCh           chan struct{}
+		syncer                 *broker.Syncer
+		config                 *broker.SyncerConfig
+		localClient            *fake.DynamicResourceClient
+		brokerClient           *fake.DynamicResourceClient
+		resource               *corev1.Pod
+		transformed            *corev1.Pod
+		initialLocalResources  []runtime.Object
+		initialBrokerResources []runtime.Object
+		stopCh                 chan struct{}
 	)
 
 	BeforeEach(func() {
-		initialResources = nil
+		initialLocalResources = nil
+		initialBrokerResources = nil
 		stopCh = make(chan struct{})
 		resource = test.NewPod("")
 
@@ -72,8 +76,9 @@ var _ = Describe("Broker Syncer", func() {
 
 		config.RestMapper, gvr = test.GetRESTMapperAndGroupVersionResourceFor(resource)
 
-		config.LocalClient = fake.NewDynamicClient(config.Scheme, test.PrepInitialClientObjs("", "", initialResources...)...)
-		config.BrokerClient = fake.NewDynamicClient(config.Scheme)
+		config.LocalClient = fake.NewDynamicClient(config.Scheme, test.PrepInitialClientObjs("", "", initialLocalResources...)...)
+		config.BrokerClient = fake.NewDynamicClient(config.Scheme, test.PrepInitialClientObjs(config.BrokerNamespace,
+			"", initialBrokerResources...)...)
 
 		localClient = config.LocalClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace).(*fake.DynamicResourceClient)
 		brokerClient = config.BrokerClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)
@@ -89,19 +94,25 @@ var _ = Describe("Broker Syncer", func() {
 		close(stopCh)
 	})
 
-	When("a local resource is created then deleted in the local datastore", func() {
-		It("should correctly sync to the broker datastore", func() {
+	When("a local resource is created in the local datastore", func() {
+		JustBeforeEach(func() {
 			test.CreateResource(localClient, resource)
-
 			test.AwaitResource(brokerClient, resource.GetName())
+		})
+
+		It("should correctly sync to the broker datastore", func() {
 			test.VerifyResource(brokerClient, resource, config.BrokerNamespace, config.LocalClusterID)
+		})
 
-			Expect(localClient.ResourceInterface.Delete(resource.GetName(), nil)).To(Succeed())
-			test.AwaitNoResource(brokerClient, resource.GetName())
+		Context("and then deleted", func() {
+			It("should be deletes from the broker datastore", func() {
+				Expect(localClient.ResourceInterface.Delete(resource.GetName(), nil)).To(Succeed())
+				test.AwaitNoResource(brokerClient, resource.GetName())
 
-			// Ensure the broker syncer did not try to sync back to the local datastore
-			localClient.VerifyNoUpdate(resource.GetName())
-			localClient.VerifyNoDelete(resource.GetName())
+				// Ensure the broker syncer did not try to sync back to the local datastore
+				localClient.VerifyNoUpdate(resource.GetName())
+				localClient.VerifyNoDelete(resource.GetName())
+			})
 		})
 	})
 
@@ -114,20 +125,26 @@ var _ = Describe("Broker Syncer", func() {
 		})
 	})
 
-	When("a non-local resource is created then deleted in the broker datastore", func() {
-		It("should correctly sync to the local datastore", func() {
+	When("a non-local resource is created in the broker datastore", func() {
+		JustBeforeEach(func() {
 			test.SetClusterIDLabel(resource, "remote")
 			test.CreateResource(brokerClient, resource)
-
 			test.AwaitResource(localClient, resource.GetName())
+		})
+
+		It("should correctly sync to the local datastore", func() {
 			test.VerifyResource(localClient, resource, config.LocalNamespace, "remote")
+		})
 
-			Expect(brokerClient.ResourceInterface.Delete(resource.GetName(), nil)).To(Succeed())
-			test.AwaitNoResource(localClient, resource.GetName())
+		Context("and then deleted", func() {
+			It("should be deleted from the broker datastore", func() {
+				Expect(brokerClient.ResourceInterface.Delete(resource.GetName(), nil)).To(Succeed())
+				test.AwaitNoResource(localClient, resource.GetName())
 
-			// Ensure the local syncer did not try to sync back to the broker datastore
-			brokerClient.VerifyNoUpdate(resource.GetName())
-			brokerClient.VerifyNoDelete(resource.GetName())
+				// Ensure the local syncer did not try to sync back to the broker datastore
+				brokerClient.VerifyNoUpdate(resource.GetName())
+				brokerClient.VerifyNoDelete(resource.GetName())
+			})
 		})
 	})
 
@@ -144,13 +161,51 @@ var _ = Describe("Broker Syncer", func() {
 		BeforeEach(func() {
 			config.ResourceConfigs[0].LocalSourceNamespace = metav1.NamespaceAll
 			resource.SetNamespace(metav1.NamespaceDefault)
-			initialResources = append(initialResources, resource)
+			initialLocalResources = append(initialLocalResources, resource)
 		})
 
-		When("a local resource is created in any namespace", func() {
+		Context("and a local resource is created in any namespace", func() {
 			It("should sync to the broker datastore", func() {
 				test.AwaitResource(brokerClient, resource.GetName())
-				test.VerifyResource(brokerClient, resource, config.BrokerNamespace, config.LocalClusterID)
+
+				actual := test.GetPod(brokerClient, resource)
+				Expect(actual.Labels).To(HaveKeyWithValue(sync.OrigNamespaceLabelKey, metav1.NamespaceDefault))
+			})
+		})
+
+		Context("and a local resource is stale in the broker datastore on startup", func() {
+			var staleResource *corev1.Pod
+
+			BeforeEach(func() {
+				staleResource = test.NewPod(config.BrokerNamespace)
+				staleResource.Name = "stale-pod"
+				test.SetClusterIDLabel(staleResource, config.LocalClusterID)
+				staleResource.Labels[sync.OrigNamespaceLabelKey] = metav1.NamespaceDefault
+				initialBrokerResources = append(initialBrokerResources, staleResource)
+			})
+
+			It("should delete it from the broker datastore on reconciliation", func() {
+				test.AwaitNoResource(brokerClient, staleResource.GetName())
+			})
+		})
+
+		Context("and a resource exists locally and in the broker datastore on startup", func() {
+			var localResource *corev1.Pod
+
+			BeforeEach(func() {
+				localResource = test.NewPod(metav1.NamespaceDefault)
+				localResource.Name = "local-pod"
+				initialLocalResources = append(initialLocalResources, localResource)
+
+				copy := localResource.DeepCopy()
+				test.SetClusterIDLabel(copy, config.LocalClusterID)
+				copy.Labels[sync.OrigNamespaceLabelKey] = metav1.NamespaceDefault
+				initialBrokerResources = append(initialBrokerResources, copy)
+			})
+
+			It("should not delete it from the broker datastore on reconciliation", func() {
+				time.Sleep(100 * time.Millisecond)
+				test.AwaitResource(brokerClient, localResource.GetName())
 			})
 		})
 	})
@@ -183,7 +238,7 @@ var _ = Describe("Broker Syncer", func() {
 			}
 		})
 
-		When("a resource is created in the broker datastore", func() {
+		Context("and a resource is created in the broker datastore", func() {
 			It("should sync the transformed resource to the local datastore", func() {
 				test.SetClusterIDLabel(resource, "remote")
 				test.CreateResource(brokerClient, resource)
@@ -203,7 +258,7 @@ var _ = Describe("Broker Syncer", func() {
 			test.UpdateResource(localClient, resource)
 		})
 
-		When("the default equivalence function is specified", func() {
+		Context("and the default equivalence function is specified", func() {
 			BeforeEach(func() {
 				config.ResourceConfigs[0].LocalResourcesEquivalent = sync.DefaultResourcesEquivalent
 			})
@@ -213,7 +268,7 @@ var _ = Describe("Broker Syncer", func() {
 			})
 		})
 
-		When("a custom equivalence function is specified that compares Status", func() {
+		Context("and a custom equivalence function is specified that compares Status", func() {
 			BeforeEach(func() {
 				config.ResourceConfigs[0].LocalResourcesEquivalent = func(obj1, obj2 *unstructured.Unstructured) bool {
 					return equality.Semantic.DeepEqual(util.GetNestedField(obj1, "status"),
@@ -240,7 +295,7 @@ var _ = Describe("Broker Syncer", func() {
 			test.UpdateResource(brokerClient, resource)
 		})
 
-		When("the default equivalence function is specified", func() {
+		Context("and the default equivalence function is specified", func() {
 			BeforeEach(func() {
 				config.ResourceConfigs[0].BrokerResourcesEquivalent = sync.DefaultResourcesEquivalent
 			})
@@ -250,7 +305,7 @@ var _ = Describe("Broker Syncer", func() {
 			})
 		})
 
-		When("a custom equivalence function is specified that compares Status", func() {
+		Context("and a custom equivalence function is specified that compares Status", func() {
 			BeforeEach(func() {
 				config.ResourceConfigs[0].BrokerResourcesEquivalent = func(obj1, obj2 *unstructured.Unstructured) bool {
 					return equality.Semantic.DeepEqual(util.GetNestedField(obj1, "status"),
@@ -264,6 +319,89 @@ var _ = Describe("Broker Syncer", func() {
 					return corev1.PodPhase(v) == corev1.PodRunning
 				})
 			})
+		})
+	})
+
+	When("a synced non-local resource is stale in the local datastore on startup", func() {
+		BeforeEach(func() {
+			resource.SetNamespace(config.LocalNamespace)
+			test.SetClusterIDLabel(resource, "remote")
+			initialLocalResources = append(initialLocalResources, resource)
+		})
+
+		It("should delete it from the local datastore on reconciliation", func() {
+			test.AwaitNoResource(localClient, resource.GetName())
+		})
+	})
+
+	When("a synced non-local resource exists locally and in the broker datastore on startup", func() {
+		BeforeEach(func() {
+			resource.SetNamespace(config.LocalNamespace)
+			test.SetClusterIDLabel(resource, "remote")
+			initialLocalResources = append(initialLocalResources, resource)
+
+			copy := resource.DeepCopy()
+			copy.SetNamespace(config.BrokerNamespace)
+			initialBrokerResources = append(initialBrokerResources, copy)
+		})
+
+		It("should not delete it from the local datastore on reconciliation", func() {
+			time.Sleep(100 * time.Millisecond)
+			test.AwaitResource(localClient, resource.GetName())
+		})
+	})
+
+	When("an unsynced local resource does not exist in the broker datastore on startup", func() {
+		BeforeEach(func() {
+			resource.SetNamespace(config.LocalNamespace)
+			initialLocalResources = append(initialLocalResources, resource)
+		})
+
+		It("should not delete it from the local datastore on reconciliation", func() {
+			time.Sleep(100 * time.Millisecond)
+			test.AwaitResource(localClient, resource.GetName())
+		})
+	})
+
+	When("a synced local resource is stale in the broker datastore on startup", func() {
+		BeforeEach(func() {
+			resource.SetNamespace(config.BrokerNamespace)
+			test.SetClusterIDLabel(resource, config.LocalClusterID)
+			initialBrokerResources = append(initialBrokerResources, resource)
+		})
+
+		It("should delete it from the broker datastore on reconciliation", func() {
+			test.AwaitNoResource(brokerClient, resource.GetName())
+		})
+	})
+
+	When("a synced local resource exists in the broker datastore on startup", func() {
+		BeforeEach(func() {
+			resource.SetNamespace(config.LocalNamespace)
+			initialLocalResources = append(initialLocalResources, resource)
+
+			copy := resource.DeepCopy()
+			copy.SetNamespace(config.BrokerNamespace)
+			test.SetClusterIDLabel(copy, config.LocalClusterID)
+			initialBrokerResources = append(initialBrokerResources, copy)
+		})
+
+		It("should not delete it from the broker datastore on reconciliation", func() {
+			time.Sleep(100 * time.Millisecond)
+			test.AwaitResource(brokerClient, resource.GetName())
+		})
+	})
+
+	When("a synced non-local resource does not exist in the local datastore on startup", func() {
+		BeforeEach(func() {
+			resource.SetNamespace(config.BrokerNamespace)
+			test.SetClusterIDLabel(resource, "remote")
+			initialBrokerResources = append(initialBrokerResources, resource)
+		})
+
+		It("should not delete it from the broker datastore on reconciliation", func() {
+			time.Sleep(100 * time.Millisecond)
+			test.AwaitResource(brokerClient, resource.GetName())
 		})
 	})
 

@@ -40,11 +40,15 @@ import (
 	"k8s.io/klog"
 )
 
+const OrigNamespaceLabelKey = "submariner-io/originatingNamespace"
+
 type SyncDirection int
 
 const (
+	None SyncDirection = iota
+
 	// Resources are synced from a local source to a remote source.
-	LocalToRemote SyncDirection = iota
+	LocalToRemote
 
 	// Resources are synced from a remote source to a local source.
 	RemoteToLocal
@@ -175,6 +179,7 @@ type resourceSyncer struct {
 	created     sync.Map
 	stopped     chan struct{}
 	syncCounter *prometheus.GaugeVec
+	stopCh      <-chan struct{}
 }
 
 func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
@@ -241,6 +246,8 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 	klog.V(log.LIBDEBUG).Infof("Starting syncer %q", r.config.Name)
 
+	r.stopCh = stopCh
+
 	go func() {
 		defer func() {
 			r.stopped <- struct{}{}
@@ -290,6 +297,10 @@ func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bo
 }
 
 func (r *resourceSyncer) ListResources() ([]runtime.Object, error) {
+	if ok := cache.WaitForCacheSync(r.stopCh, r.informer.HasSynced); !ok {
+		return nil, fmt.Errorf("failed to wait for informer cache to sync")
+	}
+
 	list := r.store.List()
 	retObjects := make([]runtime.Object, 0, len(list))
 
@@ -304,6 +315,70 @@ func (r *resourceSyncer) ListResources() ([]runtime.Object, error) {
 	}
 
 	return retObjects, nil
+}
+
+func (r *resourceSyncer) Reconcile(resourceLister func() []runtime.Object) {
+	go func() {
+		if ok := cache.WaitForCacheSync(r.stopCh, r.informer.HasSynced); !ok {
+			klog.Errorf("Unable to reconcile - failed to wait for informer cache to sync")
+			return
+		}
+
+		resourceType := reflect.TypeOf(r.config.ResourceType)
+
+		for _, resource := range resourceLister() {
+			if reflect.TypeOf(resource) != resourceType {
+				// This would happen if the custom transform function returned a different type. We would need a custom
+				// reverse transform function to handle this. Possible future work, for now bail.
+				klog.Warningf("Unable to reconcile type %T - expected type %T", resource, resourceType)
+				return
+			}
+
+			metaObj := resourceUtil.ToMeta(resource)
+			clusterID, found := getClusterIDLabel(resource)
+			ns := r.config.SourceNamespace
+
+			switch r.config.Direction {
+			case None:
+				ns = metaObj.GetNamespace()
+			case RemoteToLocal:
+				if !found || clusterID == r.config.LocalClusterID {
+					continue
+				}
+			case LocalToRemote:
+				if clusterID != r.config.LocalClusterID {
+					continue
+				}
+
+				labels := metaObj.GetLabels()
+				delete(labels, federate.ClusterIDLabelKey)
+				metaObj.SetLabels(labels)
+
+				if ns == metav1.NamespaceAll {
+					ns = metaObj.GetLabels()[OrigNamespaceLabelKey]
+				}
+			}
+
+			if ns == "" {
+				klog.Warningf("Unable to reconcile resource %s/%s - cannot determine originating namespace",
+					metaObj.GetNamespace(), metaObj.GetName())
+				continue
+			}
+
+			metaObj.SetNamespace(ns)
+
+			key, _ := cache.MetaNamespaceKeyFunc(resource)
+
+			_, exists, _ := r.store.GetByKey(key)
+			if exists {
+				continue
+			}
+
+			obj, _ := resourceUtil.ToUnstructured(resource)
+			r.deleted.Store(key, obj)
+			r.workQueue.Enqueue(obj)
+		}
+	}()
 }
 
 func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error) {
@@ -334,6 +409,12 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 			}
 
 			return requeue, nil
+		}
+
+		if r.config.SourceNamespace == metav1.NamespaceAll && resource.GetNamespace() != "" {
+			resource = resource.DeepCopy()
+			_ = unstructured.SetNestedField(resource.Object, resource.GetNamespace(),
+				util.MetadataField, util.LabelsField, OrigNamespaceLabelKey)
 		}
 
 		klog.V(log.LIBDEBUG).Infof("Syncer %q syncing resource %q", r.config.Name, resource.GetName())
@@ -423,6 +504,7 @@ func (r *resourceSyncer) convert(from interface{}) runtime.Object {
 	return converted
 }
 
+//nolint:interfacer //false positive for "`from` can be `k8s.io/apimachinery/pkg/runtime.Object`" as it returns 'from' as Unstructured
 func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 	op Operation) (*unstructured.Unstructured, runtime.Object, bool) {
 	if r.config.Transform == nil {
@@ -538,26 +620,31 @@ func (r *resourceSyncer) shouldProcess(resource *unstructured.Unstructured, op O
 
 func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 	clusterID, found := getClusterIDLabel(resource)
-	if r.config.Direction == LocalToRemote && found {
-		// This is the local -> remote case - only sync local resources w/o the label, assuming any resource with the
-		// label originated from a remote source.
-		klog.V(log.LIBDEBUG).Infof("Syncer %q: found cluster ID label %q - not syncing resource %q", r.config.Name,
-			clusterID, resource.GetName())
-		return false
-	}
 
-	if r.config.Direction == RemoteToLocal && r.config.LocalClusterID != "" && (!found || clusterID == r.config.LocalClusterID) {
-		// This is the remote -> local case - do not sync local resources
-		klog.V(log.LIBDEBUG).Infof("Syncer %q: cluster ID label %q not present or matches local cluster ID %q - not syncing resource %q",
-			r.config.Name, clusterID, r.config.LocalClusterID, resource.GetName())
-		return false
+	switch r.config.Direction {
+	case LocalToRemote:
+		if found {
+			// This is the local -> remote case - only sync local resources w/o the label, assuming any resource with the
+			// label originated from a remote source.
+			klog.V(log.LIBDEBUG).Infof("Syncer %q: found cluster ID label %q - not syncing resource %q", r.config.Name,
+				clusterID, resource.GetName())
+			return false
+		}
+	case RemoteToLocal:
+		if r.config.LocalClusterID != "" && (!found || clusterID == r.config.LocalClusterID) {
+			// This is the remote -> local case - do not sync local resources
+			klog.V(log.LIBDEBUG).Infof("Syncer %q: cluster ID label %q not present or matches local cluster ID %q - not syncing resource %q",
+				r.config.Name, clusterID, r.config.LocalClusterID, resource.GetName())
+			return false
+		}
+	default:
 	}
 
 	return true
 }
 
-func getClusterIDLabel(resource *unstructured.Unstructured) (string, bool) {
-	clusterID, found, _ := unstructured.NestedString(resource.Object, util.MetadataField, util.LabelsField, federate.ClusterIDLabelKey)
+func getClusterIDLabel(resource runtime.Object) (string, bool) {
+	clusterID, found := resourceUtil.ToMeta(resource).GetLabels()[federate.ClusterIDLabelKey]
 	return clusterID, found
 }
 

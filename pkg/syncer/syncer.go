@@ -25,4 +25,6 @@ type Interface interface {
 	GetResource(name, namespace string) (runtime.Object, bool, error)
 
 	ListResources() ([]runtime.Object, error)
+
+	Reconcile(resourceLister func() []runtime.Object)
 }
