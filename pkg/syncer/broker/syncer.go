@@ -293,6 +293,29 @@ func (s *Syncer) Start(stopCh <-chan struct{}) error {
 		}
 	}
 
+	lister := func(s syncer.Interface) []runtime.Object {
+		list, err := s.ListResources()
+		if err != nil {
+			klog.Errorf("Unable to reconcile - error listing resources: %v", err)
+			return nil
+		}
+
+		return list
+	}
+
+	for i := 0; i < len(s.syncers); i += 2 {
+		localSyncer := s.syncers[i]
+		remoteSyncer := s.syncers[i+1]
+
+		remoteSyncer.Reconcile(func() []runtime.Object {
+			return lister(localSyncer)
+		})
+
+		localSyncer.Reconcile(func() []runtime.Object {
+			return lister(remoteSyncer)
+		})
+	}
+
 	return nil
 }
 
