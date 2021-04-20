@@ -105,7 +105,7 @@ var _ = Describe("Broker Syncer", func() {
 		})
 
 		Context("and then deleted", func() {
-			It("should be deletes from the broker datastore", func() {
+			It("should be deleted from the broker datastore", func() {
 				Expect(localClient.ResourceInterface.Delete(resource.GetName(), nil)).To(Succeed())
 				test.AwaitNoResource(brokerClient, resource.GetName())
 
