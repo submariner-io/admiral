@@ -16,6 +16,7 @@ limitations under the License.
 package test
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/gomega"
@@ -41,7 +42,7 @@ func GetResourceAndError(resourceInterface dynamic.ResourceInterface, obj runtim
 	meta, err := metaapi.Accessor(obj)
 	Expect(err).To(Succeed())
 
-	return resourceInterface.Get(meta.GetName(), metav1.GetOptions{})
+	return resourceInterface.Get(context.TODO(), meta.GetName(), metav1.GetOptions{})
 }
 
 func GetResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
@@ -52,14 +53,14 @@ func GetResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object
 }
 
 func CreateResource(resourceInterface dynamic.ResourceInterface, resource runtime.Object) *unstructured.Unstructured {
-	obj, err := resourceInterface.Create(ToUnstructured(resource), metav1.CreateOptions{})
+	obj, err := resourceInterface.Create(context.TODO(), ToUnstructured(resource), metav1.CreateOptions{})
 	Expect(err).To(Succeed())
 
 	return obj
 }
 
 func UpdateResource(resourceInterface dynamic.ResourceInterface, resource runtime.Object) *unstructured.Unstructured {
-	obj, err := resourceInterface.Update(ToUnstructured(resource), metav1.UpdateOptions{})
+	obj, err := resourceInterface.Update(context.TODO(), ToUnstructured(resource), metav1.UpdateOptions{})
 	Expect(err).To(Succeed())
 
 	return obj
@@ -229,7 +230,7 @@ func AwaitAndVerifyResource(client dynamic.ResourceInterface, name string,
 	var found *unstructured.Unstructured
 
 	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
-		obj, err := client.Get(name, metav1.GetOptions{})
+		obj, err := client.Get(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				return false, nil
@@ -252,7 +253,7 @@ func AwaitAndVerifyResource(client dynamic.ResourceInterface, name string,
 
 func AwaitNoResource(client dynamic.ResourceInterface, name string) {
 	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
-		_, err := client.Get(name, metav1.GetOptions{})
+		_, err := client.Get(context.TODO(), name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return true, nil
 		}

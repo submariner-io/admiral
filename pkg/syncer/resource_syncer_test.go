@@ -16,6 +16,7 @@ limitations under the License.
 package syncer_test
 
 import (
+	"context"
 	"errors"
 	"sync/atomic"
 	"time"
@@ -155,6 +156,7 @@ func testRemoteToLocalWithoutLocalClusterID() {
 
 func testTransformFunction() {
 	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	ctx := context.TODO()
 
 	var transformed *corev1.Pod
 	var expOperation chan syncer.Operation
@@ -206,7 +208,7 @@ func testTransformFunction() {
 			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 			d.federator.VerifyDelete(test.ToUnstructured(transformed))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 		})
@@ -222,7 +224,7 @@ func testTransformFunction() {
 			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 			d.federator.VerifyDelete(test.ToUnstructured(transformed))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
@@ -273,7 +275,7 @@ func testTransformFunction() {
 				atomic.StoreInt32(&count, 0)
 				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
-				Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+				Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				d.federator.VerifyNoDelete()
 				Expect(int(atomic.LoadInt32(&count))).To(Equal(1))
 				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
@@ -319,7 +321,7 @@ func testTransformFunction() {
 				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 				transformFuncRet.Store(nilResource)
 
-				Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+				Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				d.federator.VerifyDelete(test.ToUnstructured(transformed))
 				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 			})
@@ -329,6 +331,7 @@ func testTransformFunction() {
 
 func testOnSuccessfulSyncFunction() {
 	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	ctx := context.TODO()
 
 	var expResource *corev1.Pod
 	var expOperation chan syncer.Operation
@@ -378,7 +381,7 @@ func testOnSuccessfulSyncFunction() {
 			d.federator.VerifyDistribute(expected)
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 			d.federator.VerifyDelete(expected)
 			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 		})
@@ -423,7 +426,7 @@ func testOnSuccessfulSyncFunction() {
 			d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, d.resource))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 			Consistently(expOperation, 300*time.Millisecond).ShouldNot(Receive())
 		})
 	})
@@ -431,6 +434,7 @@ func testOnSuccessfulSyncFunction() {
 
 func testShouldProcessFunction() {
 	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	ctx := context.TODO()
 
 	var (
 		expResource   *corev1.Pod
@@ -518,7 +522,7 @@ func testShouldProcessFunction() {
 				d.federator.VerifyDistribute(expected)
 				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
-				Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+				Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				d.federator.VerifyDelete(expected)
 				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 			})
@@ -533,7 +537,7 @@ func testShouldProcessFunction() {
 				d.federator.VerifyNoDistribute()
 				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
-				Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+				Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				d.federator.VerifyNoDelete()
 				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 			})
@@ -543,6 +547,7 @@ func testShouldProcessFunction() {
 
 func testSyncErrors() {
 	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	ctx := context.TODO()
 
 	var expectedErr error
 
@@ -571,7 +576,7 @@ func testSyncErrors() {
 			expected := test.GetResource(d.sourceClient, d.resource)
 			d.federator.VerifyDistribute(expected)
 
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 			Eventually(d.handledError, 5).Should(Receive(ContainErrorSubstring(expectedErr)))
 			d.federator.VerifyDelete(expected)
 		})
@@ -587,7 +592,7 @@ func testSyncErrors() {
 			expected := test.GetResource(d.sourceClient, d.resource)
 			d.federator.VerifyDistribute(expected)
 
-			Expect(d.sourceClient.Delete(d.resource.GetName(), nil)).To(Succeed())
+			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 			Consistently(d.handledError, 300*time.Millisecond).ShouldNot(Receive(), "Error was unexpectedly logged")
 		})
 	})
@@ -889,7 +894,7 @@ func (t *testDriver) verifyDistributeOnDeleteTest(clusterID string) {
 		expected := test.GetResource(t.sourceClient, t.resource)
 		t.federator.VerifyDistribute(expected)
 
-		Expect(t.sourceClient.Delete(t.resource.GetName(), nil)).To(Succeed())
+		Expect(t.sourceClient.Delete(context.TODO(), t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 		t.federator.VerifyDelete(expected)
 	})
 }
@@ -902,7 +907,7 @@ func (t *testDriver) verifyNoDistributeOnDeleteTest(clusterID string) {
 	It("should not delete it", func() {
 		t.federator.VerifyNoDistribute()
 
-		Expect(t.sourceClient.Delete(t.resource.GetName(), nil)).To(Succeed())
+		Expect(t.sourceClient.Delete(context.TODO(), t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 		t.federator.VerifyNoDelete()
 	})
 }

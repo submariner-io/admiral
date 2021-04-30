@@ -16,6 +16,7 @@ limitations under the License.
 package util_test
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -28,6 +29,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -67,7 +69,7 @@ var _ = Describe("", func() {
 	})
 
 	createAnew := func() error {
-		return util.CreateAnew(resource.ForDynamic(client), pod, nil)
+		return util.CreateAnew(context.TODO(), resource.ForDynamic(client), pod, metav1.CreateOptions{}, metav1.DeleteOptions{})
 	}
 
 	Describe("CreateAnew function", func() {
@@ -148,7 +150,7 @@ var _ = Describe("", func() {
 		})
 
 		createOrUpdate := func() (util.OperationResult, error) {
-			return util.CreateOrUpdate(resource.ForDynamic(client), test.ToUnstructured(pod), mutateFn)
+			return util.CreateOrUpdate(context.TODO(), resource.ForDynamic(client), test.ToUnstructured(pod), mutateFn)
 		}
 
 		testCreateOrUpdateErr := func() {

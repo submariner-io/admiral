@@ -16,6 +16,7 @@ limitations under the License.
 package util
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
@@ -48,11 +49,11 @@ func DeleteAllOf(client dynamic.Interface, gvr *schema.GroupVersionResource, nam
 	By(fmt.Sprintf("Deleting all %s in namespace %q from %q", gvr.Resource, namespace, clusterName))
 
 	resource := client.Resource(*gvr).Namespace(namespace)
-	Expect(resource.DeleteCollection(nil, metav1.ListOptions{})).To(Succeed())
+	Expect(resource.DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{})).To(Succeed())
 
 	framework.AwaitUntil(fmt.Sprintf("list %s in namespace %q from %q", gvr.Resource, namespace, clusterName), func() (i interface{},
 		e error) {
-		return resource.List(metav1.ListOptions{})
+		return resource.List(context.TODO(), metav1.ListOptions{})
 	}, func(result interface{}) (bool, string, error) {
 		list := result.(*unstructured.UnstructuredList)
 		if len(list.Items) != 0 {
@@ -66,7 +67,7 @@ func DeleteAllOf(client dynamic.Interface, gvr *schema.GroupVersionResource, nam
 func CreateToaster(client dynamic.Interface, toaster *testV1.Toaster, clusterName string) *testV1.Toaster {
 	By(fmt.Sprintf("Creating Toaster %q in namespace %q in %q", toaster.Name, toaster.Namespace, clusterName))
 
-	obj, err := client.Resource(*ToasterGVR()).Namespace(toaster.Namespace).Create(test.ToUnstructured(toaster),
+	obj, err := client.Resource(*ToasterGVR()).Namespace(toaster.Namespace).Create(context.TODO(), test.ToUnstructured(toaster),
 		metav1.CreateOptions{})
 	Expect(err).To(Succeed())
 
@@ -84,7 +85,7 @@ func DeleteToaster(client dynamic.Interface, toDelete runtime.Object, clusterNam
 
 	msg := fmt.Sprintf("delete Toaster %q in namespace %q from %q", meta.GetName(), meta.GetNamespace(), clusterName)
 	framework.AwaitUntil(msg, func() (i interface{}, e error) {
-		return nil, client.Resource(*ToasterGVR()).Namespace(meta.GetNamespace()).Delete(meta.GetName(), nil)
+		return nil, client.Resource(*ToasterGVR()).Namespace(meta.GetNamespace()).Delete(context.TODO(), meta.GetName(), metav1.DeleteOptions{})
 	}, framework.NoopCheckResult)
 }
 

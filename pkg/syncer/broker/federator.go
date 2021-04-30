@@ -16,6 +16,8 @@ limitations under the License.
 package broker
 
 import (
+	"context"
+
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/resource"
@@ -68,15 +70,16 @@ func (f *federator) Distribute(obj runtime.Object) error {
 
 	f.prepareResourceForSync(toDistribute)
 
-	_, err = util.CreateOrUpdate(resource.ForDynamic(resourceClient), toDistribute, func(obj runtime.Object) (runtime.Object, error) {
-		// Preserve the existing metadata info (except Labels and Annotations), specifically the ResourceVersion which must
-		// be set on an update operation.
-		existing := obj.(*unstructured.Unstructured)
-		existing.SetLabels(toDistribute.GetLabels())
-		existing.SetAnnotations(toDistribute.GetAnnotations())
-		setNestedField(toDistribute.Object, util.GetMetadata(existing), util.MetadataField)
-		return toDistribute, nil
-	})
+	_, err = util.CreateOrUpdate(context.TODO(), resource.ForDynamic(resourceClient), toDistribute,
+		func(obj runtime.Object) (runtime.Object, error) {
+			// Preserve the existing metadata info (except Labels and Annotations), specifically the ResourceVersion which must
+			// be set on an update operation.
+			existing := obj.(*unstructured.Unstructured)
+			existing.SetLabels(toDistribute.GetLabels())
+			existing.SetAnnotations(toDistribute.GetAnnotations())
+			setNestedField(toDistribute.Object, util.GetMetadata(existing), util.MetadataField)
+			return toDistribute, nil
+		})
 
 	return err
 }
@@ -89,7 +92,7 @@ func (f *federator) Delete(obj runtime.Object) error {
 
 	klog.V(log.LIBTRACE).Infof("Deleting resource: %#v", toDelete)
 
-	return resourceClient.Delete(toDelete.GetName(), &metav1.DeleteOptions{})
+	return resourceClient.Delete(context.TODO(), toDelete.GetName(), metav1.DeleteOptions{})
 }
 
 func (f *federator) toUnstructured(from runtime.Object) (*unstructured.Unstructured, dynamic.ResourceInterface, error) {

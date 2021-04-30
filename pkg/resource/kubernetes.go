@@ -16,6 +16,8 @@ limitations under the License.
 package resource
 
 import (
+	"context"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -27,17 +29,17 @@ import (
 //nolint:dupl //false positive - lines are similar but not duplicated
 func ForDeployment(client kubernetes.Interface, namespace string) Interface {
 	return &InterfaceFuncs{
-		GetFunc: func(name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.AppsV1().Deployments(namespace).Get(name, options)
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+			return client.AppsV1().Deployments(namespace).Get(ctx, name, options)
 		},
-		CreateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.AppsV1().Deployments(namespace).Create(obj.(*appsv1.Deployment))
+		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+			return client.AppsV1().Deployments(namespace).Create(ctx, obj.(*appsv1.Deployment), options)
 		},
-		UpdateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.AppsV1().Deployments(namespace).Update(obj.(*appsv1.Deployment))
+		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+			return client.AppsV1().Deployments(namespace).Update(ctx, obj.(*appsv1.Deployment), options)
 		},
-		DeleteFunc: func(name string, options *metav1.DeleteOptions) error {
-			return client.AppsV1().Deployments(namespace).Delete(name, options)
+		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.AppsV1().Deployments(namespace).Delete(ctx, name, options)
 		},
 	}
 }
@@ -45,17 +47,17 @@ func ForDeployment(client kubernetes.Interface, namespace string) Interface {
 //nolint:dupl //false positive - lines are similar but not duplicated
 func ForDaemonSet(client kubernetes.Interface, namespace string) Interface {
 	return &InterfaceFuncs{
-		GetFunc: func(name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.AppsV1().DaemonSets(namespace).Get(name, options)
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+			return client.AppsV1().DaemonSets(namespace).Get(ctx, name, options)
 		},
-		CreateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.AppsV1().DaemonSets(namespace).Create(obj.(*appsv1.DaemonSet))
+		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+			return client.AppsV1().DaemonSets(namespace).Create(ctx, obj.(*appsv1.DaemonSet), options)
 		},
-		UpdateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.AppsV1().DaemonSets(namespace).Update(obj.(*appsv1.DaemonSet))
+		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+			return client.AppsV1().DaemonSets(namespace).Update(ctx, obj.(*appsv1.DaemonSet), options)
 		},
-		DeleteFunc: func(name string, options *metav1.DeleteOptions) error {
-			return client.AppsV1().DaemonSets(namespace).Delete(name, options)
+		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.AppsV1().DaemonSets(namespace).Delete(ctx, name, options)
 		},
 	}
 }
@@ -63,17 +65,17 @@ func ForDaemonSet(client kubernetes.Interface, namespace string) Interface {
 //nolint:dupl //false positive - lines are similar but not duplicated
 func ForPod(client kubernetes.Interface, namespace string) Interface {
 	return &InterfaceFuncs{
-		GetFunc: func(name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.CoreV1().Pods(namespace).Get(name, options)
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+			return client.CoreV1().Pods(namespace).Get(ctx, name, options)
 		},
-		CreateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.CoreV1().Pods(namespace).Create(obj.(*corev1.Pod))
+		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+			return client.CoreV1().Pods(namespace).Create(ctx, obj.(*corev1.Pod), options)
 		},
-		UpdateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.CoreV1().Pods(namespace).Update(obj.(*corev1.Pod))
+		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+			return client.CoreV1().Pods(namespace).Update(ctx, obj.(*corev1.Pod), options)
 		},
-		DeleteFunc: func(name string, options *metav1.DeleteOptions) error {
-			return client.CoreV1().Pods(namespace).Delete(name, options)
+		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.CoreV1().Pods(namespace).Delete(ctx, name, options)
 		},
 	}
 }
@@ -81,35 +83,35 @@ func ForPod(client kubernetes.Interface, namespace string) Interface {
 //nolint:dupl //false positive - lines are similar but not duplicated
 func ForRole(client kubernetes.Interface, namespace string) Interface {
 	return &InterfaceFuncs{
-		GetFunc: func(name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.RbacV1().Roles(namespace).Get(name, options)
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+			return client.RbacV1().Roles(namespace).Get(ctx, name, options)
 		},
-		CreateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.RbacV1().Roles(namespace).Create(obj.(*rbacv1.Role))
+		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+			return client.RbacV1().Roles(namespace).Create(ctx, obj.(*rbacv1.Role), options)
 		},
-		UpdateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.RbacV1().Roles(namespace).Update(obj.(*rbacv1.Role))
+		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+			return client.RbacV1().Roles(namespace).Update(ctx, obj.(*rbacv1.Role), options)
 		},
-		DeleteFunc: func(name string, options *metav1.DeleteOptions) error {
-			return client.RbacV1().Roles(namespace).Delete(name, options)
+		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.RbacV1().Roles(namespace).Delete(ctx, name, options)
 		},
 	}
 }
 
 //nolint:dupl //false positive - lines are similar but not duplicated
-func ForRoleBinding(client kubernetes.Interface, namespace string) Interface {
+func ForRoleBinding(ctx context.Context, client kubernetes.Interface, namespace string) Interface {
 	return &InterfaceFuncs{
-		GetFunc: func(name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.RbacV1().RoleBindings(namespace).Get(name, options)
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+			return client.RbacV1().RoleBindings(namespace).Get(ctx, name, options)
 		},
-		CreateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.RbacV1().RoleBindings(namespace).Create(obj.(*rbacv1.RoleBinding))
+		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+			return client.RbacV1().RoleBindings(namespace).Create(ctx, obj.(*rbacv1.RoleBinding), options)
 		},
-		UpdateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.RbacV1().RoleBindings(namespace).Update(obj.(*rbacv1.RoleBinding))
+		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+			return client.RbacV1().RoleBindings(namespace).Update(ctx, obj.(*rbacv1.RoleBinding), options)
 		},
-		DeleteFunc: func(name string, options *metav1.DeleteOptions) error {
-			return client.RbacV1().RoleBindings(namespace).Delete(name, options)
+		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.RbacV1().RoleBindings(namespace).Delete(ctx, name, options)
 		},
 	}
 }
@@ -117,17 +119,17 @@ func ForRoleBinding(client kubernetes.Interface, namespace string) Interface {
 //nolint:dupl //false positive - lines are similar but not duplicated
 func ForClusterRole(client kubernetes.Interface) Interface {
 	return &InterfaceFuncs{
-		GetFunc: func(name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoles().Get(name, options)
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+			return client.RbacV1().ClusterRoles().Get(ctx, name, options)
 		},
-		CreateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoles().Create(obj.(*rbacv1.ClusterRole))
+		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+			return client.RbacV1().ClusterRoles().Create(ctx, obj.(*rbacv1.ClusterRole), options)
 		},
-		UpdateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoles().Update(obj.(*rbacv1.ClusterRole))
+		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+			return client.RbacV1().ClusterRoles().Update(ctx, obj.(*rbacv1.ClusterRole), options)
 		},
-		DeleteFunc: func(name string, options *metav1.DeleteOptions) error {
-			return client.RbacV1().ClusterRoles().Delete(name, options)
+		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.RbacV1().ClusterRoles().Delete(ctx, name, options)
 		},
 	}
 }
@@ -135,35 +137,35 @@ func ForClusterRole(client kubernetes.Interface) Interface {
 //nolint:dupl //false positive - lines are similar but not duplicated
 func ForClusterRoleBinding(client kubernetes.Interface) Interface {
 	return &InterfaceFuncs{
-		GetFunc: func(name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoleBindings().Get(name, options)
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+			return client.RbacV1().ClusterRoleBindings().Get(ctx, name, options)
 		},
-		CreateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoleBindings().Create(obj.(*rbacv1.ClusterRoleBinding))
+		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+			return client.RbacV1().ClusterRoleBindings().Create(ctx, obj.(*rbacv1.ClusterRoleBinding), options)
 		},
-		UpdateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoleBindings().Update(obj.(*rbacv1.ClusterRoleBinding))
+		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+			return client.RbacV1().ClusterRoleBindings().Update(ctx, obj.(*rbacv1.ClusterRoleBinding), options)
 		},
-		DeleteFunc: func(name string, options *metav1.DeleteOptions) error {
-			return client.RbacV1().ClusterRoleBindings().Delete(name, options)
+		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.RbacV1().ClusterRoleBindings().Delete(ctx, name, options)
 		},
 	}
 }
 
 //nolint:dupl //false positive - lines are similar but not duplicated
-func ForServiceAccount(client kubernetes.Interface, namespace string) Interface {
+func ForServiceAccount(ctx context.Context, client kubernetes.Interface, namespace string) Interface {
 	return &InterfaceFuncs{
-		GetFunc: func(name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.CoreV1().ServiceAccounts(namespace).Get(name, options)
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+			return client.CoreV1().ServiceAccounts(namespace).Get(ctx, name, options)
 		},
-		CreateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.CoreV1().ServiceAccounts(namespace).Create(obj.(*corev1.ServiceAccount))
+		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+			return client.CoreV1().ServiceAccounts(namespace).Create(ctx, obj.(*corev1.ServiceAccount), options)
 		},
-		UpdateFunc: func(obj runtime.Object) (runtime.Object, error) {
-			return client.CoreV1().ServiceAccounts(namespace).Update(obj.(*corev1.ServiceAccount))
+		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+			return client.CoreV1().ServiceAccounts(namespace).Update(ctx, obj.(*corev1.ServiceAccount), options)
 		},
-		DeleteFunc: func(name string, options *metav1.DeleteOptions) error {
-			return client.CoreV1().ServiceAccounts(namespace).Delete(name, options)
+		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.CoreV1().ServiceAccounts(namespace).Delete(ctx, name, options)
 		},
 	}
 }

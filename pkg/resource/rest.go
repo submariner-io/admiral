@@ -16,6 +16,7 @@ limitations under the License.
 package resource
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
@@ -74,7 +75,7 @@ func IsAuthorizedFor(restConfig *rest.Config, gvr schema.GroupVersionResource, n
 		return false, err
 	}
 
-	_, err = client.Resource(gvr).Namespace(namespace).Get("any", metav1.GetOptions{})
+	_, err = client.Resource(gvr).Namespace(namespace).Get(context.TODO(), "any", metav1.GetOptions{})
 	if IsUnknownAuthorityError(err) {
 		return false, errors.Wrapf(err, "cannot access the API server %q", restConfig.Host)
 	}

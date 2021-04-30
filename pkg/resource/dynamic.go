@@ -16,6 +16,8 @@ limitations under the License.
 package resource
 
 import (
+	"context"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
@@ -25,30 +27,30 @@ type dynamicType struct {
 	client dynamic.ResourceInterface
 }
 
-func (d *dynamicType) Get(name string, options metav1.GetOptions) (runtime.Object, error) {
-	return d.client.Get(name, options)
+func (d *dynamicType) Get(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+	return d.client.Get(ctx, name, options)
 }
 
-func (d *dynamicType) Create(obj runtime.Object) (runtime.Object, error) {
+func (d *dynamicType) Create(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
 	raw, err := ToUnstructured(obj)
 	if err != nil {
 		return nil, err
 	}
 
-	return d.client.Create(raw, metav1.CreateOptions{})
+	return d.client.Create(ctx, raw, options)
 }
 
-func (d *dynamicType) Update(obj runtime.Object) (runtime.Object, error) {
+func (d *dynamicType) Update(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
 	raw, err := ToUnstructured(obj)
 	if err != nil {
 		return nil, err
 	}
 
-	return d.client.Update(raw, metav1.UpdateOptions{})
+	return d.client.Update(ctx, raw, options)
 }
 
-func (d *dynamicType) Delete(name string, options *metav1.DeleteOptions) error {
-	return d.client.Delete(name, options)
+func (d *dynamicType) Delete(ctx context.Context, name string, options metav1.DeleteOptions) error {
+	return d.client.Delete(ctx, name, options)
 }
 
 func ForDynamic(client dynamic.ResourceInterface) Interface {

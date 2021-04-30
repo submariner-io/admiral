@@ -16,6 +16,7 @@ limitations under the License.
 package watcher_test
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -130,7 +131,7 @@ var _ = Describe("Resource Watcher", func() {
 			Eventually(updatedPods).Should(Receive(Equal(pod)))
 			Consistently(updatedPods).ShouldNot(Receive())
 
-			Expect(pods.Delete(pod.GetName(), nil)).To(Succeed())
+			Expect(pods.Delete(context.TODO(), pod.GetName(), v1.DeleteOptions{})).To(Succeed())
 
 			Eventually(deletedPods).Should(Receive(Equal(pod)))
 			Consistently(deletedPods).ShouldNot(Receive())
