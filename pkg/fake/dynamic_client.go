@@ -16,6 +16,7 @@ limitations under the License.
 package fake
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"sync"
@@ -127,7 +128,7 @@ func getError(from atomic.Value) error {
 	return nil
 }
 
-func (f *DynamicResourceClient) Create(obj *unstructured.Unstructured, options v1.CreateOptions,
+func (f *DynamicResourceClient) Create(ctx context.Context, obj *unstructured.Unstructured, options v1.CreateOptions,
 	subresources ...string) (*unstructured.Unstructured, error) {
 	f.created <- obj.GetName()
 
@@ -145,10 +146,10 @@ func (f *DynamicResourceClient) Create(obj *unstructured.Unstructured, options v
 	obj.SetUID(uuid.NewUUID())
 	obj.SetResourceVersion("1")
 
-	return f.ResourceInterface.Create(obj, options, subresources...)
+	return f.ResourceInterface.Create(ctx, obj, options, subresources...)
 }
 
-func (f *DynamicResourceClient) Update(obj *unstructured.Unstructured, options v1.UpdateOptions,
+func (f *DynamicResourceClient) Update(ctx context.Context, obj *unstructured.Unstructured, options v1.UpdateOptions,
 	subresources ...string) (*unstructured.Unstructured, error) {
 	f.updated <- obj.GetName()
 
@@ -164,7 +165,7 @@ func (f *DynamicResourceClient) Update(obj *unstructured.Unstructured, options v
 	}
 
 	if f.CheckResourceVersionOnUpdate {
-		existing, _ := f.ResourceInterface.Get(obj.GetName(), v1.GetOptions{})
+		existing, _ := f.ResourceInterface.Get(ctx, obj.GetName(), v1.GetOptions{})
 		if existing != nil && existing.GetResourceVersion() != obj.GetResourceVersion() {
 			return nil, apierrors.NewConflict(schema.GroupResource{}, obj.GetName(),
 				fmt.Errorf("resource version %q does not match expected %q", obj.GetResourceVersion(),
@@ -177,10 +178,10 @@ func (f *DynamicResourceClient) Update(obj *unstructured.Unstructured, options v
 		}
 	}
 
-	return f.ResourceInterface.Update(obj, options, subresources...)
+	return f.ResourceInterface.Update(ctx, obj, options, subresources...)
 }
 
-func (f *DynamicResourceClient) Delete(name string, options *v1.DeleteOptions, subresources ...string) error {
+func (f *DynamicResourceClient) Delete(ctx context.Context, name string, options v1.DeleteOptions, subresources ...string) error {
 	f.deleted <- name
 
 	fail := f.FailOnDelete
@@ -194,10 +195,11 @@ func (f *DynamicResourceClient) Delete(name string, options *v1.DeleteOptions, s
 		return fail
 	}
 
-	return f.ResourceInterface.Delete(name, options, subresources...)
+	return f.ResourceInterface.Delete(ctx, name, options, subresources...)
 }
 
-func (f *DynamicResourceClient) Get(name string, options v1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+func (f *DynamicResourceClient) Get(ctx context.Context, name string, options v1.GetOptions,
+	subresources ...string) (*unstructured.Unstructured, error) {
 	fail := f.FailOnGet
 	if fail != nil {
 		f.FailOnGet = nil
@@ -209,7 +211,7 @@ func (f *DynamicResourceClient) Get(name string, options v1.GetOptions, subresou
 		return nil, fail
 	}
 
-	return f.ResourceInterface.Get(name, options, subresources...)
+	return f.ResourceInterface.Get(ctx, name, options, subresources...)
 }
 
 func (f *DynamicResourceClient) VerifyNoCreate(name string) {

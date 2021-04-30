@@ -16,36 +16,38 @@ limitations under the License.
 package resource
 
 import (
+	"context"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type Interface interface {
-	Get(name string, options metav1.GetOptions) (runtime.Object, error)
-	Create(obj runtime.Object) (runtime.Object, error)
-	Update(obj runtime.Object) (runtime.Object, error)
-	Delete(name string, options *metav1.DeleteOptions) error
+	Get(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error)
+	Create(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error)
+	Update(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error)
+	Delete(ctx context.Context, name string, options metav1.DeleteOptions) error
 }
 
 type InterfaceFuncs struct {
-	GetFunc    func(name string, options metav1.GetOptions) (runtime.Object, error)
-	CreateFunc func(obj runtime.Object) (runtime.Object, error)
-	UpdateFunc func(obj runtime.Object) (runtime.Object, error)
-	DeleteFunc func(name string, options *metav1.DeleteOptions) error
+	GetFunc    func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error)
+	CreateFunc func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error)
+	UpdateFunc func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error)
+	DeleteFunc func(ctx context.Context, name string, options metav1.DeleteOptions) error
 }
 
-func (i *InterfaceFuncs) Get(name string, options metav1.GetOptions) (runtime.Object, error) {
-	return i.GetFunc(name, options)
+func (i *InterfaceFuncs) Get(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+	return i.GetFunc(ctx, name, options)
 }
 
-func (i *InterfaceFuncs) Create(obj runtime.Object) (runtime.Object, error) {
-	return i.CreateFunc(obj)
+func (i *InterfaceFuncs) Create(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+	return i.CreateFunc(ctx, obj, options)
 }
 
-func (i *InterfaceFuncs) Update(obj runtime.Object) (runtime.Object, error) {
-	return i.UpdateFunc(obj)
+func (i *InterfaceFuncs) Update(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+	return i.UpdateFunc(ctx, obj, options)
 }
 
-func (i *InterfaceFuncs) Delete(name string, options *metav1.DeleteOptions) error {
-	return i.DeleteFunc(name, options)
+func (i *InterfaceFuncs) Delete(ctx context.Context, name string, options metav1.DeleteOptions) error {
+	return i.DeleteFunc(ctx, name, options)
 }

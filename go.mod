@@ -3,26 +3,42 @@ module github.com/submariner-io/admiral
 go 1.13
 
 require (
-	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
+	github.com/go-logr/logr v0.3.0 // indirect
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/google/gofuzz v1.2.0 // indirect
+	github.com/google/uuid v1.2.0 // indirect
+	github.com/googleapis/gnostic v0.5.5 // indirect
+	github.com/imdario/mergo v0.3.12 // indirect
+	github.com/json-iterator/go v1.1.11 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo v1.16.2
 	github.com/onsi/gomega v1.11.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.10.0
-	github.com/submariner-io/shipyard v0.9.1-0.20210505140948-b514bc7c36d4
-	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
-	k8s.io/api v0.18.4
-	k8s.io/apimachinery v0.18.4
-	k8s.io/client-go v0.18.4
+	github.com/prometheus/common v0.23.0 // indirect
+	github.com/submariner-io/shipyard v0.9.1-0.20210506024409-3beff067454a
+	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
+	golang.org/x/net v0.0.0-20210428140749-89ef3d95e781 // indirect
+	golang.org/x/oauth2 v0.0.0-20210427180440-81ed05c6b58c // indirect
+	golang.org/x/sys v0.0.0-20210426230700-d19ff857e887 // indirect
+	golang.org/x/term v0.0.0-20210429154555-c04ba851c2a4 // indirect
+	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
+	google.golang.org/appengine v1.6.7 // indirect
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	k8s.io/api v0.21.0
+	k8s.io/apimachinery v0.21.0
+	k8s.io/client-go v1.5.2
 	k8s.io/klog v1.0.0
-	k8s.io/kube-openapi v0.0.0-20200204173128-addea2498afe // indirect
+	k8s.io/kube-openapi v0.0.0-20210421082810-95288971da7e // indirect
+	k8s.io/utils v0.0.0-20210305010621-2afb4311ab10 // indirect
 )
 
-// Pinned to kubernetes-1.17.0
+// Pinned to kubernetes-1.19.10
 replace (
-	k8s.io/api => k8s.io/api v0.17.0
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.17.0
-	k8s.io/apimachinery => k8s.io/apimachinery v0.17.0
-	k8s.io/client-go => k8s.io/client-go v0.17.0
-	k8s.io/cloud-provider => k8s.io/cloud-provider v0.17.0
+	k8s.io/api => k8s.io/api v0.19.10
+	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.19.10
+	k8s.io/apimachinery => k8s.io/apimachinery v0.19.10
+	k8s.io/client-go => k8s.io/client-go v0.19.10
+	k8s.io/cloud-provider => k8s.io/cloud-provider v0.19.10
+	k8s.io/component-base => k8s.io/component-base v0.19.10
 )

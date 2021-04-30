@@ -16,6 +16,7 @@ limitations under the License.
 package syncer
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"reflect"
@@ -296,7 +297,8 @@ func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.G
 
 	msg := fmt.Sprintf("get %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
 	raw := framework.AwaitUntil(msg, func() (i interface{}, e error) {
-		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(meta.GetName(), metav1.GetOptions{})
+		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(
+			context.TODO(), meta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
@@ -324,7 +326,8 @@ func (t *testDriver) awaitNoResource(cluster framework.ClusterIndex, gvr *schema
 
 	msg := fmt.Sprintf("get %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
 	framework.AwaitUntil(msg, func() (i interface{}, e error) {
-		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(meta.GetName(), metav1.GetOptions{})
+		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(
+			context.TODO(), meta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}

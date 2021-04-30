@@ -16,6 +16,7 @@ limitations under the License.
 package syncer
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sync"
@@ -227,12 +228,12 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 			options.LabelSelector = config.SourceLabelSelector
 			options.FieldSelector = config.SourceFieldSelector
-			return resourceClient.List(options)
+			return resourceClient.List(context.TODO(), options)
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 			options.LabelSelector = config.SourceLabelSelector
 			options.FieldSelector = config.SourceFieldSelector
-			return resourceClient.Watch(options)
+			return resourceClient.Watch(context.TODO(), options)
 		},
 	}, &unstructured.Unstructured{}, config.ResyncPeriod, cache.ResourceEventHandlerFuncs{
 		AddFunc:    syncer.onCreate,

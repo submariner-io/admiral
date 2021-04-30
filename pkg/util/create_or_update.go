@@ -16,6 +16,7 @@ limitations under the License.
 package util
 
 import (
+	"context"
 	"time"
 
 	"github.com/pkg/errors"
@@ -48,17 +49,17 @@ var backOff wait.Backoff = wait.Backoff{
 	Cap:      20 * time.Second,
 }
 
-func CreateOrUpdate(client resource.Interface, obj runtime.Object, mutate MutateFn) (OperationResult, error) {
+func CreateOrUpdate(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn) (OperationResult, error) {
 	var result OperationResult = OperationResultNone
 
 	objMeta := resource.ToMeta(obj)
 
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		existing, err := client.Get(objMeta.GetName(), metav1.GetOptions{})
+		existing, err := client.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			klog.V(log.LIBTRACE).Infof("Creating resource: %#v", obj)
 
-			_, err := client.Create(obj)
+			_, err := client.Create(ctx, obj, metav1.CreateOptions{})
 			if apierrors.IsAlreadyExists(err) {
 				klog.V(log.LIBDEBUG).Infof("Resource %q already exists - retrying", objMeta.GetName())
 				return apierrors.NewConflict(schema.GroupResource{}, objMeta.GetName(), err)
@@ -93,7 +94,7 @@ func CreateOrUpdate(client resource.Interface, obj runtime.Object, mutate Mutate
 		klog.V(log.LIBTRACE).Infof("Updating resource: %#v", obj)
 
 		result = OperationResultUpdated
-		_, err = client.Update(toUpdate)
+		_, err = client.Update(ctx, toUpdate, metav1.UpdateOptions{})
 
 		return err
 	})
@@ -110,16 +111,17 @@ func CreateOrUpdate(client resource.Interface, obj runtime.Object, mutate Mutate
 // this will wait for the deletion to be complete before creating the new object:
 // with foreground propagation, Get will continue to return the object being deleted
 // and Create will fail with “already exists” until deletion is complete.
-func CreateAnew(client resource.Interface, obj runtime.Object, deleteOptions *metav1.DeleteOptions) error {
+func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Object,
+	createOptions metav1.CreateOptions, deleteOptions metav1.DeleteOptions) error {
 	name := resource.ToMeta(obj).GetName()
 
 	return wait.ExponentialBackoff(backOff, func() (bool, error) {
-		_, err := client.Create(obj)
+		_, err := client.Create(ctx, obj, createOptions)
 		if !apierrors.IsAlreadyExists(err) {
 			return true, err
 		}
 
-		err = client.Delete(name, deleteOptions)
+		err = client.Delete(ctx, name, deleteOptions)
 		if apierrors.IsNotFound(err) {
 			err = nil
 		}

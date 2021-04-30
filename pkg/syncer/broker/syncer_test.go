@@ -16,6 +16,7 @@ limitations under the License.
 package broker_test
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -46,6 +47,8 @@ var _ = Describe("Broker Syncer", func() {
 		stopCh                 chan struct{}
 	)
 
+	ctx := context.TODO()
+
 	BeforeEach(func() {
 		initialLocalResources = nil
 		initialBrokerResources = nil
@@ -60,8 +63,8 @@ var _ = Describe("Broker Syncer", func() {
 			ResourceConfigs: []broker.ResourceConfig{
 				{
 					LocalSourceNamespace:   test.LocalNamespace,
-					LocalResourceType:      resource,
-					BrokerResourceType:     resource,
+					LocalResourceType:      &corev1.Pod{},
+					BrokerResourceType:     &corev1.Pod{},
 					BrokerWaitForCacheSync: &wait,
 				},
 			},
@@ -106,7 +109,7 @@ var _ = Describe("Broker Syncer", func() {
 
 		Context("and then deleted", func() {
 			It("should be deleted from the broker datastore", func() {
-				Expect(localClient.ResourceInterface.Delete(resource.GetName(), nil)).To(Succeed())
+				Expect(localClient.ResourceInterface.Delete(ctx, resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				test.AwaitNoResource(brokerClient, resource.GetName())
 
 				// Ensure the broker syncer did not try to sync back to the local datastore
@@ -138,7 +141,7 @@ var _ = Describe("Broker Syncer", func() {
 
 		Context("and then deleted", func() {
 			It("should be deleted from the broker datastore", func() {
-				Expect(brokerClient.ResourceInterface.Delete(resource.GetName(), nil)).To(Succeed())
+				Expect(brokerClient.ResourceInterface.Delete(ctx, resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				test.AwaitNoResource(localClient, resource.GetName())
 
 				// Ensure the local syncer did not try to sync back to the broker datastore
