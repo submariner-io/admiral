@@ -9,7 +9,7 @@ require (
 	github.com/onsi/gomega v1.11.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.10.0
-	github.com/submariner-io/shipyard v0.9.0-rc0
+	github.com/submariner-io/shipyard v0.9.1-0.20210505140948-b514bc7c36d4
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	k8s.io/api v0.18.4
 	k8s.io/apimachinery v0.18.4
