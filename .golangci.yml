@@ -12,10 +12,11 @@ linters-settings:
     min-complexity: 15
   golint:
     min-confidence: 0
+  govet:
+    enable:
+      - fieldalignment
   lll:
     line-length: 140
-  maligned:
-    suggest-new: true
 linters:
   disable-all: true
   enable:
@@ -41,7 +42,6 @@ linters:
     - interfacer
     - lll
     - misspell
-    - maligned
     - nakedret
     - prealloc
     - staticcheck
@@ -81,3 +81,9 @@ issues:
         - golint
       text: "should not use dot imports"
       source: ". \"github.com/onsi/ginkgo\""
+
+    # Ignore pointer bytes in struct alignment tests (this is a very
+    # minor optimisation)
+    - linters:
+        - govet
+      text: "pointer bytes could be"
