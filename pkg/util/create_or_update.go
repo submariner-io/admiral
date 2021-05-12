@@ -43,10 +43,10 @@ const (
 type MutateFn func(existing runtime.Object) (runtime.Object, error)
 
 var backOff wait.Backoff = wait.Backoff{
-	Steps:    10,
-	Duration: 500 * time.Millisecond,
-	Factor:   1.5,
-	Cap:      20 * time.Second,
+	Steps:    20,
+	Duration: time.Second,
+	Factor:   1.3,
+	Cap:      40 * time.Second,
 }
 
 func CreateOrUpdate(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn) (OperationResult, error) {
