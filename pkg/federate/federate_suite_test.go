@@ -15,15 +15,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package broker
+package federate_test
 
 import (
-	"github.com/submariner-io/admiral/pkg/federate"
-	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/client-go/dynamic"
+	"testing"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
-func NewFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace,
-	localClusterID string, keepMetadataField ...string) federate.Federator {
-	return federate.NewCreateOrUpdateFederator(dynClient, restMapper, targetNamespace, localClusterID, keepMetadataField...)
+func TestFederate(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Federate Suite")
 }
