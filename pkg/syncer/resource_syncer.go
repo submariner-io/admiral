@@ -404,16 +404,13 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 
 	klog.V(log.LIBTRACE).Infof("Syncer %q retrieved %sd resource %q: %#v", r.config.Name, op, resource.GetName(), resource)
 
-	if r.shouldSync(resource) {
-		resource, transformed, requeue := r.transform(resource, key, op)
-		if resource == nil {
-			if !requeue {
-				r.created.Delete(key)
-			}
+	if !r.shouldSync(resource) {
+		r.created.Delete(key)
+		return false, nil
+	}
 
-			return requeue, nil
-		}
-
+	resource, transformed, requeue := r.transform(resource, key, op)
+	if resource != nil {
 		if r.config.SourceNamespace == metav1.NamespaceAll && resource.GetNamespace() != "" {
 			resource = resource.DeepCopy()
 			_ = unstructured.SetNestedField(resource.Object, resource.GetNamespace(),
@@ -440,9 +437,11 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 		klog.V(log.LIBDEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, resource.GetName())
 	}
 
-	r.created.Delete(key)
+	if !requeue {
+		r.created.Delete(key)
+	}
 
-	return false, nil
+	return requeue, nil
 }
 
 func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
@@ -457,16 +456,12 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 	r.deleted.Delete(key)
 
 	deletedResource := obj.(*unstructured.Unstructured)
-	if r.shouldSync(deletedResource) {
-		resource, transformed, requeue := r.transform(deletedResource, key, Delete)
-		if resource == nil {
-			if requeue {
-				r.deleted.Store(key, deletedResource)
-			}
+	if !r.shouldSync(deletedResource) {
+		return false, nil
+	}
 
-			return requeue, nil
-		}
-
+	resource, transformed, requeue := r.transform(deletedResource, key, Delete)
+	if resource != nil {
 		klog.V(log.LIBDEBUG).Infof("Syncer %q deleting resource %q: %#v", r.config.Name, resource.GetName(), resource)
 
 		err := r.config.Federator.Delete(resource)
@@ -493,7 +488,11 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 		klog.V(log.LIBDEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, resource.GetName())
 	}
 
-	return false, nil
+	if requeue {
+		r.deleted.Store(key, deletedResource)
+	}
+
+	return requeue, nil
 }
 
 func (r *resourceSyncer) convert(from interface{}) runtime.Object {
@@ -538,7 +537,7 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 		_ = unstructured.SetNestedField(result.Object, clusterID, util.MetadataField, util.LabelsField, federate.ClusterIDLabelKey)
 	}
 
-	return result, transformed, false
+	return result, transformed, requeue
 }
 
 func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op Operation) {
