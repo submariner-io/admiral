@@ -162,26 +162,50 @@ func testTransformFunction() {
 
 	var transformed *corev1.Pod
 	var expOperation chan syncer.Operation
+	var invocationCount int32
+	var requeue bool
 
 	BeforeEach(func() {
+		atomic.StoreInt32(&invocationCount, 0)
 		expOperation = make(chan syncer.Operation, 20)
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
+		requeue = false
+
 		d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 			defer GinkgoRecover()
+			atomic.AddInt32(&invocationCount, 1)
 			pod, ok := from.(*corev1.Pod)
 			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", from)
 			Expect(equality.Semantic.DeepDerivative(d.resource.Spec, pod.Spec)).To(BeTrue(),
 				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, d.resource.Spec)
 			expOperation <- op
-			return transformed, false
+			return transformed, requeue
 		}
 	})
 
 	When("a resource is created in the datastore", func() {
-		It("should distribute the transformed resource", func() {
+		JustBeforeEach(func() {
 			test.CreateResource(d.sourceClient, d.resource)
+		})
+
+		It("should distribute the transformed resource", func() {
 			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+			Consistently(func() int {
+				return int(atomic.LoadInt32(&invocationCount))
+			}).Should(Equal(1))
+		})
+
+		Context("and the transform function specifies to re-queue", func() {
+			BeforeEach(func() {
+				requeue = true
+			})
+
+			It("should eventually retry", func() {
+				Eventually(func() int {
+					return int(atomic.LoadInt32(&invocationCount))
+				}, 3).Should(BeNumerically(">", 1))
+			})
 		})
 	})
 
@@ -206,13 +230,32 @@ func testTransformFunction() {
 			d.addInitialResource(d.resource)
 		})
 
-		It("should delete the transformed resource", func() {
+		JustBeforeEach(func() {
 			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+			atomic.StoreInt32(&invocationCount, 0)
+		})
 
+		It("should delete the transformed resource", func() {
 			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 			d.federator.VerifyDelete(test.ToUnstructured(transformed))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
+			Consistently(func() int {
+				return int(atomic.LoadInt32(&invocationCount))
+			}).Should(Equal(1))
+		})
+
+		Context("and the transform function specifies to re-queue", func() {
+			JustBeforeEach(func() {
+				requeue = true
+			})
+
+			It("should eventually retry", func() {
+				Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
+				Eventually(func() int {
+					return int(atomic.LoadInt32(&invocationCount))
+				}, 3).Should(BeNumerically(">", 1))
+			})
 		})
 	})
 
@@ -247,39 +290,36 @@ func testTransformFunction() {
 	})
 
 	When("the transform function returns nil with no re-queue", func() {
-		var count int32
-
 		BeforeEach(func() {
-			atomic.StoreInt32(&count, 0)
 			d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
-				atomic.AddInt32(&count, 1)
+				atomic.AddInt32(&invocationCount, 1)
 				expOperation <- op
 				return nil, false
 			}
 		})
 
-		When("a resource is created in the datastore", func() {
+		Context("and a resource is created in the datastore", func() {
 			It("should not distribute the resource", func() {
 				test.CreateResource(d.sourceClient, d.resource)
 				d.federator.VerifyNoDistribute()
-				Expect(int(atomic.LoadInt32(&count))).To(Equal(1))
+				Expect(int(atomic.LoadInt32(&invocationCount))).To(Equal(1))
 				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 			})
 		})
 
-		When("a resource is deleted in the datastore", func() {
+		Context("and a resource is deleted in the datastore", func() {
 			BeforeEach(func() {
 				d.addInitialResource(d.resource)
 			})
 
 			It("should not delete the resource", func() {
 				d.federator.VerifyNoDistribute()
-				atomic.StoreInt32(&count, 0)
+				atomic.StoreInt32(&invocationCount, 0)
 				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
 				Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				d.federator.VerifyNoDelete()
-				Expect(int(atomic.LoadInt32(&count))).To(Equal(1))
+				Expect(int(atomic.LoadInt32(&invocationCount))).To(Equal(1))
 				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 			})
 		})
@@ -305,7 +345,7 @@ func testTransformFunction() {
 			}
 		})
 
-		When("a resource is created in the datastore", func() {
+		Context("and a resource is created in the datastore", func() {
 			It("should eventually distribute the transformed resource", func() {
 				test.CreateResource(d.sourceClient, d.resource)
 				d.federator.VerifyDistribute(test.ToUnstructured(transformed))
@@ -313,7 +353,7 @@ func testTransformFunction() {
 			})
 		})
 
-		When("a resource is deleted in the datastore", func() {
+		Context("and a resource is deleted in the datastore", func() {
 			BeforeEach(func() {
 				d.addInitialResource(d.resource)
 			})
