@@ -30,7 +30,6 @@ import (
 	resourceUtil "github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/util"
 	"github.com/submariner-io/admiral/pkg/workqueue"
-	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -648,14 +647,4 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 func getClusterIDLabel(resource runtime.Object) (string, bool) {
 	clusterID, found := resourceUtil.ToMeta(resource).GetLabels()[federate.ClusterIDLabelKey]
 	return clusterID, found
-}
-
-func DefaultResourcesEquivalent(obj1, obj2 *unstructured.Unstructured) bool {
-	return reflect.DeepEqual(obj1.GetLabels(), obj2.GetLabels()) &&
-		reflect.DeepEqual(obj1.GetAnnotations(), obj2.GetAnnotations()) &&
-		equality.Semantic.DeepEqual(util.GetSpec(obj1), util.GetSpec(obj2))
-}
-
-func ResourcesNotEquivalent(obj1, obj2 *unstructured.Unstructured) bool {
-	return false
 }

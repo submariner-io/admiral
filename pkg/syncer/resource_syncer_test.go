@@ -653,7 +653,7 @@ func testUpdateSuppression() {
 	})
 
 	When("no equivalence function is specified", func() {
-		When("the resource's Status is updated in the datastore", func() {
+		Context("and the resource's Status is updated in the datastore", func() {
 			BeforeEach(func() {
 				d.resource.Status.Phase = corev1.PodRunning
 			})
@@ -663,7 +663,7 @@ func testUpdateSuppression() {
 			})
 		})
 
-		When("the resource's ObjectMeta is updated in the datastore", func() {
+		Context("and the resource's ObjectMeta is updated in the datastore", func() {
 			BeforeEach(func() {
 				t := metav1.Now()
 				d.resource.ObjectMeta.DeletionTimestamp = &t
@@ -680,7 +680,7 @@ func testUpdateSuppression() {
 			d.config.ResourcesEquivalent = syncer.DefaultResourcesEquivalent
 		})
 
-		When("the resource's Status is updated in the datastore", func() {
+		Context("and the resource's Status is updated in the datastore", func() {
 			BeforeEach(func() {
 				d.resource.Status.Phase = corev1.PodRunning
 			})
@@ -690,7 +690,7 @@ func testUpdateSuppression() {
 			})
 		})
 
-		When("the resource's ObjectMeta is updated in the datastore", func() {
+		Context("and the resource's ObjectMeta is updated in the datastore", func() {
 			BeforeEach(func() {
 				t := metav1.Now()
 				d.resource.ObjectMeta.DeletionTimestamp = &t
@@ -701,7 +701,7 @@ func testUpdateSuppression() {
 			})
 		})
 
-		When("the resource's Labels are updated in the datastore", func() {
+		Context("and the resource's Labels are updated in the datastore", func() {
 			BeforeEach(func() {
 				d.resource.SetLabels(map[string]string{"new-label": "value"})
 			})
@@ -711,7 +711,7 @@ func testUpdateSuppression() {
 			})
 		})
 
-		When("the resource's Annotations are updated in the datastore", func() {
+		Context("and the resource's Annotations are updated in the datastore", func() {
 			BeforeEach(func() {
 				d.resource.SetAnnotations(map[string]string{"new-annotations": "value"})
 			})
@@ -730,13 +730,39 @@ func testUpdateSuppression() {
 			}
 		})
 
-		When("the resource's Status is updated in the datastore", func() {
+		Context("and the resource's Status is updated in the datastore", func() {
 			BeforeEach(func() {
 				d.resource.Status.Phase = corev1.PodRunning
 			})
 
 			It("should distribute it", func() {
 				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+			})
+		})
+	})
+
+	When("the Spec equivalence function is specified ", func() {
+		BeforeEach(func() {
+			d.config.ResourcesEquivalent = syncer.AreSpecsEquivalent
+		})
+
+		Context("and the resource's Spec is updated in the datastore", func() {
+			BeforeEach(func() {
+				d.resource.Spec.Hostname = "newHost"
+			})
+
+			It("should distribute it", func() {
+				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+			})
+		})
+
+		Context("and the resource's Status is updated in the datastore", func() {
+			BeforeEach(func() {
+				d.resource.Status.Phase = corev1.PodRunning
+			})
+
+			It("should not distribute it", func() {
+				d.federator.VerifyNoDistribute()
 			})
 		})
 	})
