@@ -16,7 +16,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.10.0
 	github.com/prometheus/common v0.23.0 // indirect
-	github.com/submariner-io/shipyard v0.9.1-0.20210506024409-3beff067454a
+	github.com/submariner-io/shipyard v0.10.0-m1
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
 	golang.org/x/oauth2 v0.0.0-20210427180440-81ed05c6b58c // indirect
 	golang.org/x/sys v0.0.0-20210426230700-d19ff857e887 // indirect
