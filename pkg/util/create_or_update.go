@@ -52,6 +52,16 @@ var backOff wait.Backoff = wait.Backoff{
 }
 
 func CreateOrUpdate(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn) (OperationResult, error) {
+	return maybeCreateOrUpdate(ctx, client, obj, mutate, true)
+}
+
+func Update(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn) error {
+	_, err := maybeCreateOrUpdate(ctx, client, obj, mutate, false)
+	return err
+}
+
+func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn,
+	doCreate bool) (OperationResult, error) {
 	var result OperationResult = OperationResultNone
 
 	objMeta := resource.ToMeta(obj)
@@ -59,6 +69,11 @@ func CreateOrUpdate(ctx context.Context, client resource.Interface, obj runtime.
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		existing, err := client.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
+			if !doCreate {
+				klog.V(log.LIBTRACE).Infof("Resource %q does not exist - not updating", objMeta.GetName())
+				return nil
+			}
+
 			klog.V(log.LIBTRACE).Infof("Creating resource: %#v", obj)
 
 			_, err := client.Create(ctx, obj, metav1.CreateOptions{})
