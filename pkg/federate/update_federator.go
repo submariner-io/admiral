@@ -21,29 +21,23 @@ import (
 	"context"
 
 	"github.com/submariner-io/admiral/pkg/log"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"github.com/submariner-io/admiral/pkg/resource"
+	"github.com/submariner-io/admiral/pkg/util"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 )
 
 type updateFederator struct {
 	*baseFederator
-	subresources []string
 }
 
-func NewUpdateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string, subresources ...string) Federator {
+func NewUpdateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string) Federator {
 	return &updateFederator{
 		baseFederator: newBaseFederator(dynClient, restMapper, targetNamespace),
-		subresources:  subresources,
 	}
-}
-
-func NewUpdateStatusFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string) Federator {
-	return NewUpdateFederator(dynClient, restMapper, targetNamespace, "status")
 }
 
 func (f *updateFederator) Distribute(obj runtime.Object) error {
@@ -56,23 +50,7 @@ func (f *updateFederator) Distribute(obj runtime.Object) error {
 
 	f.prepareResourceForSync(toUpdate)
 
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		klog.V(log.LIBTRACE).Infof("Updating resource: %#v", toUpdate)
-
-		_, err = resourceClient.Update(context.TODO(), toUpdate, metav1.UpdateOptions{}, f.subresources...)
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-
-		if apierrors.IsConflict(err) {
-			existing, err := resourceClient.Get(context.TODO(), toUpdate.GetName(), metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-
-			toUpdate = preserveMetadata(existing, toUpdate)
-		}
-
-		return err
+	return util.Update(context.TODO(), resource.ForDynamic(resourceClient), toUpdate, func(obj runtime.Object) (runtime.Object, error) {
+		return preserveMetadata(obj.(*unstructured.Unstructured), toUpdate), nil
 	})
 }

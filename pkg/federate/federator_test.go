@@ -36,7 +36,6 @@ import (
 
 var _ = Describe("CreateOrUpdate Federator", testCreateOrUpdateFederator)
 var _ = Describe("Update Federator", testUpdateFederator)
-var _ = Describe("UpdateStatus Federator", testUpdateStatusFederator)
 var _ = Describe("Federator Delete", testDelete)
 
 func testCreateOrUpdateFederator() {
@@ -251,38 +250,6 @@ func testUpdateFederator() {
 	When("the resource does not exist in the datastore", func() {
 		It("should succeed", func() {
 			Expect(f.Distribute(t.resource)).To(Succeed())
-		})
-	})
-}
-
-func testUpdateStatusFederator() {
-	var (
-		f federate.Federator
-		t *testDriver
-	)
-
-	BeforeEach(func() {
-		t = newTestDriver()
-		t.localClusterID = ""
-	})
-
-	JustBeforeEach(func() {
-		f = federate.NewUpdateStatusFederator(t.dynClient, t.restMapper, t.federatorNamespace)
-		t.resource.SetNamespace(t.targetNamespace)
-		test.CreateResource(t.resourceClient, t.resource)
-	})
-
-	When("the Status is changed", func() {
-		JustBeforeEach(func() {
-			t.resource.Status = corev1.PodStatus{
-				Phase: corev1.PodRunning,
-				PodIP: "10.253.4.6",
-			}
-		})
-
-		It("should update the resource", func() {
-			Expect(f.Distribute(t.resource)).To(Succeed())
-			t.verifyResource()
 		})
 	})
 }
