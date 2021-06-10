@@ -35,6 +35,7 @@ import (
 )
 
 var _ = Describe("CreateOrUpdate Federator", testCreateOrUpdateFederator)
+var _ = Describe("Create Federator", testCreateFederator)
 var _ = Describe("Update Federator", testUpdateFederator)
 var _ = Describe("Federator Delete", testDelete)
 
@@ -181,6 +182,51 @@ func testCreateOrUpdateFederator() {
 
 		It("should create the resource in the source namespace", func() {
 			Expect(f.Distribute(t.resource)).To(Succeed())
+			t.verifyResource()
+		})
+	})
+}
+
+func testCreateFederator() {
+	var (
+		f federate.Federator
+		t *testDriver
+	)
+
+	BeforeEach(func() {
+		t = newTestDriver()
+		t.localClusterID = ""
+	})
+
+	JustBeforeEach(func() {
+		f = federate.NewCreateFederator(t.dynClient, t.restMapper, t.federatorNamespace)
+	})
+
+	When("the resource does not already exist in the datastore", func() {
+		It("create the resource", func() {
+			Expect(f.Distribute(t.resource)).To(Succeed())
+			t.verifyResource()
+		})
+
+		Context("and create fails", func() {
+			BeforeEach(func() {
+				t.resourceClient.FailOnCreate = apierrors.NewServiceUnavailable("fake")
+			})
+
+			It("should return an error", func() {
+				Expect(f.Distribute(t.resource)).ToNot(Succeed())
+			})
+		})
+	})
+
+	When("the resource already exists in the datastore", func() {
+		BeforeEach(func() {
+			t.resource.SetNamespace(t.targetNamespace)
+			test.CreateResource(t.resourceClient, t.resource)
+		})
+
+		It("should succeed and not update the resource", func() {
+			Expect(f.Distribute(test.NewPodWithImage(test.LocalNamespace, "apache"))).To(Succeed())
 			t.verifyResource()
 		})
 	})
