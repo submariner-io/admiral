@@ -89,6 +89,24 @@ func ForPod(client kubernetes.Interface, namespace string) Interface {
 }
 
 //nolint:dupl //false positive - lines are similar but not duplicated
+func ForService(ctx context.Context, client kubernetes.Interface, namespace string) Interface {
+	return &InterfaceFuncs{
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+			return client.CoreV1().Services(namespace).Get(ctx, name, options)
+		},
+		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+			return client.CoreV1().Services(namespace).Create(ctx, obj.(*corev1.Service), options)
+		},
+		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+			return client.CoreV1().Services(namespace).Update(ctx, obj.(*corev1.Service), options)
+		},
+		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.CoreV1().Services(namespace).Delete(ctx, name, options)
+		},
+	}
+}
+
+//nolint:dupl //false positive - lines are similar but not duplicated
 func ForServiceAccount(ctx context.Context, client kubernetes.Interface, namespace string) Interface {
 	return &InterfaceFuncs{
 		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
