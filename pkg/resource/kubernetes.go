@@ -89,7 +89,7 @@ func ForPod(client kubernetes.Interface, namespace string) Interface {
 }
 
 //nolint:dupl //false positive - lines are similar but not duplicated
-func ForService(ctx context.Context, client kubernetes.Interface, namespace string) Interface {
+func ForService(client kubernetes.Interface, namespace string) Interface {
 	return &InterfaceFuncs{
 		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
 			return client.CoreV1().Services(namespace).Get(ctx, name, options)
@@ -107,7 +107,7 @@ func ForService(ctx context.Context, client kubernetes.Interface, namespace stri
 }
 
 //nolint:dupl //false positive - lines are similar but not duplicated
-func ForServiceAccount(ctx context.Context, client kubernetes.Interface, namespace string) Interface {
+func ForServiceAccount(client kubernetes.Interface, namespace string) Interface {
 	return &InterfaceFuncs{
 		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
 			return client.CoreV1().ServiceAccounts(namespace).Get(ctx, name, options)
@@ -181,7 +181,7 @@ func ForRole(client kubernetes.Interface, namespace string) Interface {
 }
 
 //nolint:dupl //false positive - lines are similar but not duplicated
-func ForRoleBinding(ctx context.Context, client kubernetes.Interface, namespace string) Interface {
+func ForRoleBinding(client kubernetes.Interface, namespace string) Interface {
 	return &InterfaceFuncs{
 		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
 			return client.RbacV1().RoleBindings(namespace).Get(ctx, name, options)
