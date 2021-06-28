@@ -19,16 +19,17 @@ package util
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// TryAppendCondition appends the given Condition if it's not equal to the last Condition. Returns a new array if appended,
-// otherwise nil.
+// TryAppendCondition appends the given Condition if it's not equal to the last Condition.
 func TryAppendCondition(conditions []metav1.Condition, newCondition metav1.Condition) []metav1.Condition {
 	newCondition.LastTransitionTime = metav1.Now()
 
 	numCond := len(conditions)
-	if numCond > 0 && conditionsEqual(&conditions[numCond-1], &newCondition) {
-		return nil
+	if numCond > 0 && conditionsEqual(&(conditions)[numCond-1], &newCondition) {
+		return conditions
 	}
 
 	return append(conditions, newCondition)
@@ -36,4 +37,27 @@ func TryAppendCondition(conditions []metav1.Condition, newCondition metav1.Condi
 
 func conditionsEqual(c1, c2 *metav1.Condition) bool {
 	return c1.Type == c2.Type && c1.Status == c2.Status && c1.Reason == c2.Reason && c1.Message == c2.Message
+}
+
+func ConditionsFromUnstructured(from *unstructured.Unstructured, fields ...string) []metav1.Condition {
+	rawConditions, _, _ := unstructured.NestedSlice(from.Object, fields...)
+
+	conditions := make([]metav1.Condition, len(rawConditions))
+
+	for i := range rawConditions {
+		c := &metav1.Condition{}
+		_ = runtime.DefaultUnstructuredConverter.FromUnstructured(rawConditions[i].(map[string]interface{}), c)
+		conditions[i] = *c
+	}
+
+	return conditions
+}
+
+func ConditionsToUnstructured(conditions []metav1.Condition, to *unstructured.Unstructured, fields ...string) {
+	newConditions := make([]interface{}, len(conditions))
+	for i := range conditions {
+		newConditions[i], _ = runtime.DefaultUnstructuredConverter.ToUnstructured(&conditions[i])
+	}
+
+	_ = unstructured.SetNestedSlice(to.Object, newConditions, "status", "conditions")
 }
