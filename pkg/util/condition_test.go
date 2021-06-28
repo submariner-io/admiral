@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 var _ = Describe("TryAppendCondition", func() {
@@ -109,8 +110,36 @@ var _ = Describe("TryAppendCondition", func() {
 			inConditions = []metav1.Condition{newCondition}
 		})
 
-		It("should return nil", func() {
-			Expect(outConditions).To(BeNil())
+		It("should not append", func() {
+			compareLast(1)
 		})
+	})
+})
+
+var _ = Describe("Unstructured Conditions conversion", func() {
+	It("should correctly convert to and from Unstructured", func() {
+		conditions := []metav1.Condition{
+			{
+				Type:    "Valid",
+				Status:  metav1.ConditionFalse,
+				Reason:  "BadValue",
+				Message: "Unable to parse",
+			},
+			{
+				Type:   "Valid",
+				Status: metav1.ConditionTrue,
+				Reason: "Success",
+			},
+		}
+
+		obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
+		util.ConditionsToUnstructured(conditions, obj, "status", "conditions")
+
+		newConditions := util.ConditionsFromUnstructured(obj, "status", "conditions")
+		Expect(newConditions).To(Equal(conditions))
+
+		obj = &unstructured.Unstructured{Object: map[string]interface{}{}}
+		newConditions = util.ConditionsFromUnstructured(obj, "status", "conditions")
+		Expect(newConditions).To(HaveLen(0))
 	})
 })
