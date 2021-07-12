@@ -15,10 +15,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package log
 
-// Log levels defined for use with:
-//   klog.V(__).Info
+// Package log defines log levels for use with klog.V(...).Info
+package log
 
 const (
 	// INFO : This level is for anything which does not happen very often, and while
