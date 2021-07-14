@@ -70,15 +70,30 @@ var _ = Describe("", func() {
 		util.SetBackoff(origBackoff)
 	})
 
-	createAnew := func() error {
+	createAnew := func() (runtime.Object, error) {
 		return util.CreateAnew(context.TODO(), resource.ForDynamic(client), pod, metav1.CreateOptions{}, metav1.DeleteOptions{})
+	}
+
+	createAnewSuccess := func() *corev1.Pod {
+		o, err := createAnew()
+		Expect(err).To(Succeed())
+		Expect(o).ToNot(BeNil())
+
+		actual := &corev1.Pod{}
+		Expect(scheme.Scheme.Convert(o, actual, nil)).To(Succeed())
+
+		return actual
+	}
+
+	createAnewError := func() error {
+		_, err := createAnew()
+		return err
 	}
 
 	Describe("CreateAnew function", func() {
 		When("no existing resource exists", func() {
 			It("should successfully create the resource", func() {
-				Expect(createAnew()).To(Succeed())
-				verifyPod(client, pod)
+				comparePods(createAnewSuccess(), pod)
 			})
 		})
 
@@ -91,8 +106,7 @@ var _ = Describe("", func() {
 			})
 
 			It("should delete the existing resource and create a new one", func() {
-				Expect(createAnew()).To(Succeed())
-				verifyPod(client, existing)
+				comparePods(createAnewSuccess(), existing)
 			})
 
 			Context("and Delete returns not found", func() {
@@ -101,8 +115,7 @@ var _ = Describe("", func() {
 				})
 
 				It("should successfully create the resource", func() {
-					Expect(createAnew()).To(Succeed())
-					verifyPod(client, existing)
+					comparePods(createAnewSuccess(), existing)
 				})
 			})
 
@@ -113,7 +126,7 @@ var _ = Describe("", func() {
 				})
 
 				It("should return an error", func() {
-					Expect(createAnew()).To(ContainErrorSubstring(expectedErr))
+					Expect(createAnewError()).To(ContainErrorSubstring(expectedErr))
 				})
 			})
 
@@ -123,7 +136,7 @@ var _ = Describe("", func() {
 				})
 
 				It("should return an error", func() {
-					Expect(createAnew()).ToNot(Succeed())
+					Expect(createAnewError()).ToNot(Succeed())
 				})
 			})
 		})
@@ -135,7 +148,7 @@ var _ = Describe("", func() {
 			})
 
 			It("should return an error", func() {
-				Expect(createAnew()).To(ContainErrorSubstring(expectedErr))
+				Expect(createAnewError()).To(ContainErrorSubstring(expectedErr))
 			})
 		})
 	})
@@ -271,7 +284,10 @@ var _ = Describe("", func() {
 })
 
 func verifyPod(client dynamic.ResourceInterface, expected *corev1.Pod) {
-	actual := test.GetPod(client, expected)
+	comparePods(test.GetPod(client, expected), expected)
+}
+
+func comparePods(actual, expected *corev1.Pod) {
 	Expect(actual.GetUID()).NotTo(Equal(expected.GetUID()))
 	Expect(actual.Spec).To(Equal(expected.Spec))
 }
