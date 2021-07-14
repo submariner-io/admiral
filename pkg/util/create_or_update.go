@@ -130,11 +130,15 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 // with foreground propagation, Get will continue to return the object being deleted
 // and Create will fail with “already exists” until deletion is complete.
 func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Object,
-	createOptions metav1.CreateOptions, deleteOptions metav1.DeleteOptions) error {
+	createOptions metav1.CreateOptions, deleteOptions metav1.DeleteOptions) (runtime.Object, error) {
 	name := resource.ToMeta(obj).GetName()
 
-	return wait.ExponentialBackoff(backOff, func() (bool, error) {
-		_, err := client.Create(ctx, obj, createOptions)
+	var created runtime.Object
+
+	err := wait.ExponentialBackoff(backOff, func() (bool, error) {
+		var err error
+
+		created, err = client.Create(ctx, obj, createOptions)
 		if !apierrors.IsAlreadyExists(err) {
 			return true, err
 		}
@@ -146,6 +150,8 @@ func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Obje
 
 		return false, errors.WithMessagef(err, "failed to delete pre-existing instance %q", name)
 	})
+
+	return created, err
 }
 
 func SetBackoff(b wait.Backoff) wait.Backoff {
