@@ -59,5 +59,5 @@ func ConditionsToUnstructured(conditions []metav1.Condition, to *unstructured.Un
 		newConditions[i], _ = runtime.DefaultUnstructuredConverter.ToUnstructured(&conditions[i])
 	}
 
-	_ = unstructured.SetNestedSlice(to.Object, newConditions, "status", "conditions")
+	_ = unstructured.SetNestedSlice(to.Object, newConditions, fields...)
 }
