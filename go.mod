@@ -11,7 +11,7 @@ require (
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo v1.16.4
-	github.com/onsi/gomega v1.14.0
+	github.com/onsi/gomega v1.15.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.0
 	github.com/submariner-io/shipyard v0.10.0-rc1
