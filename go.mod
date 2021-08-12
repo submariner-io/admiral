@@ -2,6 +2,10 @@ module github.com/submariner-io/admiral
 
 go 1.13
 
+retract (
+	v0.10.0 // Tag was moved
+)
+
 require (
 	github.com/go-logr/logr v0.3.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
