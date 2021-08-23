@@ -21,8 +21,8 @@ jobs:
 
       - name: Raise an Issue to report broken links
         if: ${{ failure() }}
-        uses: JasonEtco/create-an-issue@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: peter-evans/create-issue-from-file@a04ce672e3acedb1f8e416b46716ddfd09905326
         with:
-          filename: .github/ISSUE_TEMPLATE/broken-link.md
+          title: Broken link detected by periodic linting
+          content-filepath: .github/ISSUE_TEMPLATE/broken-link.md
+          labels: automated, broken link
