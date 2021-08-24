@@ -23,9 +23,9 @@ require (
 	golang.org/x/time v0.0.0-20210611083556-38a9dc6acbc6
 	google.golang.org/appengine v1.6.7 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	k8s.io/api v0.21.0
-	k8s.io/apimachinery v0.21.0
-	k8s.io/client-go v1.5.2
+	k8s.io/api v0.19.10
+	k8s.io/apimachinery v0.19.10
+	k8s.io/client-go v0.19.10
 	k8s.io/klog v1.0.0
 	k8s.io/kube-openapi v0.0.0-20210421082810-95288971da7e // indirect
 	k8s.io/utils v0.0.0-20210305010621-2afb4311ab10 // indirect
