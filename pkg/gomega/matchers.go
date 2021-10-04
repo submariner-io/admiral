@@ -31,6 +31,9 @@ type containErrorSubstring struct {
 	expected error
 }
 
+// ContainErrorSubstring checks whether the actual error’s error message
+// contains the expected error’s error message, not as an exact match but
+// as a substring.
 func ContainErrorSubstring(expected error) gomegaTypes.GomegaMatcher {
 	return &containErrorSubstring{expected}
 }
