@@ -16,7 +16,7 @@ require (
 	github.com/onsi/gomega v1.16.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.0
-	github.com/submariner-io/shipyard v0.11.0-m2
+	github.com/submariner-io/shipyard v0.11.0-rc0
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
 	golang.org/x/oauth2 v0.0.0-20210427180440-81ed05c6b58c // indirect
 	golang.org/x/term v0.0.0-20210429154555-c04ba851c2a4 // indirect
