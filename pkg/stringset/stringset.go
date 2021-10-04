@@ -24,13 +24,31 @@ import (
 )
 
 type Interface interface {
+	// Add adds the given string to the set, if it’s not already present.
+	// Returns true if the string was added, false otherwise (it was already present).
 	Add(s string) bool
+
+	// AddAll adds all the given strings to the set.
 	AddAll(s ...string)
+
+	// Remove removes the given string from the set.
+	// Returns true if the string was present in the set, false otherwise.
 	Remove(s string) bool
+
+	// RemoveAll clears the set.
 	RemoveAll()
+
+	// Contains determines whether the set contains the given string.
 	Contains(s string) bool
+
+	// Size returns the size of the set.
 	Size() int
+
+	// Elements returns the contents of the set as a slice
 	Elements() []string
+
+	// Difference returns the difference between this set and the given object,
+	// i.e. all the strings in this set which aren’t in other.
 	Difference(other Interface) []string
 }
 
@@ -43,10 +61,13 @@ type synchronized struct {
 	syncMutex sync.Mutex
 }
 
+// New creates a new set of strings, initialized with the given strings.
 func New(s ...string) Interface {
 	return newSetType(s...)
 }
 
+// New creates a new synchronized set of strings, initialized with the given strings.
+// Changes to the set of strings will lock the set as appropriate to ensure atomicity.
 func NewSynchronized(s ...string) Interface {
 	return &synchronized{setType: newSetType(s...)}
 }
