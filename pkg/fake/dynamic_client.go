@@ -184,7 +184,9 @@ func (f *DynamicResourceClient) Update(ctx context.Context, obj *unstructured.Un
 	return f.ResourceInterface.Update(ctx, obj, options, subresources...)
 }
 
-func (f *DynamicResourceClient) Delete(ctx context.Context, name string, options v1.DeleteOptions, subresources ...string) error {
+func (f *DynamicResourceClient) Delete(ctx context.Context, name string,
+	options v1.DeleteOptions, // nolint:gocritic // Match K8s API
+	subresources ...string) error {
 	f.deleted <- name
 
 	fail := f.FailOnDelete

@@ -33,7 +33,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-func GetAuthorizedRestConfig(apiServer, apiServerToken, caData string, tls rest.TLSClientConfig,
+func GetAuthorizedRestConfig(apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig,
 	gvr schema.GroupVersionResource, namespace string) (restConfig *rest.Config, authorized bool, err error) {
 	// First try a REST config without the CA trust chain
 	restConfig, err = BuildRestConfig(apiServer, apiServerToken, "", tls)
@@ -55,7 +55,11 @@ func GetAuthorizedRestConfig(apiServer, apiServerToken, caData string, tls rest.
 	return
 }
 
-func BuildRestConfig(apiServer, apiServerToken, caData string, tls rest.TLSClientConfig) (*rest.Config, error) {
+func BuildRestConfig(apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig) (*rest.Config, error) {
+	if tls == nil {
+		tls = &rest.TLSClientConfig{}
+	}
+
 	if !tls.Insecure && caData != "" {
 		caDecoded, err := base64.StdEncoding.DecodeString(caData)
 		if err != nil {
@@ -67,7 +71,7 @@ func BuildRestConfig(apiServer, apiServerToken, caData string, tls rest.TLSClien
 
 	return &rest.Config{
 		Host:            fmt.Sprintf("https://%s", apiServer),
-		TLSClientConfig: tls,
+		TLSClientConfig: *tls,
 		BearerToken:     apiServerToken,
 	}, nil
 }

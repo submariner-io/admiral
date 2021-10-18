@@ -136,7 +136,7 @@ type Syncer struct {
 }
 
 // NewSyncer creates a Syncer that performs bi-directional syncing of resources between a local source and a central broker.
-func NewSyncer(config SyncerConfig) (*Syncer, error) {
+func NewSyncer(config SyncerConfig) (*Syncer, error) { // nolint:gocritic // Minimal performance hit, we modify our copy
 	if len(config.ResourceConfigs) == 0 {
 		return nil, fmt.Errorf("no resources to sync")
 	}
@@ -171,7 +171,8 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) {
 	brokerSyncer.remoteFederator = NewFederator(config.BrokerClient, config.RestMapper, config.BrokerNamespace, config.LocalClusterID)
 	brokerSyncer.localFederator = NewFederator(config.LocalClient, config.RestMapper, config.LocalNamespace, "")
 
-	for _, rc := range config.ResourceConfigs {
+	for i := range config.ResourceConfigs {
+		rc := &config.ResourceConfigs[i]
 		var syncCounter *prometheus.GaugeVec
 		if rc.SyncCounterOpts != nil {
 			syncCounter = prometheus.NewGaugeVec(
@@ -269,7 +270,7 @@ func createBrokerClient(config *SyncerConfig) error {
 		config.BrokerNamespace = spec.RemoteNamespace
 
 		config.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfig(spec.APIServer, spec.APIServerToken, spec.Ca,
-			rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
+			&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 	}
 
 	if !authorized {
