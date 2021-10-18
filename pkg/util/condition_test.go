@@ -44,7 +44,7 @@ var _ = Describe("TryAppendCondition", func() {
 	})
 
 	JustBeforeEach(func() {
-		outConditions = util.TryAppendCondition(inConditions, newCondition)
+		outConditions = util.TryAppendCondition(inConditions, &newCondition)
 	})
 
 	compareLast := func(expLen int) {

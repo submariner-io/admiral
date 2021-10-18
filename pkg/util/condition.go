@@ -22,18 +22,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog"
 )
 
 // TryAppendCondition appends the given Condition if it's not equal to the last Condition.
-func TryAppendCondition(conditions []metav1.Condition, newCondition metav1.Condition) []metav1.Condition {
-	newCondition.LastTransitionTime = metav1.Now()
-
-	numCond := len(conditions)
-	if numCond > 0 && conditionsEqual(&(conditions)[numCond-1], &newCondition) {
+func TryAppendCondition(conditions []metav1.Condition, newCondition *metav1.Condition) []metav1.Condition {
+	if newCondition == nil {
+		klog.Warning("TryAppendCondition call with nil newCondition")
 		return conditions
 	}
 
-	return append(conditions, newCondition)
+	newCondition.LastTransitionTime = metav1.Now()
+
+	numCond := len(conditions)
+	if numCond > 0 && conditionsEqual(&(conditions)[numCond-1], newCondition) {
+		return conditions
+	}
+
+	return append(conditions, *newCondition)
 }
 
 func conditionsEqual(c1, c2 *metav1.Condition) bool {
