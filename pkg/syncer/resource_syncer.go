@@ -63,9 +63,11 @@ func (d SyncDirection) String() string {
 		return "localToRemote"
 	case RemoteToLocal:
 		return "remoteToLocal"
-	default:
+	case None:
 		return "none"
 	}
+
+	return "unknown"
 }
 
 type Operation int
@@ -82,9 +84,11 @@ func (o Operation) String() string {
 		return "create"
 	case Update:
 		return "update"
-	default:
+	case Delete:
 		return "delete"
 	}
+
+	return "unknown"
 }
 
 const (
@@ -639,7 +643,7 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 				r.config.Name, clusterID, r.config.LocalClusterID, resource.GetName())
 			return false
 		}
-	default:
+	case None:
 	}
 
 	return true
