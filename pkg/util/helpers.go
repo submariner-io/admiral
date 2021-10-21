@@ -19,8 +19,6 @@ limitations under the License.
 package util
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	resourceUtil "github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -41,12 +39,12 @@ const (
 func BuildRestMapper(restConfig *rest.Config) (meta.RESTMapper, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(restConfig)
 	if err != nil {
-		return nil, fmt.Errorf("error creating discovery client: %v", err)
+		return nil, errors.Wrap(err, "error creating discovery client")
 	}
 
 	groupResources, err := restmapper.GetAPIGroupResources(discoveryClient)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving API group resources: %v", err)
+		return nil, errors.Wrap(err, "error retrieving API group resources")
 	}
 
 	return restmapper.NewDiscoveryRESTMapper(groupResources), nil

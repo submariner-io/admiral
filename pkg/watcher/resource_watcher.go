@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -128,7 +129,7 @@ func New(config *Config) (Interface, error) {
 	client := config.Client
 	if client == nil {
 		if client, err = dynamic.NewForConfig(config.RestConfig); err != nil {
-			return nil, fmt.Errorf("error creating dynamic client: %v", err)
+			return nil, errors.Wrap(err, "error creating dynamic client")
 		}
 	}
 
@@ -164,7 +165,6 @@ func New(config *Config) (Interface, error) {
 			Scheme:              config.Scheme,
 			ResyncPeriod:        config.ResyncPeriod,
 		})
-
 		if err != nil {
 			return nil, err
 		}
