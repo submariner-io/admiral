@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/resource"
@@ -153,7 +154,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { // nolint:gocritic // Min
 	if config.LocalClient == nil {
 		config.LocalClient, err = dynamic.NewForConfig(config.LocalRestConfig)
 		if err != nil {
-			return nil, fmt.Errorf("error creating dynamic client: %v", err)
+			return nil, errors.Wrap(err, "error creating dynamic client")
 		}
 	}
 
@@ -206,7 +207,6 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { // nolint:gocritic // Min
 			ResyncPeriod:        rc.LocalResyncPeriod,
 			SyncCounter:         syncCounter,
 		})
-
 		if err != nil {
 			return nil, err
 		}
@@ -238,7 +238,6 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { // nolint:gocritic // Min
 			ResyncPeriod:        rc.BrokerResyncPeriod,
 			SyncCounter:         syncCounter,
 		})
-
 		if err != nil {
 			return nil, err
 		}
