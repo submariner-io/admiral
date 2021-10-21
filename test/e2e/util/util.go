@@ -58,7 +58,9 @@ func DeleteAllOf(client dynamic.Interface, gvr *schema.GroupVersionResource, nam
 		e error) {
 		return resource.List(context.TODO(), metav1.ListOptions{})
 	}, func(result interface{}) (bool, string, error) {
-		list := result.(*unstructured.UnstructuredList)
+		list, ok := result.(*unstructured.UnstructuredList)
+		Expect(ok).To(BeTrue())
+
 		if len(list.Items) != 0 {
 			return false, fmt.Sprintf("%d %s still remain", len(list.Items), gvr.Resource), nil
 		}

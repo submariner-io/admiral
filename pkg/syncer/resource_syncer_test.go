@@ -336,7 +336,7 @@ func testTransformFunction() {
 				var ret runtime.Object
 				v := transformFuncRet.Load()
 				if v != nilResource {
-					ret = v.(runtime.Object)
+					ret, _ = v.(runtime.Object)
 				}
 
 				transformFuncRet.Store(transformed)
