@@ -28,6 +28,7 @@ linters:
     - errcheck
     - exhaustive
     - exportloopref
+    - forcetypeassert
     # - funlen
     # - gochecknoglobals
     # - gochecknoinits

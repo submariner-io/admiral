@@ -85,8 +85,8 @@ var _ = Describe("Broker Syncer", func() {
 		config.BrokerClient = fake.NewDynamicClient(config.Scheme, test.PrepInitialClientObjs(config.BrokerNamespace,
 			"", initialBrokerResources...)...)
 
-		localClient = config.LocalClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace).(*fake.DynamicResourceClient)
-		brokerClient = config.BrokerClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)
+		localClient, _ = config.LocalClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace).(*fake.DynamicResourceClient)
+		brokerClient, _ = config.BrokerClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)
 
 		var err error
 		syncer, err = broker.NewSyncer(*config)

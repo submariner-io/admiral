@@ -87,7 +87,10 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 		return false
 	}
 
-	key := obj.(string)
+	key, ok := obj.(string)
+	if !ok {
+		panic(fmt.Sprintf("Work queue %q received type %T instead of string", q.name, obj))
+	}
 
 	defer q.Done(key)
 

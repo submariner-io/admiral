@@ -398,7 +398,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 		return r.handleDeleted(key)
 	}
 
-	resource := obj.(*unstructured.Unstructured)
+	resource := r.assertUnstructured(obj)
 
 	op := Update
 	_, found := r.created.Load(key)
@@ -459,7 +459,7 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 
 	r.deleted.Delete(key)
 
-	deletedResource := obj.(*unstructured.Unstructured)
+	deletedResource := r.assertUnstructured(obj)
 	if !r.shouldSync(deletedResource) {
 		return false, nil
 	}
@@ -577,8 +577,8 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	oldResource := oldObj.(*unstructured.Unstructured)
-	newResource := newObj.(*unstructured.Unstructured)
+	oldResource := r.assertUnstructured(oldObj)
+	newResource := r.assertUnstructured(newObj)
 
 	if r.config.ResourcesEquivalent(oldResource, newResource) {
 		klog.V(log.LIBTRACE).Infof("Syncer %q: objects equivalent on update - not queueing resource\nOLD: %#v\nNEW: %#v",
@@ -647,6 +647,15 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 	}
 
 	return true
+}
+
+func (r *resourceSyncer) assertUnstructured(obj interface{}) *unstructured.Unstructured {
+	u, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		panic(fmt.Sprintf("Syncer %q received type %T instead of *Unstructured", r.config.Name, obj))
+	}
+
+	return u
 }
 
 func getClusterIDLabel(resource runtime.Object) (string, bool) {

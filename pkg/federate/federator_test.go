@@ -384,7 +384,7 @@ func newTestDriver() *testDriver {
 
 	t.dynClient = fake.NewDynamicClient(scheme.Scheme, test.PrepInitialClientObjs("", t.localClusterID, t.initObjs...)...)
 	t.restMapper, gvr = test.GetRESTMapperAndGroupVersionResourceFor(t.resource)
-	t.resourceClient = t.dynClient.Resource(*gvr).Namespace(t.targetNamespace).(*fake.DynamicResourceClient)
+	t.resourceClient, _ = t.dynClient.Resource(*gvr).Namespace(t.targetNamespace).(*fake.DynamicResourceClient)
 
 	return t
 }
