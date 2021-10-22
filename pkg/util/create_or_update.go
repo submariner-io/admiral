@@ -95,7 +95,7 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 			return errors.WithMessagef(err, "error retrieving %q", objMeta.GetName())
 		}
 
-		copy := existing.DeepCopyObject()
+		orig := existing.DeepCopyObject()
 		resourceVersion := resource.ToMeta(existing).GetResourceVersion()
 
 		toUpdate, err := mutate(existing)
@@ -105,7 +105,7 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 
 		resource.ToMeta(toUpdate).SetResourceVersion(resourceVersion)
 
-		if equality.Semantic.DeepEqual(toUpdate, copy) {
+		if equality.Semantic.DeepEqual(toUpdate, orig) {
 			return nil
 		}
 
