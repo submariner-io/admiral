@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
@@ -210,7 +211,7 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 
 	_, gvr, err := util.ToUnstructuredResource(config.ResourceType, config.RestMapper)
 	if err != nil {
-		return nil, err
+		return nil, err //nolint:wrapcheck // OK to return the error as is.
 	}
 
 	if syncer.config.SyncCounter != nil {
@@ -230,6 +231,8 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 	syncer.workQueue = workqueue.New(config.Name)
 
 	resourceClient := config.SourceClient.Resource(*gvr).Namespace(config.SourceNamespace)
+
+	//nolint:wrapcheck // These are wrapper functions.
 	syncer.store, syncer.informer = cache.NewInformer(&cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 			options.LabelSelector = config.SourceLabelSelector
@@ -287,15 +290,14 @@ func (r *resourceSyncer) AwaitStopped() {
 func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bool, error) {
 	obj, exists, err := r.store.GetByKey(namespace + "/" + name)
 	if err != nil {
-		return nil, false, err
+		return nil, false, errors.Wrap(err, "error retrieving resource")
 	}
 
 	if !exists {
 		return nil, false, nil
 	}
 
-	converted := r.config.ResourceType.DeepCopyObject()
-	err = r.config.Scheme.Convert(obj.(*unstructured.Unstructured), converted, nil)
+	converted, err := r.convert(obj.(*unstructured.Unstructured))
 	if err != nil {
 		return nil, false, err
 	}
@@ -312,8 +314,7 @@ func (r *resourceSyncer) ListResources() ([]runtime.Object, error) {
 	retObjects := make([]runtime.Object, 0, len(list))
 
 	for _, obj := range list {
-		converted := r.config.ResourceType.DeepCopyObject()
-		err := r.config.Scheme.Convert(obj.(*unstructured.Unstructured), converted, nil)
+		converted, err := r.convert(obj.(*unstructured.Unstructured))
 		if err != nil {
 			return nil, err
 		}
@@ -391,7 +392,7 @@ func (r *resourceSyncer) Reconcile(resourceLister func() []runtime.Object) {
 func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error) {
 	obj, exists, err := r.store.GetByKey(key)
 	if err != nil {
-		return true, err
+		return true, errors.Wrapf(err, "error retrieving resource %q", key)
 	}
 
 	if !exists {
@@ -425,7 +426,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 
 		err = r.config.Federator.Distribute(resource)
 		if err != nil {
-			return true, err
+			return true, errors.Wrapf(err, "error distributing resource %q", key)
 		}
 
 		r.onSuccessfulSync(resource, transformed, op)
@@ -476,7 +477,7 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 
 		if err != nil {
 			r.deleted.Store(key, deletedResource)
-			return true, err
+			return true, errors.Wrapf(err, "error deleting resource %q", key)
 		}
 
 		r.onSuccessfulSync(resource, transformed, Delete)
@@ -499,15 +500,20 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 	return requeue, nil
 }
 
-func (r *resourceSyncer) convert(from interface{}) runtime.Object {
-	converted := r.config.ResourceType.DeepCopyObject()
-	err := r.config.Scheme.Convert(from, converted, nil)
+func (r *resourceSyncer) convertNoError(from interface{}) runtime.Object {
+	converted, err := r.convert(from)
 	if err != nil {
-		klog.Errorf("Syncer %q: error converting %#v to %T: %v", r.config.Name, from, r.config.ResourceType, err)
-		return nil
+		klog.Errorf("%+v", err)
 	}
 
 	return converted
+}
+
+func (r *resourceSyncer) convert(from interface{}) (runtime.Object, error) {
+	converted := r.config.ResourceType.DeepCopyObject()
+	err := r.config.Scheme.Convert(from, converted, nil)
+
+	return converted, errors.Wrapf(err, "Syncer %q: error converting %#v to %T", r.config.Name, from, r.config.ResourceType)
 }
 
 //nolint:interfacer //false positive for "`from` can be `k8s.io/apimachinery/pkg/runtime.Object`" as it returns 'from' as Unstructured
@@ -519,7 +525,7 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 
 	clusterID, _ := getClusterIDLabel(from)
 
-	converted := r.convert(from)
+	converted := r.convertNoError(from)
 	if converted == nil {
 		return nil, nil, false
 	}
@@ -550,7 +556,7 @@ func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op
 	}
 
 	if converted == nil {
-		converted = r.convert(resource)
+		converted = r.convertNoError(resource)
 		if converted == nil {
 			return
 		}

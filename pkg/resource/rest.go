@@ -78,7 +78,7 @@ func BuildRestConfig(apiServer, apiServerToken, caData string, tls *rest.TLSClie
 func IsAuthorizedFor(restConfig *rest.Config, gvr schema.GroupVersionResource, namespace string) (bool, error) {
 	client, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
-		return false, err
+		return false, errors.Wrap(err, "error creating dynamic client")
 	}
 
 	_, err = client.Resource(gvr).Namespace(namespace).Get(context.TODO(), "any", metav1.GetOptions{})

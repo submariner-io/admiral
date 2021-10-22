@@ -35,7 +35,7 @@ func ToUnstructured(from runtime.Object) (*unstructured.Unstructured, error) {
 		to := &unstructured.Unstructured{}
 		err := scheme.Scheme.Convert(from, to, nil)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "error converting %#v to unstructured.Unstructured", from)
+			return nil, errors.Wrapf(err, "error converting %#v to unstructured.Unstructured", from)
 		}
 
 		return to, nil

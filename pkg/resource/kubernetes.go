@@ -16,6 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:wrapcheck // These functions are pass-through wrappers for the k8s APIs.
 package resource
 
 import (

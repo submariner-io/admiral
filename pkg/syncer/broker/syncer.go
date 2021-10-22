@@ -147,7 +147,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { // nolint:gocritic // Min
 	if config.RestMapper == nil {
 		config.RestMapper, err = util.BuildRestMapper(config.LocalRestConfig)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "error building the REST mapper")
 		}
 	}
 
@@ -208,7 +208,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { // nolint:gocritic // Min
 			SyncCounter:         syncCounter,
 		})
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "error creating local resource syncer")
 		}
 
 		brokerSyncer.syncers = append(brokerSyncer.syncers, localSyncer)
@@ -239,7 +239,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { // nolint:gocritic // Min
 			SyncCounter:         syncCounter,
 		})
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "error creating remote resource syncer")
 		}
 
 		brokerSyncer.syncers = append(brokerSyncer.syncers, remoteSyncer)
@@ -251,7 +251,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { // nolint:gocritic // Min
 func createBrokerClient(config *SyncerConfig) error {
 	_, gvr, e := util.ToUnstructuredResource(config.ResourceConfigs[0].BrokerResourceType, config.RestMapper)
 	if e != nil {
-		return e
+		return e //nolint:wrapcheck // OK to return the error as is.
 	}
 
 	var authorized bool
@@ -273,7 +273,7 @@ func createBrokerClient(config *SyncerConfig) error {
 	}
 
 	if !authorized {
-		return err
+		return errors.Wrap(err, "error authorizing access to the broker API server")
 	}
 
 	if err != nil {
@@ -281,18 +281,15 @@ func createBrokerClient(config *SyncerConfig) error {
 	}
 
 	config.BrokerClient, err = dynamic.NewForConfig(config.BrokerRestConfig)
-	if err != nil {
-		return err
-	}
 
-	return nil
+	return errors.Wrap(err, "error creating dynamic client")
 }
 
 func (s *Syncer) Start(stopCh <-chan struct{}) error {
 	for _, syncer := range s.syncers {
 		err := syncer.Start(stopCh)
 		if err != nil {
-			return err
+			return err //nolint:wrapcheck // OK to return the error as is.
 		}
 	}
 
@@ -336,7 +333,7 @@ func (s *Syncer) GetLocalResource(name, namespace string, ofType runtime.Object)
 		return nil, false, fmt.Errorf("no Syncer found for %#v", ofType)
 	}
 
-	return ls.GetResource(name, namespace)
+	return ls.GetResource(name, namespace) //nolint:wrapcheck // OK to return the error as is.
 }
 
 func (s *Syncer) ListLocalResources(ofType runtime.Object) ([]runtime.Object, error) {
@@ -345,5 +342,5 @@ func (s *Syncer) ListLocalResources(ofType runtime.Object) ([]runtime.Object, er
 		return nil, fmt.Errorf("no Syncer found for %#v", ofType)
 	}
 
-	return ls.ListResources()
+	return ls.ListResources() //nolint:wrapcheck // OK to return the error as is.
 }

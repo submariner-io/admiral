@@ -97,7 +97,7 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 	requeue, err := func() (bool, error) {
 		ns, name, err := cache.SplitMetaNamespaceKey(key)
 		if err != nil {
-			return false, err
+			panic(err)
 		}
 
 		return process(key, name, ns)
