@@ -9,3 +9,4 @@ output
 *.out
 junit*.xml
 .shflags
+Dockerfile.*
