@@ -34,10 +34,12 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("CreateOrUpdate Federator", testCreateOrUpdateFederator)
-var _ = Describe("Create Federator", testCreateFederator)
-var _ = Describe("Update Federator", testUpdateFederator)
-var _ = Describe("Federator Delete", testDelete)
+var (
+	_ = Describe("CreateOrUpdate Federator", testCreateOrUpdateFederator)
+	_ = Describe("Create Federator", testCreateFederator)
+	_ = Describe("Update Federator", testUpdateFederator)
+	_ = Describe("Federator Delete", testDelete)
+)
 
 func testCreateOrUpdateFederator() {
 	var (

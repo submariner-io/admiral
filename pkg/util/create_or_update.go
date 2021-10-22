@@ -116,7 +116,6 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 
 		return err
 	})
-
 	if err != nil {
 		return OperationResultNone, err
 	}
