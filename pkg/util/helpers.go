@@ -54,7 +54,7 @@ func ToUnstructuredResource(from runtime.Object, restMapper meta.RESTMapper) (*u
 	error) {
 	to, err := resourceUtil.ToUnstructured(from)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, err //nolint:wrapcheck // ok to return as is
 	}
 
 	gvr, err := FindGroupVersionResource(to, restMapper)
@@ -69,7 +69,7 @@ func FindGroupVersionResource(from *unstructured.Unstructured, restMapper meta.R
 	gvk := from.GroupVersionKind()
 	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "error getting REST mapper for %#v", gvk)
+		return nil, errors.Wrapf(err, "error getting REST mapper for %#v", gvk)
 	}
 
 	return &mapping.Resource, nil

@@ -60,6 +60,7 @@ linters:
     - unused
     - varcheck
     - whitespace
+    - wrapcheck
     - wsl
 issues:
   exclude-rules:

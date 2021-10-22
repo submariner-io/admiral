@@ -122,7 +122,7 @@ func New(config *Config) (Interface, error) {
 	restMapper := config.RestMapper
 	if restMapper == nil {
 		if restMapper, err = util.BuildRestMapper(config.RestConfig); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "error building the REST mapper")
 		}
 	}
 
@@ -166,7 +166,7 @@ func New(config *Config) (Interface, error) {
 			ResyncPeriod:        config.ResyncPeriod,
 		})
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "error creating resource syncer %q", rc.Name)
 		}
 
 		watcher.syncers = append(watcher.syncers, s)
@@ -179,7 +179,7 @@ func (r *resourceWatcher) Start(stopCh <-chan struct{}) error {
 	for _, syncer := range r.syncers {
 		err := syncer.Start(stopCh)
 		if err != nil {
-			return err
+			return err //nolint:wrapcheck // OK to return the error as is.
 		}
 	}
 
