@@ -48,6 +48,7 @@ linters:
     - misspell
     - nakedret
     - prealloc
+    - predeclared
     - staticcheck
     - structcheck
     - stylecheck

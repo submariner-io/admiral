@@ -202,10 +202,10 @@ var _ = Describe("Broker Syncer", func() {
 				localResource.Name = "local-pod"
 				initialLocalResources = append(initialLocalResources, localResource)
 
-				copy := localResource.DeepCopy()
-				test.SetClusterIDLabel(copy, config.LocalClusterID)
-				copy.Labels[sync.OrigNamespaceLabelKey] = metav1.NamespaceDefault
-				initialBrokerResources = append(initialBrokerResources, copy)
+				brokerResource := localResource.DeepCopy()
+				test.SetClusterIDLabel(brokerResource, config.LocalClusterID)
+				brokerResource.Labels[sync.OrigNamespaceLabelKey] = metav1.NamespaceDefault
+				initialBrokerResources = append(initialBrokerResources, brokerResource)
 			})
 
 			It("should not delete it from the broker datastore on reconciliation", func() {
@@ -345,9 +345,9 @@ var _ = Describe("Broker Syncer", func() {
 			test.SetClusterIDLabel(resource, "remote")
 			initialLocalResources = append(initialLocalResources, resource)
 
-			copy := resource.DeepCopy()
-			copy.SetNamespace(config.BrokerNamespace)
-			initialBrokerResources = append(initialBrokerResources, copy)
+			brokerResource := resource.DeepCopy()
+			brokerResource.SetNamespace(config.BrokerNamespace)
+			initialBrokerResources = append(initialBrokerResources, brokerResource)
 		})
 
 		It("should not delete it from the local datastore on reconciliation", func() {
@@ -385,10 +385,10 @@ var _ = Describe("Broker Syncer", func() {
 			resource.SetNamespace(config.LocalNamespace)
 			initialLocalResources = append(initialLocalResources, resource)
 
-			copy := resource.DeepCopy()
-			copy.SetNamespace(config.BrokerNamespace)
-			test.SetClusterIDLabel(copy, config.LocalClusterID)
-			initialBrokerResources = append(initialBrokerResources, copy)
+			brokerResource := resource.DeepCopy()
+			brokerResource.SetNamespace(config.BrokerNamespace)
+			test.SetClusterIDLabel(brokerResource, config.LocalClusterID)
+			initialBrokerResources = append(initialBrokerResources, brokerResource)
 		})
 
 		It("should not delete it from the broker datastore on reconciliation", func() {
