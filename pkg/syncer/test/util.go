@@ -39,8 +39,10 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-const RemoteNamespace = "remote-ns"
-const LocalNamespace = "local-ns"
+const (
+	RemoteNamespace = "remote-ns"
+	LocalNamespace  = "local-ns"
+)
 
 func GetResourceAndError(resourceInterface dynamic.ResourceInterface, obj runtime.Object) (*unstructured.Unstructured, error) {
 	meta, err := metaapi.Accessor(obj)
