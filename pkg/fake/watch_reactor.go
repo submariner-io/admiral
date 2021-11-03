@@ -31,7 +31,7 @@ import (
 )
 
 type WatchReactor struct {
-	sync.Mutex
+	mutex    sync.Mutex
 	watches  map[string]*watchDelegator
 	reactors []testing.WatchReactor
 }
@@ -55,8 +55,8 @@ func filterEvent(event watch.Event, restrictions *testing.WatchRestrictions) (wa
 func (r *WatchReactor) react(action testing.Action) (bool, watch.Interface, error) {
 	switch w := action.(type) {
 	case testing.WatchActionImpl:
-		r.Lock()
-		defer r.Unlock()
+		r.mutex.Lock()
+		defer r.mutex.Unlock()
 
 		if r.watches[w.Resource.Resource] != nil {
 			return true, nil, fmt.Errorf("watch for %q was already started", w.Resource.Resource)
@@ -90,8 +90,8 @@ func (r *WatchReactor) react(action testing.Action) (bool, watch.Interface, erro
 }
 
 func (r *WatchReactor) getDelegator(forResource string) *watchDelegator {
-	r.Lock()
-	defer r.Unlock()
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 
 	return r.watches[forResource]
 }

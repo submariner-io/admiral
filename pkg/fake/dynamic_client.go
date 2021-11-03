@@ -40,13 +40,12 @@ import (
 
 type DynamicClient struct {
 	*fake.FakeDynamicClient
-	sync.Mutex
 	namespaceableResources map[schema.GroupVersionResource]dynamic.NamespaceableResourceInterface
 }
 
 type namespaceableResource struct {
 	dynamic.NamespaceableResourceInterface
-	sync.Mutex
+	mutex           sync.Mutex
 	resourceClients map[string]dynamic.ResourceInterface
 }
 
@@ -95,8 +94,8 @@ func (f *DynamicClient) Resource(gvr schema.GroupVersionResource) dynamic.Namesp
 }
 
 func (f *namespaceableResource) Namespace(namespace string) dynamic.ResourceInterface {
-	f.Lock()
-	defer f.Unlock()
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 
 	i := f.resourceClients[namespace]
 	if i != nil {
