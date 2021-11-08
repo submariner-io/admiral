@@ -50,7 +50,7 @@ var _ = Describe("", func() {
 	BeforeEach(func() {
 		dynClient := fake.NewDynamicClient(scheme.Scheme)
 
-		client = dynClient.Resource(schema.GroupVersionResource{
+		client, _ = dynClient.Resource(schema.GroupVersionResource{
 			Group:    corev1.SchemeGroupVersion.Group,
 			Version:  corev1.SchemeGroupVersion.Version,
 			Resource: "pods",

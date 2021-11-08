@@ -41,6 +41,7 @@ func NewUpdateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper,
 	}
 }
 
+//nolint:wrapcheck // This function is effectively a wrapper so no need to wrap errors.
 func (f *updateFederator) Distribute(obj runtime.Object) error {
 	klog.V(log.LIBTRACE).Infof("In Distribute for %#v", obj)
 

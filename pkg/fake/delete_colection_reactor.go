@@ -53,7 +53,6 @@ func (r *DeleteCollectionReactor) react(action testing.Action) (bool, runtime.Ob
 			LabelSelector: dc.ListRestrictions.Labels.String(),
 			FieldSelector: dc.ListRestrictions.Fields.String(),
 		}))
-
 		if err != nil {
 			return true, nil, err
 		}
