@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-source ${SCRIPTS_DIR}/lib/cluster_settings
-source ${DAPPER_SOURCE}/scripts/cluster_settings
 source ${SCRIPTS_DIR}/lib/debug_functions
 source ${SCRIPTS_DIR}/lib/utils
 
@@ -13,6 +11,8 @@ function deploy_crds {
     kubectl apply -f ${DAPPER_SOURCE}/test/e2e/deploy/crds.yaml
 }
 
+settings=${DAPPER_SOURCE}/.shipyard.e2e.yml
+load_settings
 declare_kubeconfig
 
 run_all_clusters deploy_crds
