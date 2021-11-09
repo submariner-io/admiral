@@ -6,8 +6,6 @@ linters-settings:
       - opinionated
       - performance
       - style
-    disabled-checks:
-      - unlambda
   gocyclo:
     min-complexity: 15
   govet:
