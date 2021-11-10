@@ -73,7 +73,9 @@ func testWithLocalTransform() {
 	BeforeEach(func() {
 		t.brokerResourceType = &testV1.ExportedToaster{}
 		t.localTransform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
-			toaster := from.(*testV1.Toaster)
+			toaster, ok := from.(*testV1.Toaster)
+			Expect(ok).To(BeTrue())
+
 			return &testV1.ExportedToaster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: toaster.GetName(),
@@ -265,7 +267,8 @@ func (t *testDriver) deleteToaster(cluster framework.ClusterIndex, toDelete *tes
 
 func (t *testDriver) awaitToaster(cluster framework.ClusterIndex, expected *testV1.Toaster) {
 	By(fmt.Sprintf("Waiting for Toaster %q to be synced to %q", expected.Name, framework.TestContext.ClusterIDs[cluster]))
-	actual := t.awaitResource(cluster, util.ToasterGVR(), expected).(*testV1.Toaster)
+	actual, ok := t.awaitResource(cluster, util.ToasterGVR(), expected).(*testV1.Toaster)
+	Expect(ok).To(BeTrue())
 	Expect(actual.Spec).To(Equal(expected.Spec))
 }
 
@@ -281,12 +284,13 @@ func (t *testDriver) awaitNoExportedToaster(cluster framework.ClusterIndex, look
 
 func (t *testDriver) awaitExportedToaster(cluster framework.ClusterIndex, expected *testV1.Toaster) {
 	By(fmt.Sprintf("Waiting for ExportedToaster %q to be synced to %q", expected.Name, framework.TestContext.ClusterIDs[cluster]))
-	actual := t.awaitResource(cluster, exportedToasterGVR(), &testV1.ExportedToaster{
+	actual, ok := t.awaitResource(cluster, exportedToasterGVR(), &testV1.ExportedToaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      expected.Name,
 			Namespace: expected.Namespace,
 		},
 	}).(*testV1.ExportedToaster)
+	Expect(ok).To(BeTrue())
 
 	Expect(actual.Spec).To(Equal(expected.Spec))
 }
@@ -299,7 +303,7 @@ func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.G
 	Expect(err).To(Succeed())
 
 	msg := fmt.Sprintf("get %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
-	raw := framework.AwaitUntil(msg, func() (i interface{}, e error) {
+	raw, ok := framework.AwaitUntil(msg, func() (i interface{}, e error) {
 		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(
 			context.TODO(), meta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -313,6 +317,7 @@ func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.G
 
 		return true, "", nil
 	}).(*unstructured.Unstructured)
+	Expect(ok).To(BeTrue())
 
 	result := resource.DeepCopyObject()
 	err = scheme.Scheme.Convert(raw, result, nil)

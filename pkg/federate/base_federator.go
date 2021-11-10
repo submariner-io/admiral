@@ -16,6 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:wrapcheck // These functions are effectively wrappers so no need to wrap errors.
 package federate
 
 import (

@@ -34,10 +34,12 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
-var _ = Describe("CreateOrUpdate Federator", testCreateOrUpdateFederator)
-var _ = Describe("Create Federator", testCreateFederator)
-var _ = Describe("Update Federator", testUpdateFederator)
-var _ = Describe("Federator Delete", testDelete)
+var (
+	_ = Describe("CreateOrUpdate Federator", testCreateOrUpdateFederator)
+	_ = Describe("Create Federator", testCreateFederator)
+	_ = Describe("Update Federator", testUpdateFederator)
+	_ = Describe("Federator Delete", testDelete)
+)
 
 func testCreateOrUpdateFederator() {
 	var (
@@ -384,7 +386,7 @@ func newTestDriver() *testDriver {
 
 	t.dynClient = fake.NewDynamicClient(scheme.Scheme, test.PrepInitialClientObjs("", t.localClusterID, t.initObjs...)...)
 	t.restMapper, gvr = test.GetRESTMapperAndGroupVersionResourceFor(t.resource)
-	t.resourceClient = t.dynClient.Resource(*gvr).Namespace(t.targetNamespace).(*fake.DynamicResourceClient)
+	t.resourceClient, _ = t.dynClient.Resource(*gvr).Namespace(t.targetNamespace).(*fake.DynamicResourceClient)
 
 	return t
 }

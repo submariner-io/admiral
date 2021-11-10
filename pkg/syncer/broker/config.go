@@ -20,6 +20,7 @@ package broker
 
 import (
 	"github.com/kelseyhightower/envconfig"
+	"github.com/pkg/errors"
 )
 
 type brokerSpecification struct {
@@ -35,7 +36,7 @@ func getBrokerSpecification() (*brokerSpecification, error) {
 
 	err := envconfig.Process("broker_k8s", &brokerSpec)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "error processing env configuration")
 	}
 
 	return &brokerSpec, nil

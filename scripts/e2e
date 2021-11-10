@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-source ${SCRIPTS_DIR}/lib/cluster_settings
-source ${DAPPER_SOURCE}/scripts/cluster_settings
 source ${SCRIPTS_DIR}/lib/debug_functions
 source ${SCRIPTS_DIR}/lib/utils
 
@@ -15,6 +13,8 @@ function export_broker_env {
     export BROKER_K8S_APISERVERTOKEN=$(kubectl -n ${BROKER_K8S_REMOTENAMESPACE} get secrets -o jsonpath="{.items[?(@.metadata.annotations['kubernetes\.io/service-account\.name']=='${BROKER_K8S_REMOTENAMESPACE}-client')].data.token}"|base64 --decode)
 }
 
+settings=${DAPPER_SOURCE}/.shipyard.e2e.yml
+load_settings
 declare_kubeconfig
 with_context "${clusters[1]}" export_broker_env
 

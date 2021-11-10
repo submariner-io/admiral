@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -121,14 +122,14 @@ func New(config *Config) (Interface, error) {
 	restMapper := config.RestMapper
 	if restMapper == nil {
 		if restMapper, err = util.BuildRestMapper(config.RestConfig); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "error building the REST mapper")
 		}
 	}
 
 	client := config.Client
 	if client == nil {
 		if client, err = dynamic.NewForConfig(config.RestConfig); err != nil {
-			return nil, fmt.Errorf("error creating dynamic client: %v", err)
+			return nil, errors.Wrap(err, "error creating dynamic client")
 		}
 	}
 
@@ -164,9 +165,8 @@ func New(config *Config) (Interface, error) {
 			Scheme:              config.Scheme,
 			ResyncPeriod:        config.ResyncPeriod,
 		})
-
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "error creating resource syncer %q", rc.Name)
 		}
 
 		watcher.syncers = append(watcher.syncers, s)
@@ -179,7 +179,7 @@ func (r *resourceWatcher) Start(stopCh <-chan struct{}) error {
 	for _, syncer := range r.syncers {
 		err := syncer.Start(stopCh)
 		if err != nil {
-			return err
+			return err //nolint:wrapcheck // OK to return the error as is.
 		}
 	}
 
