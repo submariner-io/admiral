@@ -26,7 +26,7 @@ import (
 )
 
 type FailingReactor struct {
-	sync.Mutex
+	mutex          sync.Mutex
 	failOnCreate   error
 	failOnUpdate   error
 	failOnDelete   error
@@ -48,8 +48,8 @@ func NewFailingReactorForResource(f *testing.Fake, resource string) *FailingReac
 }
 
 func (f *FailingReactor) react(action testing.Action) (bool, runtime.Object, error) {
-	f.Lock()
-	defer f.Unlock()
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 
 	switch action.GetVerb() {
 	case "get":
@@ -133,37 +133,37 @@ func (f *FailingReactor) list() (bool, runtime.Object, error) {
 }
 
 func (f *FailingReactor) SetResetOnFailure(v bool) {
-	f.Lock()
-	defer f.Unlock()
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 	f.resetOnFailure = v
 }
 
 func (f *FailingReactor) SetFailOnCreate(err error) {
-	f.Lock()
-	defer f.Unlock()
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 	f.failOnCreate = err
 }
 
 func (f *FailingReactor) SetFailOnUpdate(err error) {
-	f.Lock()
-	defer f.Unlock()
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 	f.failOnUpdate = err
 }
 
 func (f *FailingReactor) SetFailOnDelete(err error) {
-	f.Lock()
-	defer f.Unlock()
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 	f.failOnDelete = err
 }
 
 func (f *FailingReactor) SetFailOnGet(err error) {
-	f.Lock()
-	defer f.Unlock()
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 	f.failOnGet = err
 }
 
 func (f *FailingReactor) SetFailOnList(err error) {
-	f.Lock()
-	defer f.Unlock()
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 	f.failOnList = err
 }
