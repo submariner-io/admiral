@@ -19,7 +19,9 @@ linters:
   disable-all: true
   enable:
     - asciicheck
+    - bidichk
     - bodyclose
+    - contextcheck
     # - cyclop # This is equivalent to gocyclo
     - deadcode
     - depguard
@@ -28,6 +30,7 @@ linters:
     - durationcheck
     - errcheck
     - errorlint
+    - errname
     - exhaustive
     # - exhaustivestruct # Not recommended for general use - meant to be used only for special cases
     - exportloopref
@@ -60,6 +63,8 @@ linters:
     - importas
     - ineffassign
     # - interfacer # Deprecated since v1.38.0
+    # - ireturn # The argument to always "Return Concrete Types" doesn't seem compelling. It is perfectly valid to return
+    #             an interface to avoid exposing the entire underlying struct
     - lll
     - makezero
     # - maligned # Deprecated since v1.38.0
@@ -67,6 +72,7 @@ linters:
     - nakedret
     # - nestif # This calculates cognitive complexity but we're doing that elsewhere
     - nilerr
+    - nilnil
     # - nlreturn # This is reasonable with a block-size of 2 but setting it above isn't honored
     # - noctx # We don't send HTTP requests
     - nolintlint
@@ -82,6 +88,7 @@ linters:
     - structcheck
     - stylecheck
     # - tagliatelle # Inconsistent with stylecheck and not as good
+    # - tenv # Not relevant for our Ginkgo UTs
     - testpackage
     # - thelper # Not relevant for our Ginkgo UTs
     # - tparallel # Not relevant for our Ginkgo UTs
@@ -90,6 +97,7 @@ linters:
     - unparam
     - unused
     - varcheck
+    # - varnamelen # It doesn't seem necessary to enforce a minimum variable name length
     - wastedassign
     - whitespace
     - wrapcheck
@@ -137,6 +145,7 @@ issues:
     # Ignore certain linters for test files
     - path: _test\.go|test/|fake/|gomega/
       linters:
+        - errname
         - gochecknoinits
         - goerr113
         - wrapcheck
