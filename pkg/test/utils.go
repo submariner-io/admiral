@@ -25,6 +25,8 @@ import (
 	"github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func SetDeleting(client resource.Interface, name string) {
@@ -49,4 +51,11 @@ func GetFinalizers(client resource.Interface, name string) []string {
 	Expect(err).To(Succeed())
 
 	return metaObj.GetFinalizers()
+}
+
+func ToUnstructured(obj runtime.Object) *unstructured.Unstructured {
+	raw, err := resource.ToUnstructured(obj)
+	Expect(err).To(Succeed())
+
+	return raw
 }

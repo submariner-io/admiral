@@ -28,6 +28,7 @@ import (
 	. "github.com/submariner-io/admiral/pkg/gomega"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
+	testutil "github.com/submariner-io/admiral/pkg/test"
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -158,14 +159,14 @@ var _ = Describe("", func() {
 
 		BeforeEach(func() {
 			mutateFn = func(existing runtime.Object) (runtime.Object, error) {
-				obj := test.ToUnstructured(pod)
+				obj := testutil.ToUnstructured(pod)
 				obj.SetUID(resource.ToMeta(existing).GetUID())
 				return util.Replace(obj)(nil)
 			}
 		})
 
 		createOrUpdate := func() (util.OperationResult, error) {
-			return util.CreateOrUpdate(context.TODO(), resource.ForDynamic(client), test.ToUnstructured(pod), mutateFn)
+			return util.CreateOrUpdate(context.TODO(), resource.ForDynamic(client), testutil.ToUnstructured(pod), mutateFn)
 		}
 
 		testCreateOrUpdateErr := func() {

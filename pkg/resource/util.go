@@ -24,7 +24,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes/scheme"
 )
 
 func ToUnstructured(from runtime.Object) (*unstructured.Unstructured, error) {
@@ -32,13 +31,12 @@ func ToUnstructured(from runtime.Object) (*unstructured.Unstructured, error) {
 	case *unstructured.Unstructured:
 		return f.DeepCopy(), nil
 	default:
-		to := &unstructured.Unstructured{}
-		err := scheme.Scheme.Convert(from, to, nil)
+		m, err := runtime.DefaultUnstructuredConverter.ToUnstructured(from)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error converting %#v to unstructured.Unstructured", from)
 		}
 
-		return to, nil
+		return &unstructured.Unstructured{Object: m}, nil
 	}
 }
 

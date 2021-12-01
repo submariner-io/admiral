@@ -25,7 +25,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/federate"
-	resourceUtil "github.com/submariner-io/admiral/pkg/resource"
+	"github.com/submariner-io/admiral/pkg/test"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metaapi "k8s.io/apimachinery/pkg/api/meta"
@@ -59,14 +59,14 @@ func GetResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object
 }
 
 func CreateResource(resourceInterface dynamic.ResourceInterface, resource runtime.Object) *unstructured.Unstructured {
-	obj, err := resourceInterface.Create(context.TODO(), ToUnstructured(resource), metav1.CreateOptions{})
+	obj, err := resourceInterface.Create(context.TODO(), test.ToUnstructured(resource), metav1.CreateOptions{})
 	Expect(err).To(Succeed())
 
 	return obj
 }
 
 func UpdateResource(resourceInterface dynamic.ResourceInterface, resource runtime.Object) *unstructured.Unstructured {
-	obj, err := resourceInterface.Update(context.TODO(), ToUnstructured(resource), metav1.UpdateOptions{})
+	obj, err := resourceInterface.Update(context.TODO(), test.ToUnstructured(resource), metav1.UpdateOptions{})
 	Expect(err).To(Succeed())
 
 	return obj
@@ -176,7 +176,7 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 	newObjs := make([]runtime.Object, 0, len(initObjs))
 
 	for _, obj := range initObjs {
-		raw := ToUnstructured(obj)
+		raw := test.ToUnstructured(obj)
 		raw.SetUID(uuid.NewUUID())
 		raw.SetResourceVersion("1")
 
@@ -198,13 +198,6 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 	}
 
 	return newObjs
-}
-
-func ToUnstructured(obj runtime.Object) *unstructured.Unstructured {
-	raw, err := resourceUtil.ToUnstructured(obj)
-	Expect(err).To(Succeed())
-
-	return raw
 }
 
 func SetClusterIDLabel(obj runtime.Object, clusterID string) runtime.Object {
