@@ -33,6 +33,7 @@ type brokerSpecification struct {
 	RemoteNamespace string
 	Insecure        bool `default:"false"`
 	Ca              string
+	Secret          string
 }
 
 const brokerConfigPrefix = "broker_k8s"
@@ -60,4 +61,8 @@ func EnvironmentVariable(setting string) string {
 	}
 
 	panic(fmt.Sprintf("unknown Broker setting %s", setting))
+}
+
+func SecretPath(secretName string) string {
+	return fmt.Sprintf("/run/secrets/submariner.io/%s", secretName)
 }

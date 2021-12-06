@@ -32,10 +32,10 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-func GetAuthorizedRestConfig(apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig,
+func GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig,
 	gvr schema.GroupVersionResource, namespace string) (restConfig *rest.Config, authorized bool, err error) {
 	// First try a REST config without the CA trust chain
-	restConfig, err = BuildRestConfig(apiServer, apiServerToken, "", tls)
+	restConfig, err = BuildRestConfigFromData(apiServer, apiServerToken, "", tls)
 	if err != nil {
 		return
 	}
@@ -43,7 +43,7 @@ func GetAuthorizedRestConfig(apiServer, apiServerToken, caData string, tls *rest
 	authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
 	if !authorized {
 		// Now try with the trust chain
-		restConfig, err = BuildRestConfig(apiServer, apiServerToken, caData, tls)
+		restConfig, err = BuildRestConfigFromData(apiServer, apiServerToken, caData, tls)
 		if err != nil {
 			return
 		}
@@ -54,7 +54,29 @@ func GetAuthorizedRestConfig(apiServer, apiServerToken, caData string, tls *rest
 	return
 }
 
-func BuildRestConfig(apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig) (*rest.Config, error) {
+func GetAuthorizedRestConfigFromFiles(apiServer, apiServerTokenFile, caFile string, tls *rest.TLSClientConfig,
+	gvr schema.GroupVersionResource, namespace string) (restConfig *rest.Config, authorized bool, err error) {
+	// First try a REST config without the CA trust chain
+	restConfig, err = BuildRestConfigFromFiles(apiServer, apiServerTokenFile, "", tls)
+	if err != nil {
+		return
+	}
+
+	authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
+	if !authorized {
+		// Now try with the trust chain
+		restConfig, err = BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile, tls)
+		if err != nil {
+			return
+		}
+
+		authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
+	}
+
+	return
+}
+
+func BuildRestConfigFromData(apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig) (*rest.Config, error) {
 	if tls == nil {
 		tls = &rest.TLSClientConfig{}
 	}
@@ -72,6 +94,22 @@ func BuildRestConfig(apiServer, apiServerToken, caData string, tls *rest.TLSClie
 		Host:            fmt.Sprintf("https://%s", apiServer),
 		TLSClientConfig: *tls,
 		BearerToken:     apiServerToken,
+	}, nil
+}
+
+func BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile string, tls *rest.TLSClientConfig) (*rest.Config, error) {
+	if tls == nil {
+		tls = &rest.TLSClientConfig{}
+	}
+
+	if !tls.Insecure && caFile != "" {
+		tls.CAFile = caFile
+	}
+
+	return &rest.Config{
+		Host:            fmt.Sprintf("https://%s", apiServer),
+		TLSClientConfig: *tls,
+		BearerTokenFile: apiServerTokenFile,
 	}, nil
 }
 
