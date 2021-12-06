@@ -20,6 +20,7 @@ package broker
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"time"
 
@@ -268,8 +269,14 @@ func createBrokerClient(config *SyncerConfig) error {
 
 		config.BrokerNamespace = spec.RemoteNamespace
 
-		config.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfig(spec.APIServer, spec.APIServerToken, spec.Ca,
-			&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
+		if spec.Secret != "" {
+			config.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromFiles(spec.APIServer,
+				filepath.Join(SecretPath(spec.Secret), "token"), filepath.Join(SecretPath(spec.Secret), "ca.crt"),
+				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
+		} else {
+			config.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(spec.APIServer, spec.APIServerToken, spec.Ca,
+				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
+		}
 	}
 
 	if !authorized {
