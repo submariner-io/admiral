@@ -19,6 +19,10 @@ limitations under the License.
 package broker
 
 import (
+	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/kelseyhightower/envconfig"
 	"github.com/pkg/errors"
 )
@@ -31,13 +35,29 @@ type brokerSpecification struct {
 	Ca              string
 }
 
+const brokerConfigPrefix = "broker_k8s"
+
 func getBrokerSpecification() (*brokerSpecification, error) {
 	brokerSpec := brokerSpecification{}
 
-	err := envconfig.Process("broker_k8s", &brokerSpec)
+	err := envconfig.Process(brokerConfigPrefix, &brokerSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "error processing env configuration")
 	}
 
 	return &brokerSpec, nil
+}
+
+func EnvironmentVariable(setting string) string {
+	// Check the setting is known (ignoring case)
+	s := reflect.ValueOf(&brokerSpecification{})
+	t := s.Elem().Type()
+
+	for i := 0; i < t.NumField(); i++ {
+		if strings.EqualFold(t.Field(i).Name, strings.ToLower(setting)) {
+			return strings.ToUpper(fmt.Sprintf("%s_%s", brokerConfigPrefix, setting))
+		}
+	}
+
+	panic(fmt.Sprintf("unknown Broker setting %s", setting))
 }
