@@ -57,19 +57,12 @@ func GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caData string, t
 func GetAuthorizedRestConfigFromFiles(apiServer, apiServerTokenFile, caFile string, tls *rest.TLSClientConfig,
 	gvr schema.GroupVersionResource, namespace string) (restConfig *rest.Config, authorized bool, err error) {
 	// First try a REST config without the CA trust chain
-	restConfig, err = BuildRestConfigFromFiles(apiServer, apiServerTokenFile, "", tls)
-	if err != nil {
-		return
-	}
-
+	restConfig = BuildRestConfigFromFiles(apiServer, apiServerTokenFile, "", tls)
 	authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
+
 	if !authorized {
 		// Now try with the trust chain
-		restConfig, err = BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile, tls)
-		if err != nil {
-			return
-		}
-
+		restConfig = BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile, tls)
 		authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
 	}
 
@@ -97,7 +90,7 @@ func BuildRestConfigFromData(apiServer, apiServerToken, caData string, tls *rest
 	}, nil
 }
 
-func BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile string, tls *rest.TLSClientConfig) (*rest.Config, error) {
+func BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile string, tls *rest.TLSClientConfig) *rest.Config {
 	if tls == nil {
 		tls = &rest.TLSClientConfig{}
 	}
@@ -110,7 +103,7 @@ func BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile string, tls 
 		Host:            fmt.Sprintf("https://%s", apiServer),
 		TLSClientConfig: *tls,
 		BearerTokenFile: apiServerTokenFile,
-	}, nil
+	}
 }
 
 func IsAuthorizedFor(restConfig *rest.Config, gvr schema.GroupVersionResource, namespace string) (bool, error) {
