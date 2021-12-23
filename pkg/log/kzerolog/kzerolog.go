@@ -37,7 +37,7 @@ const (
 
 var verbosityLevel = 0
 
-// AddFlags register command line options for zerolog-based logging. Should be called before InitLogging.
+// AddFlags register command line options for zerolog-based logging. Should be called before InitK8sLogging.
 //goland:noinspection GoUnusedExportedFunction
 func AddFlags(flagset *flag.FlagSet) {
 	if flagset == nil {
@@ -52,10 +52,10 @@ func AddFlags(flagset *flag.FlagSet) {
 	flagset.Bool("alsologtostderr", false, "unused - backwards compatibility for klog")
 }
 
-// InitLogging initializes a human friendly zerolog logger as the concrete logr.Logger
+// InitK8sLogging initializes a human friendly zerolog logger as the concrete logr.Logger
 // implementation in use by controller-runtime.
 //goland:noinspection GoUnusedExportedFunction
-func InitLogging() {
+func InitK8sLogging() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
 	zeroLogger := createLogger()
 	logAdapter := newAdapter(&zeroLogger, verbosityLevel)
