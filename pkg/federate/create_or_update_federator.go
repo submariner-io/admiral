@@ -54,14 +54,14 @@ func (f *createOrUpdateFederator) Distribute(obj runtime.Object) error {
 	}
 
 	if f.localClusterID != "" {
-		setNestedField(toDistribute.Object, f.localClusterID, util.MetadataField, util.LabelsField, ClusterIDLabelKey)
+		util.SetNestedField(toDistribute.Object, f.localClusterID, util.MetadataField, util.LabelsField, ClusterIDLabelKey)
 	}
 
 	f.prepareResourceForSync(toDistribute)
 
 	_, err = util.CreateOrUpdate(context.TODO(), resource.ForDynamic(resourceClient), toDistribute,
 		func(obj runtime.Object) (runtime.Object, error) {
-			return preserveMetadata(obj.(*unstructured.Unstructured), toDistribute), nil
+			return util.CopyImmutableMetadata(obj.(*unstructured.Unstructured), toDistribute), nil
 		})
 
 	return err

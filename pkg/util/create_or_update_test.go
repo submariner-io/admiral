@@ -28,6 +28,7 @@ import (
 	. "github.com/submariner-io/admiral/pkg/gomega"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
+	tests "github.com/submariner-io/admiral/pkg/test"
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -37,11 +38,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/testing"
 )
 
 var _ = Describe("", func() {
 	var (
 		pod         *corev1.Pod
+		testingFake *testing.Fake
 		client      *fake.DynamicResourceClient
 		origBackoff wait.Backoff
 		expectedErr error
@@ -49,6 +52,7 @@ var _ = Describe("", func() {
 
 	BeforeEach(func() {
 		dynClient := fake.NewDynamicClient(scheme.Scheme)
+		testingFake = &dynClient.Fake
 
 		client, _ = dynClient.Resource(schema.GroupVersionResource{
 			Group:    corev1.SchemeGroupVersion.Group,
@@ -91,52 +95,66 @@ var _ = Describe("", func() {
 	}
 
 	Describe("CreateAnew function", func() {
-		When("no existing resource exists", func() {
+		When("the resource doesn't exist", func() {
 			It("should successfully create the resource", func() {
 				comparePods(createAnewSuccess(), pod)
 			})
 		})
 
-		When("an existing resource exists", func() {
-			var existing *corev1.Pod
-
+		When("the resource already exists", func() {
 			BeforeEach(func() {
 				test.CreateResource(client, pod)
-				existing = test.GetPod(client, pod)
 			})
 
-			It("should delete the existing resource and create a new one", func() {
-				comparePods(createAnewSuccess(), existing)
-			})
-
-			Context("and Delete returns not found", func() {
+			Context("and the new resource spec differs", func() {
 				BeforeEach(func() {
-					client.FailOnDelete = apierrors.NewNotFound(schema.GroupResource{}, pod.Name)
+					pod.Spec.Containers[0].Image = "updated"
 				})
 
-				It("should successfully create the resource", func() {
-					comparePods(createAnewSuccess(), existing)
+				It("should delete the existing resource and create a new one", func() {
+					comparePods(createAnewSuccess(), pod)
+				})
+
+				Context("and Delete returns not found", func() {
+					BeforeEach(func() {
+						client.FailOnDelete = apierrors.NewNotFound(schema.GroupResource{}, pod.Name)
+					})
+
+					It("should successfully create the resource", func() {
+						comparePods(createAnewSuccess(), pod)
+					})
+				})
+
+				Context("and Delete fails", func() {
+					BeforeEach(func() {
+						client.FailOnDelete = errors.New("delete failed")
+						expectedErr = client.FailOnDelete
+					})
+
+					It("should return an error", func() {
+						Expect(createAnewError()).To(ContainErrorSubstring(expectedErr))
+					})
+				})
+
+				Context("and deletion doesn't complete in time", func() {
+					BeforeEach(func() {
+						client.PersistentFailOnCreate.Store(apierrors.NewAlreadyExists(schema.GroupResource{}, pod.Name))
+					})
+
+					It("should return an error", func() {
+						Expect(createAnewError()).ToNot(Succeed())
+					})
 				})
 			})
 
-			Context("and Delete fails", func() {
+			Context("and the new resource spec does not differ", func() {
 				BeforeEach(func() {
-					client.FailOnDelete = errors.New("delete failed")
-					expectedErr = client.FailOnDelete
+					pod.Status.Phase = corev1.PodRunning
 				})
 
-				It("should return an error", func() {
-					Expect(createAnewError()).To(ContainErrorSubstring(expectedErr))
-				})
-			})
-
-			Context("and deletion doesn't complete in time", func() {
-				BeforeEach(func() {
-					client.PersistentFailOnCreate.Store(apierrors.NewAlreadyExists(schema.GroupResource{}, pod.Name))
-				})
-
-				It("should return an error", func() {
-					Expect(createAnewError()).ToNot(Succeed())
+				It("should not recreate it", func() {
+					createAnewSuccess()
+					tests.EnsureNoActionsForResource(testingFake, "pods", "delete")
 				})
 			})
 		})
@@ -174,7 +192,7 @@ var _ = Describe("", func() {
 			Expect(result).To(Equal(util.OperationResultNone))
 		}
 
-		When("no existing resource exists", func() {
+		When("the resource doesn't exist", func() {
 			It("should successfully create the resource", func() {
 				Expect(createOrUpdate()).To(Equal(util.OperationResultCreated))
 				verifyPod(client, pod)
@@ -209,7 +227,7 @@ var _ = Describe("", func() {
 			})
 		})
 
-		When("an existing resource exists", func() {
+		When("the resource already exists", func() {
 			BeforeEach(func() {
 				test.CreateResource(client, pod)
 				pod = test.NewPodWithImage("", "apache")
