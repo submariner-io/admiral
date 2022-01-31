@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -133,14 +134,25 @@ func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Obje
 	deleteOptions metav1.DeleteOptions) (runtime.Object, error) { // nolint:gocritic // Match K8s API
 	name := resource.ToMeta(obj).GetName()
 
-	var created runtime.Object
+	var retObj runtime.Object
 
 	err := wait.ExponentialBackoff(backOff, func() (bool, error) {
 		var err error
 
-		created, err = client.Create(ctx, obj, createOptions)
+		retObj, err = client.Create(ctx, obj, createOptions)
 		if !apierrors.IsAlreadyExists(err) {
 			return true, errors.Wrapf(err, "error creating %#v", obj)
+		}
+
+		retObj, err = client.Get(ctx, resource.ToMeta(obj).GetName(), metav1.GetOptions{})
+		if !apierrors.IsNotFound(err) {
+			if err != nil {
+				return false, errors.Wrapf(err, "failed to retrieve pre-existing instance %q", name)
+			}
+
+			if mutableFieldsEqual(retObj, obj) {
+				return true, nil
+			}
 		}
 
 		err = client.Delete(ctx, name, deleteOptions)
@@ -151,7 +163,27 @@ func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Obje
 		return false, errors.Wrapf(err, "failed to delete pre-existing instance %q", name)
 	})
 
-	return created, errors.Wrap(err, "error creating resource anew")
+	return retObj, errors.Wrap(err, "error creating resource anew")
+}
+
+func mutableFieldsEqual(existingObj, newObj runtime.Object) bool {
+	existingU, err := resource.ToUnstructured(existingObj)
+	if err != nil {
+		panic(err)
+	}
+
+	newU, err := resource.ToUnstructured(newObj)
+	if err != nil {
+		panic(err)
+	}
+
+	newU = CopyImmutableMetadata(existingU, newU)
+
+	// Also ignore the Status fields.
+	unstructured.RemoveNestedField(existingU.Object, StatusField)
+	unstructured.RemoveNestedField(newU.Object, StatusField)
+
+	return equality.Semantic.DeepEqual(existingU, newU)
 }
 
 func SetBackoff(b wait.Backoff) wait.Backoff {

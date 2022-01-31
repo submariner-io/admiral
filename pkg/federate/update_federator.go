@@ -53,6 +53,6 @@ func (f *updateFederator) Distribute(obj runtime.Object) error {
 	f.prepareResourceForSync(toUpdate)
 
 	return util.Update(context.TODO(), resource.ForDynamic(resourceClient), toUpdate, func(obj runtime.Object) (runtime.Object, error) {
-		return preserveMetadata(obj.(*unstructured.Unstructured), toUpdate), nil
+		return util.CopyImmutableMetadata(obj.(*unstructured.Unstructured), toUpdate), nil
 	})
 }
