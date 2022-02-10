@@ -27,6 +27,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -64,8 +65,11 @@ func (r *DeleteCollectionReactor) react(action testing.Action) (bool, runtime.Ob
 
 		for _, m := range items {
 			item := unstructured.Unstructured{Object: m.(map[string]interface{})}
-			if dc.ListRestrictions.Labels.Matches(labels.Set(item.GetLabels())) {
-				_, err = r.invoke(testing.NewDeleteAction(action.GetResource(), action.GetNamespace(), item.GetName()))
+
+			fieldSet := fields.Set{"metadata.namespace": item.GetNamespace(), "metadata.name": item.GetName()}
+			if dc.ListRestrictions.Labels.Matches(labels.Set(item.GetLabels())) &&
+				dc.ListRestrictions.Fields.Matches(fieldSet) {
+				_, err = r.invoke(testing.NewDeleteAction(action.GetResource(), item.GetNamespace(), item.GetName()))
 				if err != nil {
 					return true, nil, err
 				}
