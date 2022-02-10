@@ -112,7 +112,7 @@ type SyncerConfig struct {
 	RestMapper meta.RESTMapper
 
 	// BrokerRestConfig the REST config used to access the broker resources to sync. If not specified and the BrokerClient
-	// is not specified, the config is built from environment variables via BuildBrokerConfigFromEnv.
+	// is not specified, the config is built from environment variables.
 	BrokerRestConfig *rest.Config
 
 	// BrokerClient the client used to access local resources to sync. This is optional and is provided for unit testing
@@ -120,7 +120,7 @@ type SyncerConfig struct {
 	BrokerClient dynamic.Interface
 
 	// BrokerNamespace the namespace in the broker to which resources from the local source will be synced. If not
-	// specified, the namespace is obtained from an environment variable via BuildBrokerConfigFromEnv.
+	// specified, the namespace is obtained from an environment variable.
 	BrokerNamespace string
 
 	// ResourceConfigs the configurations for resources to sync
@@ -135,6 +135,9 @@ type Syncer struct {
 	localSyncers    map[reflect.Type]syncer.Interface
 	localFederator  federate.Federator
 	remoteFederator federate.Federator
+	brokerNamespace string
+	brokerClient    dynamic.Interface
+	localClient     dynamic.Interface
 }
 
 // NewSyncer creates a Syncer that performs bi-directional syncing of resources between a local source and a central broker.
@@ -166,8 +169,11 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { // nolint:gocritic // Min
 	}
 
 	brokerSyncer := &Syncer{
-		syncers:      []syncer.Interface{},
-		localSyncers: make(map[reflect.Type]syncer.Interface),
+		syncers:         []syncer.Interface{},
+		localSyncers:    make(map[reflect.Type]syncer.Interface),
+		brokerNamespace: config.BrokerNamespace,
+		brokerClient:    config.BrokerClient,
+		localClient:     config.LocalClient,
 	}
 
 	brokerSyncer.remoteFederator = NewFederator(config.BrokerClient, config.RestMapper, config.BrokerNamespace, config.LocalClusterID)
@@ -350,4 +356,16 @@ func (s *Syncer) ListLocalResources(ofType runtime.Object) ([]runtime.Object, er
 	}
 
 	return ls.ListResources() //nolint:wrapcheck // OK to return the error as is.
+}
+
+func (s *Syncer) GetBrokerNamespace() string {
+	return s.brokerNamespace
+}
+
+func (s *Syncer) GetBrokerClient() dynamic.Interface {
+	return s.brokerClient
+}
+
+func (s *Syncer) GetLocalClient() dynamic.Interface {
+	return s.localClient
 }
