@@ -50,10 +50,10 @@ func (r *DeleteCollectionReactor) react(action testing.Action) (bool, runtime.Ob
 	case testing.DeleteCollectionActionImpl:
 		defer GinkgoRecover()
 
-		obj, err := r.invoke(testing.NewListAction(action.GetResource(), r.gvk, action.GetNamespace(), metav1.ListOptions{
+		obj, err := invokeReactors(testing.NewListAction(action.GetResource(), r.gvk, action.GetNamespace(), metav1.ListOptions{
 			LabelSelector: dc.ListRestrictions.Labels.String(),
 			FieldSelector: dc.ListRestrictions.Fields.String(),
-		}))
+		}), r.reactors)
 		if err != nil {
 			return true, nil, err
 		}
@@ -69,7 +69,7 @@ func (r *DeleteCollectionReactor) react(action testing.Action) (bool, runtime.Ob
 			fieldSet := fields.Set{"metadata.namespace": item.GetNamespace(), "metadata.name": item.GetName()}
 			if dc.ListRestrictions.Labels.Matches(labels.Set(item.GetLabels())) &&
 				dc.ListRestrictions.Fields.Matches(fieldSet) {
-				_, err = r.invoke(testing.NewDeleteAction(action.GetResource(), item.GetNamespace(), item.GetName()))
+				_, err = invokeReactors(testing.NewDeleteAction(action.GetResource(), item.GetNamespace(), item.GetName()), r.reactors)
 				if err != nil {
 					return true, nil, err
 				}
@@ -82,8 +82,8 @@ func (r *DeleteCollectionReactor) react(action testing.Action) (bool, runtime.Ob
 	}
 }
 
-func (r *DeleteCollectionReactor) invoke(action testing.Action) (runtime.Object, error) {
-	for _, reactor := range r.reactors {
+func invokeReactors(action testing.Action, reactors []testing.Reactor) (runtime.Object, error) {
+	for _, reactor := range reactors {
 		if !reactor.Handles(action) {
 			continue
 		}
