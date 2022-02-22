@@ -69,6 +69,7 @@ func NewDynamicClient(scheme *runtime.Scheme, objects ...runtime.Object) *Dynami
 	f := fake.NewSimpleDynamicClient(scheme, objects...)
 
 	AddDeleteCollectionReactor(&f.Fake, schema.GroupVersionKind{Group: "fake-dynamic-client-group", Version: "v1", Kind: ""})
+	AddFilteringListReactor(&f.Fake)
 
 	return &DynamicClient{
 		FakeDynamicClient:      f,
