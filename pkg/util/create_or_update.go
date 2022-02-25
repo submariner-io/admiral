@@ -131,7 +131,8 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 // and Create will fail with “already exists” until deletion is complete.
 func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Object,
 	createOptions metav1.CreateOptions,
-	deleteOptions metav1.DeleteOptions) (runtime.Object, error) { // nolint:gocritic // Match K8s API
+	deleteOptions metav1.DeleteOptions) (runtime.Object, error, // nolint:gocritic // Match K8s API
+) {
 	name := resource.ToMeta(obj).GetName()
 
 	var retObj runtime.Object
