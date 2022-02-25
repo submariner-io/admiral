@@ -36,11 +36,8 @@ type ProcessFunc func(key, name, namespace string) (bool, error)
 
 type Interface interface {
 	Enqueue(obj interface{})
-
 	NumRequeues(key string) int
-
 	Run(stopCh <-chan struct{}, process ProcessFunc)
-
 	ShutDown()
 }
 
