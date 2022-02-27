@@ -22,7 +22,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/rs/zerolog"
@@ -63,7 +62,7 @@ func InitK8sLogging() {
 }
 
 func createLogger() zerolog.Logger {
-	consoleWriter := &zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}
+	consoleWriter := &zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "2006-01-02T15:04:05.000Z07:00"}
 	consoleWriter.FormatCaller = formatCaller
 
 	return log.Output(consoleWriter).With().Caller().Logger()
