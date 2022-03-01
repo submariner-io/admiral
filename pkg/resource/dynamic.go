@@ -54,7 +54,8 @@ func (d *dynamicType) Update(ctx context.Context, obj runtime.Object, options me
 }
 
 func (d *dynamicType) Delete(ctx context.Context, name string,
-	options metav1.DeleteOptions) error { // nolint:gocritic // Match K8s API
+	options metav1.DeleteOptions, // nolint:gocritic // Match K8s API
+) error {
 	return d.client.Delete(ctx, name, options)
 }
 
