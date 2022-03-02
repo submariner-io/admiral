@@ -18,7 +18,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.1
 	github.com/rs/zerolog v1.26.1
-	github.com/submariner-io/shipyard v0.12.0-m3
+	github.com/submariner-io/shipyard v0.12.0-rc0
 	golang.org/x/term v0.0.0-20210429154555-c04ba851c2a4 // indirect
 	golang.org/x/time v0.0.0-20210611083556-38a9dc6acbc6
 	google.golang.org/appengine v1.6.7 // indirect
