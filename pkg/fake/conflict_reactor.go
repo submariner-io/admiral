@@ -53,7 +53,7 @@ func ConflictOnUpdateReactor(f *testing.Fake, resource string) {
 		Verb:     "update",
 		Resource: resource,
 		Reaction: func(action testing.Action) (bool, runtime.Object, error) {
-			updateAction := action.(testing.UpdateActionImpl) // nolint:forcetypeassert // Let it panic
+			updateAction := action.(testing.UpdateActionImpl)
 			m, _ := meta.Accessor(updateAction.Object)
 
 			_, ok := state.Load(m.GetName())

@@ -133,7 +133,7 @@ func AwaitUpdateAction(f *testing.Fake, resourceType, name string) runtime.Objec
 		actions := f.Actions()
 		for i := range actions {
 			if actions[i].GetVerb() == "update" && actions[i].GetResource().Resource == resourceType {
-				update := actions[i].(testing.UpdateAction) // nolint:forcetypeassert // Let it panic tho shouldn't happen
+				update := actions[i].(testing.UpdateAction)
 				obj, err := meta.Accessor(update.GetObject())
 				Expect(err).To(Succeed())
 
