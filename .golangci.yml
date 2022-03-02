@@ -35,7 +35,8 @@ linters:
     # - exhaustivestruct # Not recommended for general use - meant to be used only for special cases
     - exportloopref
     # - forbidigo # We don't forbid any statements
-    - forcetypeassert
+    # - forcetypeassert # There are many unchecked type assertions that would be the result of a programming error so the
+    #                     reasonable recourse would be to panic anyway if checked so this doesn't seem useful
     # - funlen # gocyclo is enabled which is generally a better metric than simply LOC.
     - gci
     # - gochecknoglobals # We don't want to forbid global variable constants

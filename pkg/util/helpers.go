@@ -117,7 +117,7 @@ func CopyImmutableMetadata(from, to *unstructured.Unstructured) *unstructured.Un
 		return to
 	}
 
-	fromMetadata := value.(map[string]interface{}) // nolint:forcetypeassert // Let it panic
+	fromMetadata := value.(map[string]interface{})
 	err := unstructured.SetNestedStringMap(fromMetadata, to.GetLabels(), LabelsField)
 	if err != nil {
 		panic(err)
