@@ -275,11 +275,18 @@ func createBrokerClient(config *SyncerConfig) error {
 
 		config.BrokerNamespace = spec.RemoteNamespace
 
+		// If we have a secret, try to use it
 		if spec.Secret != "" {
 			config.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromFiles(spec.APIServer,
 				filepath.Join(SecretPath(spec.Secret), "token"), filepath.Join(SecretPath(spec.Secret), "ca.crt"),
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
-		} else {
+			if err != nil {
+				klog.Errorf("Error accessing the %s secret: %v", spec.Secret, err)
+			}
+		}
+
+		// If we encountered an error, or we don't have a secret, use the values in the spec
+		if spec.Secret == "" || err != nil {
 			config.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(spec.APIServer, spec.APIServerToken, spec.Ca,
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 		}
