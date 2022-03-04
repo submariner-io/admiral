@@ -34,7 +34,7 @@ func Add(ctx context.Context, client resource.Interface, obj runtime.Object, fin
 		return false, nil
 	}
 
-	if find(objMeta, finalizerName) {
+	if IsPresent(objMeta, finalizerName) {
 		return false, nil
 	}
 
@@ -50,7 +50,7 @@ func Add(ctx context.Context, client resource.Interface, obj runtime.Object, fin
 
 func Remove(ctx context.Context, client resource.Interface, obj runtime.Object, finalizerName string) error {
 	objMeta := resource.ToMeta(obj)
-	if !find(objMeta, finalizerName) {
+	if !IsPresent(objMeta, finalizerName) {
 		return nil
 	}
 
@@ -74,7 +74,7 @@ func Remove(ctx context.Context, client resource.Interface, obj runtime.Object, 
 	return errors.Wrapf(err, "error removing finalizer %q from %q", finalizerName, objMeta.GetName())
 }
 
-func find(objMeta metav1.Object, finalizerName string) bool {
+func IsPresent(objMeta metav1.Object, finalizerName string) bool {
 	for _, f := range objMeta.GetFinalizers() {
 		if f == finalizerName {
 			return true
