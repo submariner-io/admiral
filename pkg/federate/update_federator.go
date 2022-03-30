@@ -31,14 +31,26 @@ import (
 	"k8s.io/klog"
 )
 
+type UpdateFn func(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) *unstructured.Unstructured
+
 type updateFederator struct {
 	*baseFederator
+	update UpdateFn
 }
 
-func NewUpdateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string) Federator {
+func NewUpdateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string, update UpdateFn) Federator {
 	return &updateFederator{
 		baseFederator: newBaseFederator(dynClient, restMapper, targetNamespace),
+		update:        update,
 	}
+}
+
+func NewUpdateStatusFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string) Federator {
+	return NewUpdateFederator(dynClient, restMapper, targetNamespace,
+		func(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) *unstructured.Unstructured {
+			util.SetNestedField(oldObj.Object, util.GetNestedField(newObj, util.StatusField), util.StatusField)
+			return oldObj
+		})
 }
 
 //nolint:wrapcheck // This function is effectively a wrapper so no need to wrap errors.
@@ -53,6 +65,6 @@ func (f *updateFederator) Distribute(obj runtime.Object) error {
 	f.prepareResourceForSync(toUpdate)
 
 	return util.Update(context.TODO(), resource.ForDynamic(resourceClient), toUpdate, func(obj runtime.Object) (runtime.Object, error) {
-		return util.CopyImmutableMetadata(obj.(*unstructured.Unstructured), toUpdate), nil
+		return f.update(obj.(*unstructured.Unstructured), toUpdate), nil
 	})
 }
