@@ -25,6 +25,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/fake"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
+	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -38,6 +39,7 @@ var (
 	_ = Describe("CreateOrUpdate Federator", testCreateOrUpdateFederator)
 	_ = Describe("Create Federator", testCreateFederator)
 	_ = Describe("Update Federator", testUpdateFederator)
+	_ = Describe("Update Status Federator", testUpdateStatusFederator)
 	_ = Describe("Federator Delete", testDelete)
 )
 
@@ -246,7 +248,7 @@ func testUpdateFederator() {
 	})
 
 	JustBeforeEach(func() {
-		f = federate.NewUpdateFederator(t.dynClient, t.restMapper, t.federatorNamespace)
+		f = federate.NewUpdateFederator(t.dynClient, t.restMapper, t.federatorNamespace, util.CopyImmutableMetadata)
 	})
 
 	When("the resource exists in the datastore", func() {
@@ -298,6 +300,85 @@ func testUpdateFederator() {
 	When("the resource does not exist in the datastore", func() {
 		It("should succeed", func() {
 			Expect(f.Distribute(t.resource)).To(Succeed())
+		})
+	})
+}
+
+func testUpdateStatusFederator() {
+	var (
+		f federate.Federator
+		t *testDriver
+	)
+
+	BeforeEach(func() {
+		t = newTestDriver()
+		t.localClusterID = ""
+	})
+
+	JustBeforeEach(func() {
+		t.resource.SetNamespace(t.targetNamespace)
+		test.CreateResource(t.resourceClient, t.resource)
+
+		f = federate.NewUpdateStatusFederator(t.dynClient, t.restMapper, t.federatorNamespace)
+	})
+
+	When("no previous status is present", func() {
+		It("should add the new status", func() {
+			t.resource.Status = corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				PodIP: "1.2.3.4",
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name:  "foo",
+						Ready: true,
+					},
+				},
+			}
+
+			Expect(f.Distribute(t.resource)).To(Succeed())
+			t.verifyResource()
+		})
+	})
+
+	When("a previous status is present", func() {
+		BeforeEach(func() {
+			t.resource.Status = corev1.PodStatus{
+				Phase: corev1.PodPending,
+			}
+		})
+
+		It("should replace it", func() {
+			t.resource.Status = corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				PodIP: "1.2.3.4",
+			}
+
+			Expect(f.Distribute(t.resource)).To(Succeed())
+			t.verifyResource()
+		})
+	})
+
+	When("some other fields have changed", func() {
+		BeforeEach(func() {
+			t.resource.Spec.NodeName = "raiders"
+		})
+
+		It("should not update them", func() {
+			t.resource.Status = corev1.PodStatus{
+				Phase: corev1.PodRunning,
+			}
+
+			prev := t.resource.DeepCopy()
+
+			t.resource.Spec.NodeName = "redsox"
+			t.resource.Annotations = map[string]string{"key1": "abc"}
+			t.resource.Labels = map[string]string{"key2": "def"}
+
+			Expect(f.Distribute(t.resource)).To(Succeed())
+
+			t.resource = prev
+
+			t.verifyResource()
 		})
 	})
 }
