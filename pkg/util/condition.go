@@ -35,7 +35,7 @@ func TryAppendCondition(conditions []metav1.Condition, newCondition *metav1.Cond
 	newCondition.LastTransitionTime = metav1.Now()
 
 	numCond := len(conditions)
-	if numCond > 0 && conditionsEqual(&(conditions)[numCond-1], newCondition) {
+	if numCond > 0 && conditionsEqual(&conditions[numCond-1], newCondition) {
 		return conditions
 	}
 
