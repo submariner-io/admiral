@@ -63,7 +63,8 @@ func Update(ctx context.Context, client resource.Interface, obj runtime.Object, 
 }
 
 func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn,
-	doCreate bool) (OperationResult, error) {
+	doCreate bool,
+) (OperationResult, error) {
 	result := OperationResultNone
 
 	objMeta := resource.ToMeta(obj)

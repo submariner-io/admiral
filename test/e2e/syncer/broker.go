@@ -296,7 +296,8 @@ func (t *testDriver) awaitExportedToaster(cluster framework.ClusterIndex, expect
 }
 
 func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.GroupVersionResource,
-	resource runtime.Object) runtime.Object {
+	resource runtime.Object,
+) runtime.Object {
 	clusterName := framework.TestContext.ClusterIDs[cluster]
 
 	meta, err := metaapi.Accessor(resource)

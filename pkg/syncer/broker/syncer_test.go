@@ -219,7 +219,8 @@ var _ = Describe("Broker Syncer", func() {
 		BeforeEach(func() {
 			transformed = test.NewPodWithImage(config.LocalNamespace, "transformed")
 			config.ResourceConfigs[0].LocalTransform = func(from runtime.Object, numRequeues int,
-				op sync.Operation) (runtime.Object, bool) {
+				op sync.Operation,
+			) (runtime.Object, bool) {
 				return transformed, false
 			}
 		})
@@ -238,7 +239,8 @@ var _ = Describe("Broker Syncer", func() {
 		BeforeEach(func() {
 			transformed = test.NewPodWithImage(config.LocalNamespace, "transformed")
 			config.ResourceConfigs[0].BrokerTransform = func(from runtime.Object, numRequeues int,
-				op sync.Operation) (runtime.Object, bool) {
+				op sync.Operation,
+			) (runtime.Object, bool) {
 				return transformed, false
 			}
 		})

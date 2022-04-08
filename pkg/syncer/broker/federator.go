@@ -25,6 +25,7 @@ import (
 )
 
 func NewFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace,
-	localClusterID string, keepMetadataField ...string) federate.Federator {
+	localClusterID string, keepMetadataField ...string,
+) federate.Federator {
 	return federate.NewCreateOrUpdateFederator(dynClient, restMapper, targetNamespace, localClusterID, keepMetadataField...)
 }
