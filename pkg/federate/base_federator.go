@@ -41,7 +41,8 @@ type baseFederator struct {
 }
 
 func newBaseFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string,
-	keepMetadataField ...string) *baseFederator {
+	keepMetadataField ...string,
+) *baseFederator {
 	b := &baseFederator{
 		dynClient:          dynClient,
 		restMapper:         restMapper,

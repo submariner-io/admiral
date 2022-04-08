@@ -232,7 +232,8 @@ func AwaitResource(client dynamic.ResourceInterface, name string) *unstructured.
 }
 
 func AwaitAndVerifyResource(client dynamic.ResourceInterface, name string,
-	verify func(*unstructured.Unstructured) bool) *unstructured.Unstructured {
+	verify func(*unstructured.Unstructured) bool,
+) *unstructured.Unstructured {
 	var found *unstructured.Unstructured
 
 	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {

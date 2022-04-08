@@ -37,7 +37,8 @@ type createOrUpdateFederator struct {
 }
 
 func NewCreateOrUpdateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace,
-	localClusterID string, keepMetadataField ...string) Federator {
+	localClusterID string, keepMetadataField ...string,
+) Federator {
 	return &createOrUpdateFederator{
 		baseFederator:  newBaseFederator(dynClient, restMapper, targetNamespace, keepMetadataField...),
 		localClusterID: localClusterID,

@@ -132,7 +132,8 @@ func getError(from atomic.Value) error {
 }
 
 func (f *DynamicResourceClient) Create(ctx context.Context, obj *unstructured.Unstructured, options v1.CreateOptions,
-	subresources ...string) (*unstructured.Unstructured, error) {
+	subresources ...string,
+) (*unstructured.Unstructured, error) {
 	f.created <- obj.GetName()
 
 	fail := f.FailOnCreate
@@ -153,7 +154,8 @@ func (f *DynamicResourceClient) Create(ctx context.Context, obj *unstructured.Un
 }
 
 func (f *DynamicResourceClient) Update(ctx context.Context, obj *unstructured.Unstructured, options v1.UpdateOptions,
-	subresources ...string) (*unstructured.Unstructured, error) {
+	subresources ...string,
+) (*unstructured.Unstructured, error) {
 	f.updated <- obj.GetName()
 
 	fail := f.FailOnUpdate
@@ -186,7 +188,8 @@ func (f *DynamicResourceClient) Update(ctx context.Context, obj *unstructured.Un
 
 func (f *DynamicResourceClient) Delete(ctx context.Context, name string,
 	options v1.DeleteOptions, // nolint:gocritic // Match K8s API
-	subresources ...string) error {
+	subresources ...string,
+) error {
 	f.deleted <- name
 
 	fail := f.FailOnDelete
@@ -204,7 +207,8 @@ func (f *DynamicResourceClient) Delete(ctx context.Context, name string,
 }
 
 func (f *DynamicResourceClient) Get(ctx context.Context, name string, options v1.GetOptions,
-	subresources ...string) (*unstructured.Unstructured, error) {
+	subresources ...string,
+) (*unstructured.Unstructured, error) {
 	fail := f.FailOnGet
 	if fail != nil {
 		f.FailOnGet = nil
