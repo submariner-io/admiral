@@ -22,12 +22,16 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"k8s.io/klog"
+	"github.com/submariner-io/admiral/pkg/log/kzerolog"
 )
 
 func init() {
-	klog.InitFlags(nil)
+	kzerolog.AddFlags(nil)
 }
+
+var _ = Describe("", func() {
+	kzerolog.InitK8sLogging()
+})
 
 func TestWatcher(t *testing.T) {
 	RegisterFailHandler(Fail)

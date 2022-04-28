@@ -41,7 +41,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/klog"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const OrigNamespaceLabelKey = "submariner-io/originatingNamespace"
@@ -188,12 +188,14 @@ type resourceSyncer struct {
 	stopped     chan struct{}
 	syncCounter *prometheus.GaugeVec
 	stopCh      <-chan struct{}
+	log         log.Logger
 }
 
 func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 	syncer := &resourceSyncer{
 		config:  *config,
 		stopped: make(chan struct{}),
+		log:     log.Logger{Logger: logf.Log.WithName("ResourceSyncer")},
 	}
 
 	if syncer.config.Scheme == nil {
@@ -254,14 +256,14 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 }
 
 func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
-	klog.V(log.LIBDEBUG).Infof("Starting syncer %q", r.config.Name)
+	r.log.V(log.LIBDEBUG).Infof("Starting syncer %q", r.config.Name)
 
 	r.stopCh = stopCh
 
 	go func() {
 		defer func() {
 			r.stopped <- struct{}{}
-			klog.V(log.LIBDEBUG).Infof("Syncer %q stopped", r.config.Name)
+			r.log.V(log.LIBDEBUG).Infof("Syncer %q stopped", r.config.Name)
 		}()
 		defer r.workQueue.ShutDown()
 
@@ -269,7 +271,7 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 	}()
 
 	if *r.config.WaitForCacheSync {
-		klog.V(log.LIBDEBUG).Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
+		r.log.V(log.LIBDEBUG).Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
 
 		if ok := cache.WaitForCacheSync(stopCh, r.informer.HasSynced); !ok {
 			return fmt.Errorf("failed to wait for informer cache to sync")
@@ -278,7 +280,7 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 
 	r.workQueue.Run(stopCh, r.processNextWorkItem)
 
-	klog.V(log.LIBDEBUG).Infof("Syncer %q started", r.config.Name)
+	r.log.V(log.LIBDEBUG).Infof("Syncer %q started", r.config.Name)
 
 	return nil
 }
@@ -328,7 +330,7 @@ func (r *resourceSyncer) ListResources() ([]runtime.Object, error) {
 func (r *resourceSyncer) Reconcile(resourceLister func() []runtime.Object) {
 	go func() {
 		if ok := cache.WaitForCacheSync(r.stopCh, r.informer.HasSynced); !ok {
-			klog.Errorf("Unable to reconcile - failed to wait for informer cache to sync")
+			r.log.Error(nil, "Unable to reconcile - failed to wait for informer cache to sync")
 			return
 		}
 
@@ -338,7 +340,7 @@ func (r *resourceSyncer) Reconcile(resourceLister func() []runtime.Object) {
 			if reflect.TypeOf(resource) != resourceType {
 				// This would happen if the custom transform function returned a different type. We would need a custom
 				// reverse transform function to handle this. Possible future work, for now bail.
-				klog.Warningf("Unable to reconcile type %T - expected type %T", resource, resourceType)
+				r.log.Warningf("Unable to reconcile type %T - expected type %T", resource, resourceType)
 				return
 			}
 
@@ -368,7 +370,7 @@ func (r *resourceSyncer) Reconcile(resourceLister func() []runtime.Object) {
 			}
 
 			if ns == "" {
-				klog.Warningf("Unable to reconcile resource %s/%s - cannot determine originating namespace",
+				r.log.Warningf("Unable to reconcile resource %s/%s - cannot determine originating namespace",
 					metaObj.GetNamespace(), metaObj.GetName())
 				continue
 			}
@@ -407,7 +409,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 		op = Create
 	}
 
-	klog.V(log.LIBTRACE).Infof("Syncer %q retrieved %sd resource %q: %#v", r.config.Name, op, resource.GetName(), resource)
+	r.log.V(log.LIBTRACE).Infof("Syncer %q retrieved %sd resource %q: %#v", r.config.Name, op, resource.GetName(), resource)
 
 	if !r.shouldSync(resource) {
 		r.created.Delete(key)
@@ -422,7 +424,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 				util.MetadataField, util.LabelsField, OrigNamespaceLabelKey)
 		}
 
-		klog.V(log.LIBDEBUG).Infof("Syncer %q syncing resource %q", r.config.Name, resource.GetName())
+		r.log.V(log.LIBDEBUG).Infof("Syncer %q syncing resource %q", r.config.Name, resource.GetName())
 
 		err = r.config.Federator.Distribute(resource)
 		if err != nil {
@@ -439,7 +441,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 			}).Inc()
 		}
 
-		klog.V(log.LIBDEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, resource.GetName())
+		r.log.V(log.LIBDEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, resource.GetName())
 	}
 
 	if !requeue {
@@ -450,11 +452,11 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 }
 
 func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
-	klog.V(log.LIBDEBUG).Infof("Syncer %q informed of deleted resource %q", r.config.Name, key)
+	r.log.V(log.LIBDEBUG).Infof("Syncer %q informed of deleted resource %q", r.config.Name, key)
 
 	obj, found := r.deleted.Load(key)
 	if !found {
-		klog.V(log.LIBDEBUG).Infof("Syncer %q: resource %q not found in deleted object cache", r.config.Name, key)
+		r.log.V(log.LIBDEBUG).Infof("Syncer %q: resource %q not found in deleted object cache", r.config.Name, key)
 		return false, nil
 	}
 
@@ -467,11 +469,11 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 
 	resource, transformed, requeue := r.transform(deletedResource, key, Delete)
 	if resource != nil {
-		klog.V(log.LIBDEBUG).Infof("Syncer %q deleting resource %q: %#v", r.config.Name, resource.GetName(), resource)
+		r.log.V(log.LIBDEBUG).Infof("Syncer %q deleting resource %q: %#v", r.config.Name, resource.GetName(), resource)
 
 		err := r.config.Federator.Delete(resource)
 		if apierrors.IsNotFound(err) {
-			klog.V(log.LIBDEBUG).Infof("Syncer %q: resource %q not found - ignoring", r.config.Name, resource.GetName())
+			r.log.V(log.LIBDEBUG).Infof("Syncer %q: resource %q not found - ignoring", r.config.Name, resource.GetName())
 			return false, nil
 		}
 
@@ -490,7 +492,7 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 			}).Inc()
 		}
 
-		klog.V(log.LIBDEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, resource.GetName())
+		r.log.V(log.LIBDEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, resource.GetName())
 	}
 
 	if requeue {
@@ -503,7 +505,7 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 func (r *resourceSyncer) convertNoError(from interface{}) runtime.Object {
 	converted, err := r.convert(from)
 	if err != nil {
-		klog.Errorf("%+v", err)
+		r.log.Error(err, "Unable to convert: %#v", from)
 	}
 
 	return converted
@@ -533,13 +535,13 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 
 	transformed, requeue := r.config.Transform(converted, r.workQueue.NumRequeues(key), op)
 	if transformed == nil {
-		klog.V(log.LIBDEBUG).Infof("Syncer %q: transform function returned nil - not syncing - requeue: %v", r.config.Name, requeue)
+		r.log.V(log.LIBDEBUG).Infof("Syncer %q: transform function returned nil - not syncing - requeue: %v", r.config.Name, requeue)
 		return nil, nil, requeue
 	}
 
 	result, err := resourceUtil.ToUnstructured(transformed)
 	if err != nil {
-		klog.Errorf("Syncer %q: error converting transform function result: %v", r.config.Name, err)
+		r.log.Errorf(err, "Syncer %q: error converting transform function result", r.config.Name)
 		return nil, nil, false
 	}
 
@@ -563,7 +565,7 @@ func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op
 		}
 	}
 
-	klog.V(log.LIBTRACE).Infof("Syncer %q: invoking OnSuccessfulSync function with: %#v", r.config.Name, converted)
+	r.log.V(log.LIBTRACE).Infof("Syncer %q: invoking OnSuccessfulSync function with: %#v", r.config.Name, converted)
 
 	r.config.OnSuccessfulSync(converted, op)
 }
@@ -588,7 +590,7 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
 	newResource := r.assertUnstructured(newObj)
 
 	if r.config.ResourcesEquivalent(oldResource, newResource) {
-		klog.V(log.LIBTRACE).Infof("Syncer %q: objects equivalent on update - not queueing resource\nOLD: %#v\nNEW: %#v",
+		r.log.V(log.LIBTRACE).Infof("Syncer %q: objects equivalent on update - not queueing resource\nOLD: %#v\nNEW: %#v",
 			r.config.Name, oldResource, newResource)
 		return
 	}
@@ -602,13 +604,13 @@ func (r *resourceSyncer) onDelete(obj interface{}) {
 	if resource, ok = obj.(*unstructured.Unstructured); !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			klog.Errorf("Syncer %q: could not convert object %v to DeletedFinalStateUnknown", r.config.Name, obj)
+			r.log.Errorf(nil, "Syncer %q: could not convert object %v to DeletedFinalStateUnknown", r.config.Name, obj)
 			return
 		}
 
 		resource, ok = tombstone.Obj.(*unstructured.Unstructured)
 		if !ok {
-			klog.Errorf("Syncer %q: could not convert object tombstone %v to Unstructured", r.config.Name, tombstone.Obj)
+			r.log.Errorf(nil, "Syncer %q: could not convert object tombstone %v to Unstructured", r.config.Name, tombstone.Obj)
 			return
 		}
 	}
@@ -639,14 +641,14 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 		if found {
 			// This is the local -> remote case - only sync local resources w/o the label, assuming any resource with the
 			// label originated from a remote source.
-			klog.V(log.LIBDEBUG).Infof("Syncer %q: found cluster ID label %q - not syncing resource %q", r.config.Name,
+			r.log.V(log.LIBDEBUG).Infof("Syncer %q: found cluster ID label %q - not syncing resource %q", r.config.Name,
 				clusterID, resource.GetName())
 			return false
 		}
 	case RemoteToLocal:
 		if r.config.LocalClusterID != "" && (!found || clusterID == r.config.LocalClusterID) {
 			// This is the remote -> local case - do not sync local resources
-			klog.V(log.LIBDEBUG).Infof("Syncer %q: cluster ID label %q not present or matches local cluster ID %q - not syncing resource %q",
+			r.log.V(log.LIBDEBUG).Infof("Syncer %q: cluster ID label %q not present or matches local cluster ID %q - not syncing resource %q",
 				r.config.Name, clusterID, r.config.LocalClusterID, resource.GetName())
 			return false
 		}
