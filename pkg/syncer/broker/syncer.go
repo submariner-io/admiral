@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
+	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -34,7 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-	"k8s.io/klog"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type ResourceConfig struct {
@@ -139,6 +140,8 @@ type Syncer struct {
 	brokerClient    dynamic.Interface
 	localClient     dynamic.Interface
 }
+
+var logger = log.Logger{Logger: logf.Log.WithName("BrokerSyncer")}
 
 // NewSyncer creates a Syncer that performs bi-directional syncing of resources between a local source and a central broker.
 func NewSyncer(config SyncerConfig) (*Syncer, error) { // nolint:gocritic // Minimal performance hit, we modify our copy
@@ -281,7 +284,7 @@ func createBrokerClient(config *SyncerConfig) error {
 				filepath.Join(SecretPath(spec.Secret), "token"), filepath.Join(SecretPath(spec.Secret), "ca.crt"),
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 			if err != nil {
-				klog.Errorf("Error accessing the %s secret: %v", spec.Secret, err)
+				logger.Errorf(err, "Error accessing the %s secret", spec.Secret)
 			}
 		}
 
@@ -297,7 +300,7 @@ func createBrokerClient(config *SyncerConfig) error {
 	}
 
 	if err != nil {
-		klog.Errorf("Error accessing the broker API server: %v", err)
+		logger.Error(err, "Error accessing the broker API server")
 	}
 
 	config.BrokerClient, err = dynamic.NewForConfig(config.BrokerRestConfig)
@@ -316,7 +319,7 @@ func (s *Syncer) Start(stopCh <-chan struct{}) error {
 	lister := func(s syncer.Interface) []runtime.Object {
 		list, err := s.ListResources()
 		if err != nil {
-			klog.Errorf("Unable to reconcile - error listing resources: %v", err)
+			logger.Error(err, "Unable to reconcile - error listing resources")
 			return nil
 		}
 
