@@ -30,7 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/klog"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type baseFederator struct {
@@ -39,6 +39,8 @@ type baseFederator struct {
 	targetNamespace    string
 	keepMetadataFields map[string]bool
 }
+
+var logger = log.Logger{Logger: logf.Log.WithName("Federator")}
 
 func newBaseFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string,
 	keepMetadataField ...string,
@@ -63,7 +65,7 @@ func (f *baseFederator) Delete(obj runtime.Object) error {
 		return err
 	}
 
-	klog.V(log.LIBTRACE).Infof("Deleting resource: %#v", toDelete)
+	logger.V(log.LIBTRACE).Infof("Deleting resource: %#v", toDelete)
 
 	return resourceClient.Delete(context.TODO(), toDelete.GetName(), metav1.DeleteOptions{})
 }

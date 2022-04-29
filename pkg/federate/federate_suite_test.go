@@ -22,7 +22,16 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/submariner-io/admiral/pkg/log/kzerolog"
 )
+
+func init() {
+	kzerolog.AddFlags(nil)
+}
+
+var _ = Describe("", func() {
+	kzerolog.InitK8sLogging()
+})
 
 func TestFederate(t *testing.T) {
 	RegisterFailHandler(Fail)

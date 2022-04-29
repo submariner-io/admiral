@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/klog"
 )
 
 type UpdateFn func(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) *unstructured.Unstructured
@@ -55,7 +54,7 @@ func NewUpdateStatusFederator(dynClient dynamic.Interface, restMapper meta.RESTM
 
 //nolint:wrapcheck // This function is effectively a wrapper so no need to wrap errors.
 func (f *updateFederator) Distribute(obj runtime.Object) error {
-	klog.V(log.LIBTRACE).Infof("In Distribute for %#v", obj)
+	logger.V(log.LIBTRACE).Infof("In Distribute for %#v", obj)
 
 	toUpdate, resourceClient, err := f.toUnstructured(obj)
 	if err != nil {
