@@ -30,7 +30,6 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
-	"k8s.io/klog"
 )
 
 const (
@@ -95,7 +94,7 @@ func GetSpec(obj *unstructured.Unstructured) interface{} {
 func GetNestedField(obj *unstructured.Unstructured, fields ...string) interface{} {
 	nested, _, err := unstructured.NestedFieldNoCopy(obj.Object, fields...)
 	if err != nil {
-		klog.Errorf("Error retrieving %v field for %#v: %v", fields, obj, err)
+		panic(fmt.Sprintf("Error retrieving %v field for %#v: %v", fields, obj, err))
 	}
 
 	return nested

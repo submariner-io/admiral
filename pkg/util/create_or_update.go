@@ -33,7 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
-	"k8s.io/klog"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type OperationResult string
@@ -52,6 +52,8 @@ var backOff wait.Backoff = wait.Backoff{
 	Factor:   1.3,
 	Cap:      40 * time.Second,
 }
+
+var logger = log.Logger{Logger: logf.Log}
 
 func CreateOrUpdate(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn) (OperationResult, error) {
 	return maybeCreateOrUpdate(ctx, client, obj, mutate, true)
@@ -73,15 +75,15 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 		existing, err := client.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			if !doCreate {
-				klog.V(log.LIBTRACE).Infof("Resource %q does not exist - not updating", objMeta.GetName())
+				logger.V(log.LIBTRACE).Infof("Resource %q does not exist - not updating", objMeta.GetName())
 				return nil
 			}
 
-			klog.V(log.LIBTRACE).Infof("Creating resource: %#v", obj)
+			logger.V(log.LIBTRACE).Infof("Creating resource: %#v", obj)
 
 			_, err := client.Create(ctx, obj, metav1.CreateOptions{})
 			if apierrors.IsAlreadyExists(err) {
-				klog.V(log.LIBDEBUG).Infof("Resource %q already exists - retrying", objMeta.GetName())
+				logger.V(log.LIBDEBUG).Infof("Resource %q already exists - retrying", objMeta.GetName())
 				return apierrors.NewConflict(schema.GroupResource{}, objMeta.GetName(), err)
 			}
 
@@ -111,7 +113,7 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 			return nil
 		}
 
-		klog.V(log.LIBTRACE).Infof("Updating resource: %#v", obj)
+		logger.V(log.LIBTRACE).Infof("Updating resource: %#v", obj)
 
 		result = OperationResultUpdated
 		_, err = client.Update(ctx, toUpdate, metav1.UpdateOptions{})
