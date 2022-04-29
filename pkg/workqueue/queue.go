@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type ProcessFunc func(key, name, namespace string) (bool, error)
@@ -46,6 +46,8 @@ type queueType struct {
 
 	name string
 }
+
+var logger = log.Logger{Logger: logf.Log.WithName("WorkQueue")}
 
 func New(name string) Interface {
 	return &queueType{
@@ -67,7 +69,7 @@ func (q *queueType) Enqueue(obj interface{}) {
 		return
 	}
 
-	klog.V(log.LIBTRACE).Infof("%s: enqueueing key %q for %T object", q.name, key, obj)
+	logger.V(log.LIBTRACE).Infof("%s: enqueueing key %q for %T object", q.name, key, obj)
 	q.AddRateLimited(key)
 }
 
@@ -105,7 +107,7 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 
 	if requeue {
 		q.AddRateLimited(key)
-		klog.V(log.LIBDEBUG).Infof("%s: enqueued %q for retry - # of times re-queued: %d", q.name, key, q.NumRequeues(key))
+		logger.V(log.LIBDEBUG).Infof("%s: enqueued %q for retry - # of times re-queued: %d", q.name, key, q.NumRequeues(key))
 	} else {
 		q.Forget(key)
 	}
