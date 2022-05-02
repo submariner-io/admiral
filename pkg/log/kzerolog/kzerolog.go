@@ -22,6 +22,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/rs/zerolog"
@@ -93,6 +95,7 @@ type zeroLogContext struct {
 	prefix           string
 	currentVerbosity int
 	maxVerbosity     int
+	skipFrames       int
 }
 
 func (ctx *zeroLogContext) clone() zeroLogContext {
@@ -115,9 +118,45 @@ func truncate(i interface{}, maxLen int) string {
 	return fmt.Sprintf(padFmtStr, s)
 }
 
+func (ctx *zeroLogContext) calculateSkipFrames() int {
+	if ctx.skipFrames > 0 {
+		return ctx.skipFrames
+	}
+
+	skipFrames := 0
+	pc := make([]uintptr, 10)   // this should be enough frames to collect
+	n := runtime.Callers(2, pc) // skip runtime.Callers and this function
+	if n == 0 {
+		return 0
+	}
+
+	frames := runtime.CallersFrames(pc[:n])
+
+	for {
+		frame, more := frames.Next()
+
+		// We want to skip call frames in this package and go-logr but controller-runtime may have a DelegatingLogSink
+		// in between so skip that as well.
+		if strings.HasPrefix(frame.Function, "github.com/submariner-io/admiral/pkg/log") ||
+			strings.HasPrefix(frame.Function, "github.com/go-logr") ||
+			strings.HasPrefix(frame.Function, "sigs.k8s.io/controller-runtime/pkg/log") {
+			skipFrames++
+		}
+
+		if !more {
+			break
+		}
+	}
+
+	ctx.skipFrames = skipFrames
+
+	return ctx.skipFrames
+}
+
 func (ctx *zeroLogContext) logEvent(evt *zerolog.Event, msg string, kvList ...interface{}) {
 	msg = truncate(ctx.prefix, maxLenLogger) + " " + msg
-	evt.Fields(kvList).CallerSkipFrame(2).Msg(msg)
+
+	evt.Fields(kvList).CallerSkipFrame(ctx.calculateSkipFrames()).Msg(msg)
 }
 
 func (ctx *zeroLogContext) Info(msg string, kvList ...interface{}) {
