@@ -26,6 +26,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"k8s.io/klog"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -55,6 +56,12 @@ func AddFlags(flagset *flag.FlagSet) {
 // implementation in use by controller-runtime.
 //goland:noinspection GoUnusedExportedFunction
 func InitK8sLogging() {
+	if verbosityLevel > 0 {
+		klogFlags := flag.NewFlagSet("klog", flag.ContinueOnError)
+		klog.InitFlags(klogFlags)
+		_ = klogFlags.Parse([]string{fmt.Sprintf("-v=%d", verbosityLevel)})
+	}
+
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
 	zeroLogger := createLogger()
 	logAdapter := newAdapter(&zeroLogger, verbosityLevel)
