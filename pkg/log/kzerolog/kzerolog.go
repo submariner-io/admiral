@@ -28,6 +28,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	loga "github.com/submariner-io/admiral/pkg/log"
 	"k8s.io/klog"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -164,17 +165,34 @@ func (ctx *zeroLogContext) Info(msg string, kvList ...interface{}) {
 		return
 	}
 
-	evt := ctx.zLogger.Info()
+	var evt *zerolog.Event
+
+	for i := 0; i < len(kvList); i += 2 {
+		s, ok := kvList[i].(string)
+		if ok && s == loga.WarningKey {
+			kvList = append(kvList[:i], kvList[i+2:]...)
+			evt = ctx.zLogger.Warn()
+
+			break
+		}
+	}
+
+	if evt == nil {
+		switch {
+		case ctx.currentVerbosity >= loga.TRACE:
+			evt = ctx.zLogger.Trace()
+		case ctx.currentVerbosity >= loga.DEBUG:
+			evt = ctx.zLogger.Debug()
+		default:
+			evt = ctx.zLogger.Info()
+		}
+	}
+
 	ctx.logEvent(evt, msg, kvList...)
 }
 
 func (ctx *zeroLogContext) Error(err error, msg string, kvList ...interface{}) {
-	if ctx.currentVerbosity > ctx.maxVerbosity {
-		return
-	}
-
-	evt := ctx.zLogger.Err(err)
-	ctx.logEvent(evt, msg, kvList...)
+	ctx.logEvent(ctx.zLogger.Error().Err(err), msg, kvList...)
 }
 
 func (ctx *zeroLogContext) Enabled() bool {
