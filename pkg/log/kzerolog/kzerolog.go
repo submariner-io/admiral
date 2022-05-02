@@ -22,8 +22,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/rs/zerolog"
@@ -59,12 +57,8 @@ func AddFlags(flagset *flag.FlagSet) {
 func InitK8sLogging() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
 	zeroLogger := createLogger()
-
-	logf.SetLogger(logr.New(&zeroLogContext{
-		zLogger:      &zeroLogger,
-		prefix:       "",
-		maxVerbosity: verbosityLevel,
-	}))
+	logAdapter := newAdapter(&zeroLogger, verbosityLevel)
+	logf.SetLogger(logAdapter)
 }
 
 func createLogger() zerolog.Logger {
@@ -74,22 +68,32 @@ func createLogger() zerolog.Logger {
 	return log.Output(consoleWriter).With().Caller().Logger()
 }
 
+func newAdapter(zeroLogger *zerolog.Logger, maxVerbosityLevel int) logr.Logger {
+	return &zeroLogContext{
+		zLogger:          zeroLogger,
+		prefix:           "",
+		currentVerbosity: 0,
+		maxVerbosity:     maxVerbosityLevel,
+	}
+}
+
 func formatCaller(i interface{}) string {
 	return truncate(i, maxLenCaller)
 }
 
 type zeroLogContext struct {
-	zLogger      *zerolog.Logger
-	prefix       string
-	maxVerbosity int
-	skipFrames   int
+	zLogger          *zerolog.Logger
+	prefix           string
+	currentVerbosity int
+	maxVerbosity     int
 }
 
 func (ctx *zeroLogContext) clone() zeroLogContext {
 	return zeroLogContext{
-		zLogger:      ctx.zLogger,
-		prefix:       ctx.prefix,
-		maxVerbosity: ctx.maxVerbosity,
+		zLogger:          ctx.zLogger,
+		prefix:           ctx.prefix,
+		maxVerbosity:     ctx.maxVerbosity,
+		currentVerbosity: ctx.currentVerbosity,
 	}
 }
 
@@ -104,52 +108,13 @@ func truncate(i interface{}, maxLen int) string {
 	return fmt.Sprintf(padFmtStr, s)
 }
 
-func (ctx *zeroLogContext) calculateSkipFrames() int {
-	if ctx.skipFrames > 0 {
-		return ctx.skipFrames
-	}
-
-	skipFrames := 0
-	pc := make([]uintptr, 10)   // this should be enough frames to collect
-	n := runtime.Callers(2, pc) // skip runtime.Callers and this function
-	if n == 0 {
-		return 0
-	}
-
-	frames := runtime.CallersFrames(pc[:n])
-
-	for {
-		frame, more := frames.Next()
-
-		// We want to skip call frames in this package and go-logr but controller-runtime may have a DelegatingLogSink
-		// in between so skip that as well.
-		if strings.HasPrefix(frame.Function, "github.com/submariner-io/admiral/pkg/log") ||
-			strings.HasPrefix(frame.Function, "github.com/go-logr") ||
-			strings.HasPrefix(frame.Function, "sigs.k8s.io/controller-runtime/pkg/log") {
-			skipFrames++
-		}
-
-		if !more {
-			break
-		}
-	}
-
-	ctx.skipFrames = skipFrames
-
-	return ctx.skipFrames
-}
-
 func (ctx *zeroLogContext) logEvent(evt *zerolog.Event, msg string, kvList ...interface{}) {
 	msg = truncate(ctx.prefix, maxLenLogger) + " " + msg
-
-	evt.Fields(kvList).CallerSkipFrame(ctx.calculateSkipFrames()).Msg(msg)
+	evt.Fields(kvList).CallerSkipFrame(2).Msg(msg)
 }
 
-func (ctx *zeroLogContext) Init(logr.RuntimeInfo) {
-}
-
-func (ctx *zeroLogContext) Info(level int, msg string, kvList ...interface{}) {
-	if level > ctx.maxVerbosity {
+func (ctx *zeroLogContext) Info(msg string, kvList ...interface{}) {
+	if ctx.currentVerbosity > ctx.maxVerbosity {
 		return
 	}
 
@@ -158,15 +123,26 @@ func (ctx *zeroLogContext) Info(level int, msg string, kvList ...interface{}) {
 }
 
 func (ctx *zeroLogContext) Error(err error, msg string, kvList ...interface{}) {
+	if ctx.currentVerbosity > ctx.maxVerbosity {
+		return
+	}
+
 	evt := ctx.zLogger.Err(err)
 	ctx.logEvent(evt, msg, kvList...)
 }
 
-func (ctx *zeroLogContext) Enabled(level int) bool {
-	return level <= ctx.maxVerbosity
+func (ctx *zeroLogContext) Enabled() bool {
+	return true
 }
 
-func (ctx *zeroLogContext) WithName(name string) logr.LogSink {
+func (ctx *zeroLogContext) V(level int) logr.Logger {
+	subCtx := ctx.clone()
+	subCtx.currentVerbosity = level
+
+	return &subCtx
+}
+
+func (ctx *zeroLogContext) WithName(name string) logr.Logger {
 	subCtx := ctx.clone()
 	if len(ctx.prefix) > 0 {
 		subCtx.prefix = ctx.prefix + "/"
@@ -177,7 +153,7 @@ func (ctx *zeroLogContext) WithName(name string) logr.LogSink {
 	return &subCtx
 }
 
-func (ctx *zeroLogContext) WithValues(kvList ...interface{}) logr.LogSink {
+func (ctx *zeroLogContext) WithValues(kvList ...interface{}) logr.Logger {
 	subCtx := ctx.clone()
 	logger := ctx.zLogger.With().Fields(kvList).Logger()
 	subCtx.zLogger = &logger
