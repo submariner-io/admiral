@@ -192,7 +192,23 @@ func (ctx *zeroLogContext) Info(msg string, kvList ...interface{}) {
 }
 
 func (ctx *zeroLogContext) Error(err error, msg string, kvList ...interface{}) {
-	ctx.logEvent(ctx.zLogger.Error().Err(err), msg, kvList...)
+	var evt *zerolog.Event
+
+	for i := 0; i < len(kvList); i += 2 {
+		s, ok := kvList[i].(string)
+		if ok && s == loga.FatalKey {
+			kvList = append(kvList[:i], kvList[i+2:]...)
+			evt = ctx.zLogger.WithLevel(zerolog.FatalLevel)
+
+			break
+		}
+	}
+
+	if evt == nil {
+		evt = ctx.zLogger.Error()
+	}
+
+	ctx.logEvent(evt.Err(err), msg, kvList...)
 }
 
 func (ctx *zeroLogContext) Enabled() bool {

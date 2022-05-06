@@ -20,11 +20,15 @@ package log
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/go-logr/logr"
 )
 
-const WarningKey = "WARNING"
+const (
+	WarningKey = "WARNING"
+	FatalKey   = "FATAL"
+)
 
 type Logger struct {
 	logr.Logger
@@ -52,6 +56,28 @@ func (l Logger) Warning(msg string, keysAndValues ...interface{}) {
 
 func (l Logger) Warningf(format string, args ...interface{}) {
 	l.Logger.Info(fmt.Sprintf(format, args...), WarningKey, "true")
+}
+
+func (l Logger) Fatal(msg string, keysAndValues ...interface{}) {
+	l.Logger.Error(nil, msg, append(keysAndValues, FatalKey, "true")...)
+	os.Exit(255)
+}
+
+func (l Logger) Fatalf(format string, args ...interface{}) {
+	l.Fatal(fmt.Sprintf(format, args...))
+}
+
+func (l Logger) FatalOnError(err error, msg string, keysAndValues ...interface{}) {
+	if err == nil {
+		return
+	}
+
+	l.Logger.Error(err, msg, append(keysAndValues, FatalKey, "true")...)
+	os.Exit(255)
+}
+
+func (l Logger) FatalfOnError(err error, format string, args ...interface{}) {
+	l.FatalOnError(err, fmt.Sprintf(format, args...))
 }
 
 func (l Logger) V(level int) Logger {
