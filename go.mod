@@ -6,6 +6,7 @@ retract v0.10.0 // Tag was moved
 
 require (
 	github.com/go-logr/logr v0.4.0
+	github.com/golang/mock v1.6.0
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
@@ -19,6 +20,7 @@ require (
 	k8s.io/client-go v0.19.16
 	k8s.io/klog v1.0.0
 	sigs.k8s.io/controller-runtime v0.6.1
+	sigs.k8s.io/yaml v1.2.0
 )
 
 require (
@@ -64,5 +66,4 @@ require (
 	k8s.io/utils v0.0.0-20210305010621-2afb4311ab10 // indirect
 	sigs.k8s.io/mcs-api v0.1.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.1.2 // indirect
-	sigs.k8s.io/yaml v1.2.0 // indirect
 )
