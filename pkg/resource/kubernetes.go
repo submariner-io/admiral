@@ -73,6 +73,24 @@ func ForDeployment(client kubernetes.Interface, namespace string) Interface {
 // Core
 
 //nolint:dupl //false positive - lines are similar but not duplicated
+func ForNamespace(client kubernetes.Interface) Interface {
+	return &InterfaceFuncs{
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+			return client.CoreV1().Namespaces().Get(ctx, name, options)
+		},
+		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+			return client.CoreV1().Namespaces().Create(ctx, obj.(*corev1.Namespace), options)
+		},
+		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+			return client.CoreV1().Namespaces().Update(ctx, obj.(*corev1.Namespace), options)
+		},
+		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.CoreV1().Namespaces().Delete(ctx, name, options)
+		},
+	}
+}
+
+//nolint:dupl //false positive - lines are similar but not duplicated
 func ForPod(client kubernetes.Interface, namespace string) Interface {
 	return &InterfaceFuncs{
 		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
