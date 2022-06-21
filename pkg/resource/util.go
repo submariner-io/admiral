@@ -19,6 +19,9 @@ limitations under the License.
 package resource
 
 import (
+	"strings"
+	"unicode"
+
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,4 +52,17 @@ func ToMeta(obj runtime.Object) metav1.Object {
 	}
 
 	return objMeta
+}
+
+func EnsureValidName(name string) string {
+	// K8s only allows lower case alphanumeric characters, '-' or '.'. Regex used for validation is
+	// '[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*'
+	return strings.Map(func(c rune) rune {
+		c = unicode.ToLower(c)
+		if !unicode.IsDigit(c) && !unicode.IsLower(c) && c != '-' && c != '.' {
+			return '-'
+		}
+
+		return c
+	}, name)
 }
