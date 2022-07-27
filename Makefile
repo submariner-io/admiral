@@ -9,9 +9,9 @@ include $(SHIPYARD_DIR)/Makefile.inc
 
 TARGETS := $(shell ls -p scripts | grep -v -e /)
 
-CLUSTER_SETTINGS_FLAG = --settings $(DAPPER_SOURCE)/.shipyard.e2e.yml
-override CLUSTERS_ARGS = $(CLUSTER_SETTINGS_FLAG)
-override E2E_ARGS += --nolazy_deploy cluster1 cluster2
+export SETTINGS = $(DAPPER_SOURCE)/.shipyard.e2e.yml
+export LAZY_DEPLOY = false
+override E2E_ARGS += cluster1 cluster2
 override UNIT_TEST_ARGS += test/e2e
 
 deploy: clusters
