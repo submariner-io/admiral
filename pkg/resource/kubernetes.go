@@ -27,7 +27,9 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	controllerClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Entries are sorted alphabetically by group and resource
@@ -232,6 +234,31 @@ func ForConfigMap(client kubernetes.Interface, namespace string) Interface {
 		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.CoreV1().ConfigMaps(namespace).Delete(ctx, name, options)
+		},
+	}
+}
+
+func ForControllerClient(client controllerClient.Client, namespace string, objType controllerClient.Object) Interface {
+	return &InterfaceFuncs{
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+			obj := objType.DeepCopyObject()
+			err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, obj.(controllerClient.Object))
+			return obj, err
+		},
+		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+			err := client.Create(ctx, obj.(controllerClient.Object))
+			return obj, err
+		},
+		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+			err := client.Update(ctx, obj.(controllerClient.Object))
+			return obj, err
+		},
+		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			obj := objType.DeepCopyObject().(controllerClient.Object)
+			obj.SetName(name)
+			obj.SetNamespace(namespace)
+
+			return client.Delete(ctx, obj)
 		},
 	}
 }
