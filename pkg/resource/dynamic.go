@@ -35,6 +35,7 @@ func (d *dynamicType) Get(ctx context.Context, name string, options metav1.GetOp
 	return d.client.Get(ctx, name, options)
 }
 
+// nolint:gocritic // hugeParam - we're matching K8s API
 func (d *dynamicType) Create(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
 	raw, err := ToUnstructured(obj)
 	if err != nil {
@@ -44,6 +45,7 @@ func (d *dynamicType) Create(ctx context.Context, obj runtime.Object, options me
 	return d.client.Create(ctx, raw, options)
 }
 
+// nolint:gocritic // hugeParam - we're matching K8s API
 func (d *dynamicType) Update(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
 	raw, err := ToUnstructured(obj)
 	if err != nil {
@@ -54,7 +56,7 @@ func (d *dynamicType) Update(ctx context.Context, obj runtime.Object, options me
 }
 
 func (d *dynamicType) Delete(ctx context.Context, name string,
-	options metav1.DeleteOptions, // nolint:gocritic // Match K8s API
+	options metav1.DeleteOptions, // nolint:gocritic // hugeParam - we're matching K8s API
 ) error {
 	return d.client.Delete(ctx, name, options)
 }
