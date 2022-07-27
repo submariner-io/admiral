@@ -11,7 +11,6 @@ function deploy_crds {
     kubectl apply -f ${DAPPER_SOURCE}/test/e2e/deploy/crds.yaml
 }
 
-settings=${DAPPER_SOURCE}/.shipyard.e2e.yml
 load_settings
 declare_kubeconfig
 
