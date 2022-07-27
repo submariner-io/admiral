@@ -67,8 +67,12 @@ func InitK8sLogging() {
 
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
 	zeroLogger := createLogger()
-	logAdapter := newAdapter(&zeroLogger, verbosityLevel)
-	logf.SetLogger(logAdapter)
+
+	logf.SetLogger(logr.New(&zeroLogContext{
+		zLogger:      &zeroLogger,
+		prefix:       "",
+		maxVerbosity: verbosityLevel,
+	}))
 }
 
 func createLogger() zerolog.Logger {
@@ -78,33 +82,22 @@ func createLogger() zerolog.Logger {
 	return log.Output(consoleWriter).With().Caller().Logger()
 }
 
-func newAdapter(zeroLogger *zerolog.Logger, maxVerbosityLevel int) logr.Logger {
-	return &zeroLogContext{
-		zLogger:          zeroLogger,
-		prefix:           "",
-		currentVerbosity: 0,
-		maxVerbosity:     maxVerbosityLevel,
-	}
-}
-
 func formatCaller(i interface{}) string {
 	return truncate(i, maxLenCaller)
 }
 
 type zeroLogContext struct {
-	zLogger          *zerolog.Logger
-	prefix           string
-	currentVerbosity int
-	maxVerbosity     int
-	skipFrames       int
+	zLogger      *zerolog.Logger
+	prefix       string
+	maxVerbosity int
+	skipFrames   int
 }
 
 func (ctx *zeroLogContext) clone() zeroLogContext {
 	return zeroLogContext{
-		zLogger:          ctx.zLogger,
-		prefix:           ctx.prefix,
-		maxVerbosity:     ctx.maxVerbosity,
-		currentVerbosity: ctx.currentVerbosity,
+		zLogger:      ctx.zLogger,
+		prefix:       ctx.prefix,
+		maxVerbosity: ctx.maxVerbosity,
 	}
 }
 
@@ -160,8 +153,11 @@ func (ctx *zeroLogContext) logEvent(evt *zerolog.Event, msg string, kvList ...in
 	evt.Fields(kvList).CallerSkipFrame(ctx.calculateSkipFrames()).Msg(msg)
 }
 
-func (ctx *zeroLogContext) Info(msg string, kvList ...interface{}) {
-	if ctx.currentVerbosity > ctx.maxVerbosity {
+func (ctx *zeroLogContext) Init(logr.RuntimeInfo) {
+}
+
+func (ctx *zeroLogContext) Info(level int, msg string, kvList ...interface{}) {
+	if level > ctx.maxVerbosity {
 		return
 	}
 
@@ -179,9 +175,9 @@ func (ctx *zeroLogContext) Info(msg string, kvList ...interface{}) {
 
 	if evt == nil {
 		switch {
-		case ctx.currentVerbosity >= loga.TRACE:
+		case level >= loga.TRACE:
 			evt = ctx.zLogger.Trace()
-		case ctx.currentVerbosity >= loga.DEBUG:
+		case level >= loga.DEBUG:
 			evt = ctx.zLogger.Debug()
 		default:
 			evt = ctx.zLogger.Info()
@@ -211,18 +207,11 @@ func (ctx *zeroLogContext) Error(err error, msg string, kvList ...interface{}) {
 	ctx.logEvent(evt.Err(err), msg, kvList...)
 }
 
-func (ctx *zeroLogContext) Enabled() bool {
-	return true
+func (ctx *zeroLogContext) Enabled(level int) bool {
+	return level <= ctx.maxVerbosity
 }
 
-func (ctx *zeroLogContext) V(level int) logr.Logger {
-	subCtx := ctx.clone()
-	subCtx.currentVerbosity = level
-
-	return &subCtx
-}
-
-func (ctx *zeroLogContext) WithName(name string) logr.Logger {
+func (ctx *zeroLogContext) WithName(name string) logr.LogSink {
 	subCtx := ctx.clone()
 	if len(ctx.prefix) > 0 {
 		subCtx.prefix = ctx.prefix + "/"
@@ -233,7 +222,7 @@ func (ctx *zeroLogContext) WithName(name string) logr.Logger {
 	return &subCtx
 }
 
-func (ctx *zeroLogContext) WithValues(kvList ...interface{}) logr.Logger {
+func (ctx *zeroLogContext) WithValues(kvList ...interface{}) logr.LogSink {
 	subCtx := ctx.clone()
 	logger := ctx.zLogger.With().Fields(kvList).Logger()
 	subCtx.zLogger = &logger

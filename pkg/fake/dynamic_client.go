@@ -131,6 +131,7 @@ func getError(from atomic.Value) error {
 	return nil
 }
 
+// nolint:gocritic // hugeParam - we're matching K8s API
 func (f *DynamicResourceClient) Create(ctx context.Context, obj *unstructured.Unstructured, options v1.CreateOptions,
 	subresources ...string,
 ) (*unstructured.Unstructured, error) {
@@ -153,6 +154,7 @@ func (f *DynamicResourceClient) Create(ctx context.Context, obj *unstructured.Un
 	return f.ResourceInterface.Create(ctx, obj, options, subresources...)
 }
 
+// nolint:gocritic // hugeParam - we're matching K8s API
 func (f *DynamicResourceClient) Update(ctx context.Context, obj *unstructured.Unstructured, options v1.UpdateOptions,
 	subresources ...string,
 ) (*unstructured.Unstructured, error) {
