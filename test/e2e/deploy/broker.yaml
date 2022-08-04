@@ -14,6 +14,16 @@ metadata:
     app: broker
 
 ---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: broker-client-token
+  namespace: broker
+  annotations:
+    kubernetes.io/service-account.name: broker-client
+type: kubernetes.io/service-account-token
+
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

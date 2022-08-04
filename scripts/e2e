@@ -8,9 +8,9 @@ function export_broker_env {
 
     export BROKER_K8S_APISERVER=$(kubectl  -n default get endpoints kubernetes -o jsonpath="{.subsets[0].addresses[0].ip}:{.subsets[0].ports[?(@.name=='https')].port}")
 
-    export BROKER_K8S_CA=$(kubectl -n ${BROKER_K8S_REMOTENAMESPACE} get secrets -o jsonpath="{.items[?(@.metadata.annotations['kubernetes\.io/service-account\.name']=='${BROKER_K8S_REMOTENAMESPACE}-client')].data['ca\.crt']}")
+    export BROKER_K8S_CA=$(kubectl -n ${BROKER_K8S_REMOTENAMESPACE} get secrets -o jsonpath="{.items[?(@.metadata.name=='broker-client-token')].data['ca\.crt']}")
 
-    export BROKER_K8S_APISERVERTOKEN=$(kubectl -n ${BROKER_K8S_REMOTENAMESPACE} get secrets -o jsonpath="{.items[?(@.metadata.annotations['kubernetes\.io/service-account\.name']=='${BROKER_K8S_REMOTENAMESPACE}-client')].data.token}"|base64 --decode)
+    export BROKER_K8S_APISERVERTOKEN=$(kubectl -n ${BROKER_K8S_REMOTENAMESPACE} get secrets -o jsonpath="{.items[?(@.metadata.name=='broker-client-token')].data.token}"|base64 --decode)
 }
 
 load_settings
