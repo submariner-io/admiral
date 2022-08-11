@@ -20,6 +20,7 @@ package fake
 
 import (
 	"context"
+	"errors"
 	"reflect"
 
 	"k8s.io/client-go/kubernetes/scheme"
@@ -61,8 +62,9 @@ func NewReactingClient(c client.Client) *ReactingClient {
 	}
 }
 
-func (c *ReactingClient) AddReactor(verb VerbType, objType interface{}, r ReactionFunc) {
+func (c *ReactingClient) AddReactor(verb VerbType, objType interface{}, r ReactionFunc) *ReactingClient {
 	c.reactors[verb][reflect.TypeOf(objType)] = r
+	return c
 }
 
 func (c *ReactingClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
@@ -105,4 +107,14 @@ func (c *ReactingClient) react(verb VerbType, obj interface{}, fallBack func() e
 	}
 
 	return fallBack()
+}
+
+func FailingReaction(err error) func(obj interface{}) (bool, error) {
+	if err == nil {
+		err = errors.New("mock error")
+	}
+
+	return func(obj interface{}) (bool, error) {
+		return true, err
+	}
 }
