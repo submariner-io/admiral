@@ -189,6 +189,28 @@ var _ = Describe("CreateOrUpdate function", func() {
 	t.testGetFailure(createOrUpdate)
 })
 
+var _ = Describe("Update function", func() {
+	t := newCreateOrUpdateTestDiver()
+
+	update := func() error {
+		return util.Update(context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
+	}
+
+	When("the resource doesn't exist", func() {
+		It("shouldn't return an error", func() {
+			Expect(update()).To(Succeed())
+		})
+	})
+
+	t.testUpdate(func(_ util.OperationResult) error {
+		return update()
+	})
+
+	t.testGetFailure(func(_ util.OperationResult) error {
+		return update()
+	})
+})
+
 type createOrUpdateTestDriver struct {
 	pod         *corev1.Pod
 	testingFake *testing.Fake
