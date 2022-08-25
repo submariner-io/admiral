@@ -36,46 +36,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/testing"
 )
 
-var _ = Describe("", func() {
-	var (
-		pod         *corev1.Pod
-		testingFake *testing.Fake
-		client      *fake.DynamicResourceClient
-		origBackoff wait.Backoff
-		expectedErr error
-	)
-
-	BeforeEach(func() {
-		dynClient := fake.NewDynamicClient(scheme.Scheme)
-		testingFake = &dynClient.Fake
-
-		client, _ = dynClient.Resource(schema.GroupVersionResource{
-			Group:    corev1.SchemeGroupVersion.Group,
-			Version:  corev1.SchemeGroupVersion.Version,
-			Resource: "pods",
-		}).Namespace("test").(*fake.DynamicResourceClient)
-
-		client.CheckResourceVersionOnUpdate = true
-
-		pod = test.NewPod("")
-
-		origBackoff = util.SetBackoff(wait.Backoff{
-			Steps:    5,
-			Duration: 30 * time.Millisecond,
-		})
-	})
-
-	AfterEach(func() {
-		util.SetBackoff(origBackoff)
-	})
+var _ = Describe("CreateAnew function", func() {
+	t := newCreateOrUpdateTestDiver()
 
 	createAnew := func() (runtime.Object, error) {
-		return util.CreateAnew(context.TODO(), resource.ForDynamic(client), pod, metav1.CreateOptions{}, metav1.DeleteOptions{})
+		return util.CreateAnew(context.TODO(), resource.ForDynamic(t.client), t.pod, metav1.CreateOptions{}, metav1.DeleteOptions{})
 	}
 
 	createAnewSuccess := func() *corev1.Pod {
@@ -94,218 +63,261 @@ var _ = Describe("", func() {
 		return err
 	}
 
-	Describe("CreateAnew function", func() {
-		When("the resource doesn't exist", func() {
-			It("should successfully create the resource", func() {
-				comparePods(createAnewSuccess(), pod)
-			})
+	When("the resource doesn't exist", func() {
+		It("should successfully create the resource", func() {
+			t.compareWithPod(createAnewSuccess())
+		})
+	})
+
+	When("the resource already exists", func() {
+		BeforeEach(func() {
+			t.createPod()
 		})
 
-		When("the resource already exists", func() {
+		Context("and the new resource spec differs", func() {
 			BeforeEach(func() {
-				test.CreateResource(client, pod)
+				t.pod.Spec.Containers[0].Image = "updated"
 			})
 
-			Context("and the new resource spec differs", func() {
+			It("should delete the existing resource and create a new one", func() {
+				t.compareWithPod(createAnewSuccess())
+			})
+
+			Context("and Delete returns not found", func() {
 				BeforeEach(func() {
-					pod.Spec.Containers[0].Image = "updated"
+					t.client.FailOnDelete = apierrors.NewNotFound(schema.GroupResource{}, t.pod.Name)
 				})
 
-				It("should delete the existing resource and create a new one", func() {
-					comparePods(createAnewSuccess(), pod)
-				})
-
-				Context("and Delete returns not found", func() {
-					BeforeEach(func() {
-						client.FailOnDelete = apierrors.NewNotFound(schema.GroupResource{}, pod.Name)
-					})
-
-					It("should successfully create the resource", func() {
-						comparePods(createAnewSuccess(), pod)
-					})
-				})
-
-				Context("and Delete fails", func() {
-					BeforeEach(func() {
-						client.FailOnDelete = errors.New("delete failed")
-						expectedErr = client.FailOnDelete
-					})
-
-					It("should return an error", func() {
-						Expect(createAnewError()).To(ContainErrorSubstring(expectedErr))
-					})
-				})
-
-				Context("and deletion doesn't complete in time", func() {
-					BeforeEach(func() {
-						client.PersistentFailOnCreate.Store(apierrors.NewAlreadyExists(schema.GroupResource{}, pod.Name))
-					})
-
-					It("should return an error", func() {
-						Expect(createAnewError()).ToNot(Succeed())
-					})
+				It("should successfully create the resource", func() {
+					t.compareWithPod(createAnewSuccess())
 				})
 			})
 
-			Context("and the new resource spec does not differ", func() {
+			Context("and Delete fails", func() {
 				BeforeEach(func() {
-					pod.Status.Phase = corev1.PodRunning
+					t.client.FailOnDelete = errors.New("delete failed")
+					t.expectedErr = t.client.FailOnDelete
 				})
 
-				It("should not recreate it", func() {
-					createAnewSuccess()
-					tests.EnsureNoActionsForResource(testingFake, "pods", "delete")
+				It("should return an error", func() {
+					Expect(createAnewError()).To(ContainErrorSubstring(t.expectedErr))
+				})
+			})
+
+			Context("and deletion doesn't complete in time", func() {
+				BeforeEach(func() {
+					t.client.PersistentFailOnCreate.Store(apierrors.NewAlreadyExists(schema.GroupResource{}, t.pod.Name))
+				})
+
+				It("should return an error", func() {
+					Expect(createAnewError()).ToNot(Succeed())
 				})
 			})
 		})
 
-		When("Create fails", func() {
+		Context("and the new resource spec does not differ", func() {
 			BeforeEach(func() {
-				client.FailOnCreate = errors.New("create failed")
-				expectedErr = client.FailOnCreate
+				t.pod.Status.Phase = corev1.PodRunning
 			})
 
-			It("should return an error", func() {
-				Expect(createAnewError()).To(ContainErrorSubstring(expectedErr))
+			It("should not recreate it", func() {
+				createAnewSuccess()
+				tests.EnsureNoActionsForResource(t.testingFake, "pods", "delete")
 			})
 		})
 	})
 
-	Describe("CreateOrUpdate function", func() {
-		var mutateFn util.MutateFn
-
+	When("Create fails", func() {
 		BeforeEach(func() {
-			mutateFn = func(existing runtime.Object) (runtime.Object, error) {
-				obj := test.ToUnstructured(pod)
-				obj.SetUID(resource.ToMeta(existing).GetUID())
-				return util.Replace(obj)(nil)
-			}
+			t.client.FailOnCreate = errors.New("create failed")
+			t.expectedErr = t.client.FailOnCreate
 		})
 
-		createOrUpdate := func() (util.OperationResult, error) {
-			return util.CreateOrUpdate(context.TODO(), resource.ForDynamic(client), test.ToUnstructured(pod), mutateFn)
-		}
-
-		testCreateOrUpdateErr := func() {
-			result, err := createOrUpdate()
-			Expect(err).To(ContainErrorSubstring(expectedErr))
-			Expect(result).To(Equal(util.OperationResultNone))
-		}
-
-		When("the resource doesn't exist", func() {
-			It("should successfully create the resource", func() {
-				Expect(createOrUpdate()).To(Equal(util.OperationResultCreated))
-				verifyPod(client, pod)
-			})
-
-			Context("and Create fails", func() {
-				JustBeforeEach(func() {
-					client.FailOnCreate = apierrors.NewServiceUnavailable("fake")
-					expectedErr = client.FailOnCreate
-				})
-
-				It("should return an error", func() {
-					testCreateOrUpdateErr()
-				})
-			})
-
-			Context("and Create initially returns AlreadyExists due to a simulated out-of-band create", func() {
-				BeforeEach(func() {
-					test.CreateResource(client, pod)
-					pod = test.NewPodWithImage("", "apache")
-				})
-
-				JustBeforeEach(func() {
-					client.FailOnGet = apierrors.NewNotFound(schema.GroupResource{}, pod.GetName())
-					client.FailOnCreate = apierrors.NewAlreadyExists(schema.GroupResource{}, pod.GetName())
-				})
-
-				It("should eventually update the resource", func() {
-					Expect(createOrUpdate()).To(Equal(util.OperationResultUpdated))
-					verifyPod(client, pod)
-				})
-			})
-		})
-
-		When("the resource already exists", func() {
-			BeforeEach(func() {
-				test.CreateResource(client, pod)
-				pod = test.NewPodWithImage("", "apache")
-			})
-
-			It("should update the resource", func() {
-				Expect(createOrUpdate()).To(Equal(util.OperationResultUpdated))
-				verifyPod(client, pod)
-			})
-
-			Context("and Update initially fails due to conflict", func() {
-				BeforeEach(func() {
-					client.FailOnUpdate = apierrors.NewConflict(schema.GroupResource{}, "", errors.New("conflict"))
-				})
-
-				It("should eventually update the resource", func() {
-					Expect(createOrUpdate()).To(Equal(util.OperationResultUpdated))
-					verifyPod(client, pod)
-				})
-			})
-
-			Context("and Update fails not due to conflict", func() {
-				JustBeforeEach(func() {
-					client.FailOnUpdate = apierrors.NewServiceUnavailable("fake")
-					expectedErr = client.FailOnUpdate
-				})
-
-				It("should return an error", func() {
-					testCreateOrUpdateErr()
-				})
-			})
-
-			Context("and the resource to update is the same", func() {
-				BeforeEach(func() {
-					mutateFn = func(existing runtime.Object) (runtime.Object, error) {
-						return existing, nil
-					}
-				})
-
-				It("should not update the resource", func() {
-					result, err := createOrUpdate()
-					Expect(err).To(Succeed())
-					Expect(result).To(Equal(util.OperationResultNone))
-				})
-			})
-
-			Context("and the mutate function returns an error", func() {
-				BeforeEach(func() {
-					expectedErr = errors.New("mutate failure")
-					mutateFn = func(existing runtime.Object) (runtime.Object, error) {
-						return nil, expectedErr
-					}
-				})
-
-				It("should return an error", func() {
-					testCreateOrUpdateErr()
-				})
-			})
-		})
-
-		When("resource retrieval fails", func() {
-			JustBeforeEach(func() {
-				client.FailOnGet = apierrors.NewServiceUnavailable("fake")
-				expectedErr = client.FailOnGet
-			})
-
-			It("should return an error", func() {
-				testCreateOrUpdateErr()
-			})
+		It("should return an error", func() {
+			Expect(createAnewError()).To(ContainErrorSubstring(t.expectedErr))
 		})
 	})
 })
 
-func verifyPod(client dynamic.ResourceInterface, expected *corev1.Pod) {
-	comparePods(test.GetPod(client, expected), expected)
+var _ = Describe("CreateOrUpdate function", func() {
+	t := newCreateOrUpdateTestDiver()
+
+	createOrUpdate := func(expResult util.OperationResult) error {
+		result, err := util.CreateOrUpdate(context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
+		Expect(result).To(Equal(expResult))
+
+		return err
+	}
+
+	When("the resource doesn't exist", func() {
+		It("should successfully create the resource", func() {
+			Expect(createOrUpdate(util.OperationResultCreated)).To(Succeed())
+			t.verifyPod()
+		})
+
+		Context("and Create fails", func() {
+			JustBeforeEach(func() {
+				t.client.FailOnCreate = apierrors.NewServiceUnavailable("fake")
+				t.expectedErr = t.client.FailOnCreate
+			})
+
+			It("should return an error", func() {
+				Expect(createOrUpdate(util.OperationResultNone)).To(ContainErrorSubstring(t.expectedErr))
+			})
+		})
+
+		Context("and Create initially returns AlreadyExists due to a simulated out-of-band create", func() {
+			BeforeEach(func() {
+				t.createPod()
+				t.pod = test.NewPodWithImage("", "apache")
+			})
+
+			JustBeforeEach(func() {
+				t.client.FailOnGet = apierrors.NewNotFound(schema.GroupResource{}, t.pod.GetName())
+				t.client.FailOnCreate = apierrors.NewAlreadyExists(schema.GroupResource{}, t.pod.GetName())
+			})
+
+			It("should eventually update the resource", func() {
+				Expect(createOrUpdate(util.OperationResultUpdated)).To(Succeed())
+				t.verifyPod()
+			})
+		})
+	})
+
+	t.testUpdate(createOrUpdate)
+
+	t.testGetFailure(createOrUpdate)
+})
+
+type createOrUpdateTestDriver struct {
+	pod         *corev1.Pod
+	testingFake *testing.Fake
+	client      *fake.DynamicResourceClient
+	origBackoff wait.Backoff
+	expectedErr error
+	mutateFn    util.MutateFn
 }
 
-func comparePods(actual, expected *corev1.Pod) {
-	Expect(actual.GetUID()).NotTo(Equal(expected.GetUID()))
-	Expect(actual.Spec).To(Equal(expected.Spec))
+func newCreateOrUpdateTestDiver() *createOrUpdateTestDriver {
+	t := &createOrUpdateTestDriver{}
+
+	BeforeEach(func() {
+		dynClient := fake.NewDynamicClient(scheme.Scheme)
+		t.testingFake = &dynClient.Fake
+
+		t.client, _ = dynClient.Resource(schema.GroupVersionResource{
+			Group:    corev1.SchemeGroupVersion.Group,
+			Version:  corev1.SchemeGroupVersion.Version,
+			Resource: "pods",
+		}).Namespace("test").(*fake.DynamicResourceClient)
+
+		t.client.CheckResourceVersionOnUpdate = true
+
+		t.pod = test.NewPod("")
+
+		t.origBackoff = util.SetBackoff(wait.Backoff{
+			Steps:    5,
+			Duration: 30 * time.Millisecond,
+		})
+
+		t.mutateFn = func(existing runtime.Object) (runtime.Object, error) {
+			obj := test.ToUnstructured(t.pod)
+			obj.SetUID(resource.ToMeta(existing).GetUID())
+			return util.Replace(obj)(nil)
+		}
+	})
+
+	AfterEach(func() {
+		util.SetBackoff(t.origBackoff)
+	})
+
+	return t
+}
+
+func (t *createOrUpdateTestDriver) testGetFailure(doOper func(util.OperationResult) error) {
+	When("resource retrieval fails", func() {
+		JustBeforeEach(func() {
+			t.client.FailOnGet = apierrors.NewServiceUnavailable("fake")
+			t.expectedErr = t.client.FailOnGet
+		})
+
+		It("should return an error", func() {
+			Expect(doOper(util.OperationResultNone)).To(ContainErrorSubstring(t.expectedErr))
+		})
+	})
+}
+
+func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult) error) {
+	When("the resource already exists", func() {
+		BeforeEach(func() {
+			t.createPod()
+			t.pod = test.NewPodWithImage("", "apache")
+		})
+
+		It("should update the resource", func() {
+			Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
+			t.verifyPod()
+		})
+
+		Context("and Update initially fails due to conflict", func() {
+			BeforeEach(func() {
+				t.client.FailOnUpdate = apierrors.NewConflict(schema.GroupResource{}, "", errors.New("conflict"))
+			})
+
+			It("should eventually update the resource", func() {
+				Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
+				t.verifyPod()
+			})
+		})
+
+		Context("and Update fails not due to conflict", func() {
+			JustBeforeEach(func() {
+				t.client.FailOnUpdate = apierrors.NewServiceUnavailable("fake")
+				t.expectedErr = t.client.FailOnUpdate
+			})
+
+			It("should return an error", func() {
+				Expect(doUpdate(util.OperationResultNone)).To(ContainErrorSubstring(t.expectedErr))
+			})
+		})
+
+		Context("and the resource to update is the same", func() {
+			BeforeEach(func() {
+				t.mutateFn = func(existing runtime.Object) (runtime.Object, error) {
+					return existing, nil
+				}
+			})
+
+			It("should not update the resource", func() {
+				Expect(doUpdate(util.OperationResultNone)).To(Succeed())
+				tests.EnsureNoActionsForResource(t.testingFake, "pods", "update")
+			})
+		})
+
+		Context("and the mutate function returns an error", func() {
+			BeforeEach(func() {
+				t.expectedErr = errors.New("mutate failure")
+				t.mutateFn = func(existing runtime.Object) (runtime.Object, error) {
+					return nil, t.expectedErr
+				}
+			})
+
+			It("should return an error", func() {
+				Expect(doUpdate(util.OperationResultNone)).ToNot(Succeed())
+			})
+		})
+	})
+}
+
+func (t *createOrUpdateTestDriver) createPod() {
+	test.CreateResource(t.client, t.pod)
+}
+
+func (t *createOrUpdateTestDriver) verifyPod() {
+	t.compareWithPod(test.GetPod(t.client, t.pod))
+}
+
+func (t *createOrUpdateTestDriver) compareWithPod(actual *corev1.Pod) {
+	Expect(actual.GetUID()).NotTo(Equal(t.pod.GetUID()))
+	Expect(actual.Spec).To(Equal(t.pod.Spec))
 }
