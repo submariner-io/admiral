@@ -33,7 +33,9 @@ func (a *Adapter) Error(err error, message string, args ...interface{}) error {
 		return nil
 	}
 
-	err = errors.Wrapf(err, message, args...)
+	if message != "" {
+		err = errors.Wrapf(err, message, args...)
+	}
 
 	capitalizeFirst := func(str string) string {
 		for i, v := range str {
