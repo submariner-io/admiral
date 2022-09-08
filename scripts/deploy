@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 
-source ${SCRIPTS_DIR}/lib/debug_functions
-source ${SCRIPTS_DIR}/lib/utils
+source "${SCRIPTS_DIR}"/lib/debug_functions
+source "${SCRIPTS_DIR}"/lib/utils
 
 function deploy_broker {
-    kubectl apply -f ${DAPPER_SOURCE}/test/e2e/deploy/broker.yaml
+    kubectl apply -f "${DAPPER_SOURCE}/test/e2e/deploy/broker.yaml"
 }
 
 function deploy_crds {
-    kubectl apply -f ${DAPPER_SOURCE}/test/e2e/deploy/crds.yaml
+    kubectl apply -f "${DAPPER_SOURCE}/test/e2e/deploy/crds.yaml"
 }
 
 load_settings
