@@ -211,7 +211,7 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 		syncer.config.WaitForCacheSync = &wait
 	}
 
-	_, gvr, err := util.ToUnstructuredResource(config.ResourceType, config.RestMapper)
+	rawType, gvr, err := util.ToUnstructuredResource(config.ResourceType, config.RestMapper)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // OK to return the error as is.
 	}
@@ -246,7 +246,7 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 			options.FieldSelector = config.SourceFieldSelector
 			return resourceClient.Watch(context.TODO(), options)
 		},
-	}, &unstructured.Unstructured{}, config.ResyncPeriod, cache.ResourceEventHandlerFuncs{
+	}, rawType, config.ResyncPeriod, cache.ResourceEventHandlerFuncs{
 		AddFunc:    syncer.onCreate,
 		UpdateFunc: syncer.onUpdate,
 		DeleteFunc: syncer.onDelete,
