@@ -308,7 +308,7 @@ func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.G
 		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(
 			context.TODO(), meta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
-			return nil, nil // nolint:nilnil // Returning nil value is intentional
+			return nil, nil //nolint:nilnil // Returning nil value is intentional
 		}
 		return obj, err
 	}, func(result interface{}) (bool, string, error) {
@@ -338,7 +338,7 @@ func (t *testDriver) awaitNoResource(cluster framework.ClusterIndex, gvr *schema
 		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(
 			context.TODO(), meta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
-			return nil, nil // nolint:nilnil // Returning nil value is intentional
+			return nil, nil //nolint:nilnil // Returning nil value is intentional
 		}
 		return obj, err
 	}, func(result interface{}) (bool, string, error) {
