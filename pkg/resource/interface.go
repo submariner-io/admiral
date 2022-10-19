@@ -43,18 +43,18 @@ func (i *InterfaceFuncs) Get(ctx context.Context, name string, options metav1.Ge
 	return i.GetFunc(ctx, name, options)
 }
 
-// nolint:gocritic // hugeParam - we're matching K8s API
+//nolint:gocritic // hugeParam - we're matching K8s API
 func (i *InterfaceFuncs) Create(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
 	return i.CreateFunc(ctx, obj, options)
 }
 
-// nolint:gocritic // hugeParam - we're matching K8s API
+//nolint:gocritic // hugeParam - we're matching K8s API
 func (i *InterfaceFuncs) Update(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
 	return i.UpdateFunc(ctx, obj, options)
 }
 
 func (i *InterfaceFuncs) Delete(ctx context.Context, name string,
-	options metav1.DeleteOptions, // nolint:gocritic // hugeParam - we're matching K8s API
+	options metav1.DeleteOptions, //nolint:gocritic // hugeParam - we're matching K8s API
 ) error {
 	return i.DeleteFunc(ctx, name, options)
 }
