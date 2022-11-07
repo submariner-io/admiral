@@ -144,7 +144,7 @@ type Syncer struct {
 var logger = log.Logger{Logger: logf.Log.WithName("BrokerSyncer")}
 
 // NewSyncer creates a Syncer that performs bi-directional syncing of resources between a local source and a central broker.
-func NewSyncer(config SyncerConfig) (*Syncer, error) { // nolint:gocritic // Minimal performance hit, we modify our copy
+func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Minimal performance hit, we modify our copy
 	if len(config.ResourceConfigs) == 0 {
 		return nil, fmt.Errorf("no resources to sync")
 	}
