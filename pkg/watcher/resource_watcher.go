@@ -91,7 +91,7 @@ type Config struct {
 	// RestConfig. If not specified, one is created from the RestConfig.
 	RestMapper meta.RESTMapper
 
-	// Client the client used to access the resources to watch. This is optional and is provided for unit testing in lieu
+	// Client used to access the resources to watch. This is optional and is provided for unit testing in lieu
 	// of the RestConfig. If not specified, one is created from the RestConfig.
 	Client dynamic.Interface
 
