@@ -160,6 +160,7 @@ issues:
     # Ignore certain linters for test files
     - path: _test\.go|test/|fake/|gomega/
       linters:
+        - contextcheck
         - errname
         - gochecknoinits
         - goerr113
