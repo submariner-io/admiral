@@ -67,9 +67,9 @@ func (c *ReactingClient) AddReactor(verb VerbType, objType interface{}, r Reacti
 	return c
 }
 
-func (c *ReactingClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
+func (c *ReactingClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	return c.react(Get, obj, func() error {
-		return c.Client.Get(ctx, key, obj)
+		return c.Client.Get(ctx, key, obj, opts...)
 	})
 }
 
