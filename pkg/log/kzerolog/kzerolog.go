@@ -41,7 +41,6 @@ const (
 var verbosityLevel = 0
 
 // AddFlags register command line options for zerolog-based logging. Should be called before InitK8sLogging.
-//goland:noinspection GoUnusedExportedFunction
 func AddFlags(flagset *flag.FlagSet) {
 	if flagset == nil {
 		flagset = flag.CommandLine
@@ -57,7 +56,6 @@ func AddFlags(flagset *flag.FlagSet) {
 
 // InitK8sLogging initializes a human friendly zerolog logger as the concrete logr.Logger
 // implementation in use by controller-runtime.
-//goland:noinspection GoUnusedExportedFunction
 func InitK8sLogging() {
 	if verbosityLevel > 0 {
 		klogFlags := flag.NewFlagSet("klog", flag.ContinueOnError)
