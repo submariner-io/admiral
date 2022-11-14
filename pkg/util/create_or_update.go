@@ -150,9 +150,9 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 // this will wait for the deletion to be complete before creating the new object:
 // with foreground propagation, Get will continue to return the object being deleted
 // and Create will fail with “already exists” until deletion is complete.
-//nolint:gocritic // hugeParam - we're matching K8s API
 func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Object,
-	createOptions metav1.CreateOptions, deleteOptions metav1.DeleteOptions,
+	createOptions metav1.CreateOptions, //nolint:gocritic // hugeParam - we're matching K8s API
+	deleteOptions metav1.DeleteOptions, //nolint:gocritic // hugeParam - we're matching K8s API
 ) (runtime.Object, error) {
 	name := resource.ToMeta(obj).GetName()
 
