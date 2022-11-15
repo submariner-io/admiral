@@ -7,7 +7,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -150,9 +150,9 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 // this will wait for the deletion to be complete before creating the new object:
 // with foreground propagation, Get will continue to return the object being deleted
 // and Create will fail with “already exists” until deletion is complete.
-//nolint:gocritic // hugeParam - we're matching K8s API
 func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Object,
-	createOptions metav1.CreateOptions, deleteOptions metav1.DeleteOptions,
+	createOptions metav1.CreateOptions, //nolint:gocritic // hugeParam - we're matching K8s API
+	deleteOptions metav1.DeleteOptions, //nolint:gocritic // hugeParam - we're matching K8s API
 ) (runtime.Object, error) {
 	name := resource.ToMeta(obj).GetName()
 

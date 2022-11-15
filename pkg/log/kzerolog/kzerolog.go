@@ -7,7 +7,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -41,7 +41,6 @@ const (
 var verbosityLevel = 0
 
 // AddFlags register command line options for zerolog-based logging. Should be called before InitK8sLogging.
-//goland:noinspection GoUnusedExportedFunction
 func AddFlags(flagset *flag.FlagSet) {
 	if flagset == nil {
 		flagset = flag.CommandLine
@@ -57,7 +56,6 @@ func AddFlags(flagset *flag.FlagSet) {
 
 // InitK8sLogging initializes a human friendly zerolog logger as the concrete logr.Logger
 // implementation in use by controller-runtime.
-//goland:noinspection GoUnusedExportedFunction
 func InitK8sLogging() {
 	if verbosityLevel > 0 {
 		klogFlags := flag.NewFlagSet("klog", flag.ContinueOnError)
