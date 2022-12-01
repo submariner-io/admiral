@@ -23,7 +23,6 @@ updates:
   - package-ecosystem: gomod
     directory: "/"
     schedule:
-      interval: daily
-    open-pull-requests-limit: 10
+      interval: weekly
     ignore:
       - dependency-name: github.com/submariner-io/*
