@@ -19,7 +19,7 @@ limitations under the License.
 package syncer
 
 import (
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/watcher"
 	testV1 "github.com/submariner-io/admiral/test/apis/admiral.submariner.io/v1"
