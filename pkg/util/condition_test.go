@@ -18,7 +18,7 @@ limitations under the License.
 package util_test
 
 import (
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
