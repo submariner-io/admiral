@@ -17,9 +17,9 @@ override UNIT_TEST_ARGS += test/e2e
 deploy: clusters
 	./scripts/$@
 
-e2e: vendor/modules.txt deploy
+e2e: deploy
 	./scripts/$@ $(E2E_ARGS)
-	
+
 .PHONY: $(TARGETS) test
 
 else
