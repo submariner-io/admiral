@@ -15,9 +15,9 @@ require (
 	github.com/rs/zerolog v1.29.0
 	github.com/submariner-io/shipyard v0.15.0-m3
 	golang.org/x/time v0.3.0
-	k8s.io/api v0.26.1
-	k8s.io/apimachinery v0.26.1
-	k8s.io/client-go v0.26.1
+	k8s.io/api v0.26.2
+	k8s.io/apimachinery v0.26.2
+	k8s.io/client-go v0.26.2
 	k8s.io/klog v1.0.0
 	sigs.k8s.io/controller-runtime v0.14.4
 	sigs.k8s.io/yaml v1.3.0
