@@ -104,7 +104,7 @@ const (
 type TransformFunc func(from runtime.Object, numRequeues int, op Operation) (runtime.Object, bool)
 
 // OnSuccessfulSyncFunc is invoked after a successful sync operation.
-type OnSuccessfulSyncFunc func(synced runtime.Object, op Operation)
+type OnSuccessfulSyncFunc func(synced runtime.Object, op Operation) bool
 
 type ResourceEquivalenceFunc func(obj1, obj2 *unstructured.Unstructured) bool
 
@@ -149,7 +149,8 @@ type ResourceSyncerConfig struct {
 	// Transform function used to transform resources prior to syncing.
 	Transform TransformFunc
 
-	// OnSuccessfulSync function invoked after a successful sync operation.
+	// OnSuccessfulSync function invoked after a successful sync operation. If true is returned, the resource is re-queued
+	// to be retried later.
 	OnSuccessfulSync OnSuccessfulSyncFunc
 
 	// ResourcesEquivalent function to compare two resources for equivalence. This is invoked on an update notification
@@ -427,11 +428,9 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 		r.log.V(log.LIBDEBUG).Infof("Syncer %q syncing resource %q", r.config.Name, resource.GetName())
 
 		err = r.config.Federator.Distribute(resource)
-		if err != nil {
+		if err != nil || r.onSuccessfulSync(resource, transformed, op) {
 			return true, errors.Wrapf(err, "error distributing resource %q", key)
 		}
-
-		r.onSuccessfulSync(resource, transformed, op)
 
 		if r.syncCounter != nil {
 			r.syncCounter.With(prometheus.Labels{
@@ -477,12 +476,10 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 			return false, nil
 		}
 
-		if err != nil {
+		if err != nil || r.onSuccessfulSync(resource, transformed, Delete) {
 			r.deleted.Store(key, deletedResource)
 			return true, errors.Wrapf(err, "error deleting resource %q", key)
 		}
-
-		r.onSuccessfulSync(resource, transformed, Delete)
 
 		if r.syncCounter != nil {
 			r.syncCounter.With(prometheus.Labels{
@@ -553,21 +550,21 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 	return result, transformed, requeue
 }
 
-func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op Operation) {
+func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op Operation) bool {
 	if r.config.OnSuccessfulSync == nil {
-		return
+		return false
 	}
 
 	if converted == nil {
 		converted = r.convertNoError(resource)
 		if converted == nil {
-			return
+			return false
 		}
 	}
 
 	r.log.V(log.LIBTRACE).Infof("Syncer %q: invoking OnSuccessfulSync function with: %#v", r.config.Name, converted)
 
-	r.config.OnSuccessfulSync(converted, op)
+	return r.config.OnSuccessfulSync(converted, op)
 }
 
 func (r *resourceSyncer) onCreate(resource interface{}) {
