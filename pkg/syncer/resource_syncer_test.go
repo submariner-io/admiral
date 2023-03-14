@@ -375,19 +375,28 @@ func testOnSuccessfulSyncFunction() {
 	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
 	ctx := context.TODO()
 
-	var expResource *corev1.Pod
-	var expOperation chan syncer.Operation
+	var (
+		expResource            *corev1.Pod
+		expOperation           chan syncer.Operation
+		onSuccessfulSyncReturn atomic.Bool
+	)
 
 	BeforeEach(func() {
 		expOperation = make(chan syncer.Operation, 20)
 		expResource = d.resource
-		d.config.OnSuccessfulSync = func(synced runtime.Object, op syncer.Operation) {
+		onSuccessfulSyncReturn.Store(false)
+		d.config.OnSuccessfulSync = func(synced runtime.Object, op syncer.Operation) bool {
 			defer GinkgoRecover()
 			pod, ok := synced.(*corev1.Pod)
 			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", synced)
 			Expect(equality.Semantic.DeepDerivative(expResource.Spec, pod.Spec)).To(BeTrue(),
 				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, expResource.Spec)
 			expOperation <- op
+
+			retry := onSuccessfulSyncReturn.Load()
+			onSuccessfulSyncReturn.Store(false)
+
+			return retry
 		}
 	})
 
@@ -395,6 +404,7 @@ func testOnSuccessfulSyncFunction() {
 		It("should invoke the OnSuccessfulSync function", func() {
 			d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, d.resource))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+			Consistently(expOperation).ShouldNot(Receive())
 		})
 	})
 
@@ -426,6 +436,7 @@ func testOnSuccessfulSyncFunction() {
 			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 			d.federator.VerifyDelete(expected)
 			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
+			Consistently(expOperation).ShouldNot(Receive())
 		})
 	})
 
@@ -470,6 +481,25 @@ func testOnSuccessfulSyncFunction() {
 
 			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 			Consistently(expOperation, 300*time.Millisecond).ShouldNot(Receive())
+		})
+	})
+
+	When("the OnSuccessfulSync function returns true", func() {
+		BeforeEach(func() {
+			onSuccessfulSyncReturn.Store(true)
+		})
+
+		It("should retry", func() {
+			d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, d.resource))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+			Consistently(expOperation).ShouldNot(Receive())
+
+			onSuccessfulSyncReturn.Store(true)
+			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
+			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
+			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
+			Consistently(expOperation).ShouldNot(Receive())
 		})
 	})
 }
