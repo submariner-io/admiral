@@ -21,6 +21,7 @@ package test
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	. "github.com/onsi/gomega"
@@ -36,18 +37,35 @@ import (
 
 func EnsureNoActionsForResource(f *testing.Fake, resourceType string, expectedVerbs ...string) {
 	Consistently(func() []string {
-		expSet := sets.NewString(expectedVerbs...)
-		verbs := []string{}
-
-		actualActions := f.Actions()
-		for i := range actualActions {
-			if actualActions[i].GetResource().Resource == resourceType && expSet.Has(actualActions[i].GetVerb()) {
-				verbs = append(verbs, actualActions[i].GetVerb())
-			}
-		}
-
-		return verbs
+		return GetOccurredActionVerbs(f, resourceType, expectedVerbs...)
 	}).Should(BeEmpty())
+}
+
+func EnsureActionsForResource(f *testing.Fake, resourceType string, expectedVerbs ...string) {
+	Eventually(func() []string {
+		return GetOccurredActionVerbs(f, resourceType, expectedVerbs...)
+	}).ShouldNot(BeEmpty())
+}
+
+func GetOccurredActionVerbs(f *testing.Fake, resourceType string, expectedVerbs ...string) []string {
+	expSet := sets.NewString(expectedVerbs...)
+	verbs := []string{}
+
+	subresource := ""
+	if index := strings.Index(resourceType, "/"); index != -1 {
+		subresource = resourceType[index+1:]
+		resourceType = resourceType[:index]
+	}
+
+	actualActions := f.Actions()
+	for i := range actualActions {
+		verb := actualActions[i].GetVerb()
+		if actualActions[i].GetResource().Resource == resourceType && actualActions[i].GetSubresource() == subresource && expSet.Has(verb) {
+			verbs = append(verbs, verb)
+		}
+	}
+
+	return verbs
 }
 
 func AwaitFinalizer(client resource.Interface, name, finalizer string) {
