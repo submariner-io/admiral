@@ -153,6 +153,40 @@ var _ = Describe("CreateOrUpdate function", func() {
 		It("should successfully create the resource", func() {
 			Expect(createOrUpdate(util.OperationResultCreated)).To(Succeed())
 			t.verifyPod()
+			tests.EnsureNoActionsForResource(t.testingFake, "pods/status", "update")
+		})
+
+		Context("and the status field is specified", func() {
+			BeforeEach(func() {
+				t.pod.Status = corev1.PodStatus{Phase: corev1.PodRunning}
+			})
+
+			It("should create the resource with the status field set via UpdateStatus", func() {
+				Expect(createOrUpdate(util.OperationResultCreated)).To(Succeed())
+				t.verifyPod()
+				tests.EnsureActionsForResource(t.testingFake, "pods/status", "update")
+			})
+
+			Context("but the status resource isn't defined", func() {
+				BeforeEach(func() {
+					fake.FailOnAction(t.testingFake, "pods/status", "update", apierrors.NewNotFound(schema.GroupResource{}, ""), false)
+				})
+
+				It("should successfully create the resource", func() {
+					Expect(createOrUpdate(util.OperationResultCreated)).To(Succeed())
+					t.verifyPod()
+				})
+			})
+
+			Context("and UpdateStatus fails", func() {
+				JustBeforeEach(func() {
+					fake.FailOnAction(t.testingFake, "pods/status", "update", apierrors.NewServiceUnavailable("fake"), false)
+				})
+
+				It("should return an error", func() {
+					Expect(createOrUpdate(util.OperationResultNone)).ToNot(Succeed())
+				})
+			})
 		})
 
 		Context("and Create fails", func() {
@@ -293,7 +327,7 @@ func (t *createOrUpdateTestDriver) testGetFailure(doOper func(util.OperationResu
 
 func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult) error) {
 	When("the resource already exists", func() {
-		BeforeEach(func() {
+		JustBeforeEach(func() {
 			t.createPod()
 			t.pod = test.NewPodWithImage("", "apache")
 		})
@@ -301,6 +335,45 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 		It("should update the resource", func() {
 			Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
 			t.verifyPod()
+			tests.EnsureNoActionsForResource(t.testingFake, "pods/status", "update")
+		})
+
+		Context("and the status is also modified", func() {
+			JustBeforeEach(func() {
+				t.pod.Status = corev1.PodStatus{Phase: corev1.PodRunning}
+			})
+
+			It("should update the resource", func() {
+				Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
+				t.verifyPod()
+			})
+
+			Context("and UpdateStatus fails", func() {
+				JustBeforeEach(func() {
+					fake.FailOnAction(t.testingFake, "pods/status", "update", apierrors.NewServiceUnavailable("fake"), false)
+				})
+
+				It("should return an error", func() {
+					Expect(doUpdate(util.OperationResultNone)).ToNot(Succeed())
+				})
+			})
+		})
+
+		Context("and only the status is modified", func() {
+			BeforeEach(func() {
+				t.pod.Status = corev1.PodStatus{Phase: corev1.PodPending}
+			})
+
+			JustBeforeEach(func() {
+				t.pod = test.GetPod(t.client, t.pod)
+				t.pod.Status = corev1.PodStatus{Phase: corev1.PodRunning}
+			})
+
+			It("should only update the status", func() {
+				Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
+				Expect(test.GetPod(t.client, t.pod).Status).To(Equal(t.pod.Status))
+				tests.EnsureNoActionsForResource(t.testingFake, "pods", "update")
+			})
 		})
 
 		Context("and Update initially fails due to conflict", func() {
@@ -335,6 +408,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 			It("should not update the resource", func() {
 				Expect(doUpdate(util.OperationResultNone)).To(Succeed())
 				tests.EnsureNoActionsForResource(t.testingFake, "pods", "update")
+				tests.EnsureNoActionsForResource(t.testingFake, "pods/status", "update")
 			})
 		})
 
@@ -364,4 +438,5 @@ func (t *createOrUpdateTestDriver) verifyPod() {
 func (t *createOrUpdateTestDriver) compareWithPod(actual *corev1.Pod) {
 	Expect(actual.GetUID()).NotTo(Equal(t.pod.GetUID()))
 	Expect(actual.Spec).To(Equal(t.pod.Spec))
+	Expect(actual.Status).To(Equal(t.pod.Status))
 }

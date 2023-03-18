@@ -18,6 +18,7 @@ limitations under the License.
 package util_test
 
 import (
+	"flag"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -26,12 +27,13 @@ import (
 )
 
 func init() {
-	kzerolog.AddFlags(nil)
-}
+	flags := flag.NewFlagSet("kzerolog", flag.ExitOnError)
+	kzerolog.AddFlags(flags)
 
-var _ = Describe("", func() {
+	_ = flags.Parse([]string{"-v=6"})
+
 	kzerolog.InitK8sLogging()
-})
+}
 
 func TestUtil(t *testing.T) {
 	RegisterFailHandler(Fail)

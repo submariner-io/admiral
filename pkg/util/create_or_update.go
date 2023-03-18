@@ -99,35 +99,46 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 
 			logger.V(log.LIBTRACE).Infof("Creating resource: %#v", obj)
 
-			_, err := client.Create(ctx, obj, metav1.CreateOptions{})
-			if apierrors.IsAlreadyExists(err) {
-				logger.V(log.LIBDEBUG).Infof("Resource %q already exists - retrying", objMeta.GetName())
-				return apierrors.NewConflict(schema.GroupResource{}, objMeta.GetName(), err)
-			}
-
-			if err != nil {
-				return errors.Wrapf(err, "error creating %#v", obj)
-			}
-
 			result = OperationResultCreated
-			return nil
+			return createResource(ctx, client, obj)
 		}
 
 		if err != nil {
 			return errors.Wrapf(err, "error retrieving %q", objMeta.GetName())
 		}
 
-		orig := existing.DeepCopyObject()
-		resourceVersion := resource.ToMeta(existing).GetResourceVersion()
+		origObj := resource.MustToUnstructured(existing)
 
 		toUpdate, err := mutate(existing)
 		if err != nil {
 			return err
 		}
 
-		resource.ToMeta(toUpdate).SetResourceVersion(resourceVersion)
+		resource.ToMeta(toUpdate).SetResourceVersion(origObj.GetResourceVersion())
 
-		if equality.Semantic.DeepEqual(toUpdate, orig) {
+		newObj := resource.MustToUnstructured(toUpdate)
+
+		origStatus := GetNestedField(origObj, StatusField)
+		newStatus := GetNestedField(newObj, StatusField)
+		if !equality.Semantic.DeepEqual(origStatus, newStatus) {
+			logger.V(log.LIBTRACE).Infof("Updating resource status: %#v", newStatus)
+
+			result = OperationResultUpdated
+
+			// UpdateStatus for generic clients (eg dynamic client) will return NotFound error if the resource CRD
+			// doesn't have the status subresource so we'll ignore it.
+			updated, err := client.UpdateStatus(ctx, toUpdate, metav1.UpdateOptions{})
+			if err == nil {
+				resource.ToMeta(toUpdate).SetResourceVersion(resource.ToMeta(updated).GetResourceVersion())
+
+				unstructured.RemoveNestedField(origObj.Object, StatusField)
+				unstructured.RemoveNestedField(newObj.Object, StatusField)
+			} else if !apierrors.IsNotFound(err) {
+				return errors.Wrapf(err, "error updating status for %#v", toUpdate)
+			}
+		}
+
+		if equality.Semantic.DeepEqual(origObj, newObj) {
 			return nil
 		}
 
@@ -143,6 +154,35 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 	}
 
 	return result, nil
+}
+
+func createResource(ctx context.Context, client resource.Interface, obj runtime.Object) error {
+	objMeta := resource.ToMeta(obj)
+
+	created, err := client.Create(ctx, obj, metav1.CreateOptions{})
+	if apierrors.IsAlreadyExists(err) {
+		logger.V(log.LIBDEBUG).Infof("Resource %q already exists - retrying", objMeta.GetName())
+		return apierrors.NewConflict(schema.GroupResource{}, objMeta.GetName(), err)
+	}
+
+	if err != nil {
+		return errors.Wrapf(err, "error creating %#v", obj)
+	}
+
+	status, ok := GetNestedField(resource.MustToUnstructured(obj), StatusField).(map[string]interface{})
+	if ok && len(status) > 0 {
+		// If the resource CRD has the status subresource the Create won't set the status field so we need to
+		// do a separate UpdateStatus call.
+		objMeta.SetResourceVersion(resource.ToMeta(created).GetResourceVersion())
+		objMeta.SetUID(resource.ToMeta(created).GetUID())
+
+		_, err := client.UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			return errors.Wrapf(err, "error updating status for %#v", obj)
+		}
+	}
+
+	return nil
 }
 
 // CreateAnew creates a resource, first deleting an existing instance if one exists.
@@ -189,15 +229,8 @@ func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Obje
 }
 
 func mutableFieldsEqual(existingObj, newObj runtime.Object) bool {
-	existingU, err := resource.ToUnstructured(existingObj)
-	if err != nil {
-		panic(err)
-	}
-
-	newU, err := resource.ToUnstructured(newObj)
-	if err != nil {
-		panic(err)
-	}
+	existingU := resource.MustToUnstructured(existingObj)
+	newU := resource.MustToUnstructured(newObj)
 
 	newU = CopyImmutableMetadata(existingU, newU)
 

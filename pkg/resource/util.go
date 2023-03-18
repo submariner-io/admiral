@@ -45,6 +45,15 @@ func ToUnstructured(from runtime.Object) (*unstructured.Unstructured, error) {
 	}
 }
 
+func MustToUnstructured(from runtime.Object) *unstructured.Unstructured {
+	u, err := ToUnstructured(from)
+	if err != nil {
+		panic(err)
+	}
+
+	return u
+}
+
 func ToMeta(obj runtime.Object) metav1.Object {
 	objMeta, err := meta.Accessor(obj)
 	if err != nil {
