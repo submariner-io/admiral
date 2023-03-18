@@ -55,12 +55,30 @@ func (d *dynamicType) Update(ctx context.Context, obj runtime.Object, options me
 	return d.client.Update(ctx, raw, options)
 }
 
+//nolint:gocritic // hugeParam - we're matching K8s API
+func (d *dynamicType) UpdateStatus(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+	raw, err := ToUnstructured(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	return d.client.UpdateStatus(ctx, raw, options)
+}
+
 func (d *dynamicType) Delete(ctx context.Context, name string,
 	options metav1.DeleteOptions, //nolint:gocritic // hugeParam - we're matching K8s API
 ) error {
 	return d.client.Delete(ctx, name, options)
 }
 
-func ForDynamic(client dynamic.ResourceInterface) Interface {
-	return &dynamicType{client: client}
+func ForDynamic(client dynamic.ResourceInterface) *InterfaceFuncs {
+	t := &dynamicType{client: client}
+
+	return &InterfaceFuncs{
+		GetFunc:          t.Get,
+		CreateFunc:       t.Create,
+		UpdateFunc:       t.Update,
+		UpdateStatusFunc: t.UpdateStatus,
+		DeleteFunc:       t.Delete,
+	}
 }
