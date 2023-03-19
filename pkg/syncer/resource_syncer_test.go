@@ -470,17 +470,32 @@ func testOnSuccessfulSyncFunction() {
 	})
 
 	When("delete fails", func() {
-		BeforeEach(func() {
-			d.federator.FailOnDelete = errors.New("fake error")
-			d.federator.ResetOnFailure = false
-		})
-
-		It("should not invoke the OnSuccessfulSync function", func() {
+		JustBeforeEach(func() {
 			d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, d.resource))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
+		})
 
-			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
-			Consistently(expOperation, 300*time.Millisecond).ShouldNot(Receive())
+		Context("with a general error", func() {
+			BeforeEach(func() {
+				d.federator.FailOnDelete = errors.New("fake error")
+				d.federator.ResetOnFailure = false
+			})
+
+			It("should not invoke the OnSuccessfulSync function", func() {
+				Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
+				Consistently(expOperation, 300*time.Millisecond).ShouldNot(Receive())
+			})
+		})
+
+		Context("with a NotFound error", func() {
+			BeforeEach(func() {
+				d.federator.FailOnDelete = apierrors.NewNotFound(schema.GroupResource{}, "")
+			})
+
+			It("should invoke the OnSuccessfulSync function", func() {
+				Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
+				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
+			})
 		})
 	})
 
