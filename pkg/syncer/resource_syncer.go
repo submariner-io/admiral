@@ -470,10 +470,14 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 	if resource != nil {
 		r.log.V(log.LIBDEBUG).Infof("Syncer %q deleting resource %q: %#v", r.config.Name, resource.GetName(), resource)
 
+		deleted := true
+
 		err := r.config.Federator.Delete(resource)
 		if apierrors.IsNotFound(err) {
-			r.log.V(log.LIBDEBUG).Infof("Syncer %q: resource %q not found - ignoring", r.config.Name, resource.GetName())
-			return false, nil
+			r.log.V(log.LIBDEBUG).Infof("Syncer %q: resource %q not found", r.config.Name, resource.GetName())
+
+			deleted = false
+			err = nil
 		}
 
 		if err != nil || r.onSuccessfulSync(resource, transformed, Delete) {
@@ -481,15 +485,17 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 			return true, errors.Wrapf(err, "error deleting resource %q", key)
 		}
 
-		if r.syncCounter != nil {
-			r.syncCounter.With(prometheus.Labels{
-				DirectionLabel:  r.config.Direction.String(),
-				OperationLabel:  Delete.String(),
-				SyncerNameLabel: r.config.Name,
-			}).Inc()
-		}
+		if deleted {
+			if r.syncCounter != nil {
+				r.syncCounter.With(prometheus.Labels{
+					DirectionLabel:  r.config.Direction.String(),
+					OperationLabel:  Delete.String(),
+					SyncerNameLabel: r.config.Name,
+				}).Inc()
+			}
 
-		r.log.V(log.LIBDEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, resource.GetName())
+			r.log.V(log.LIBDEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, resource.GetName())
+		}
 	}
 
 	if requeue {
