@@ -82,7 +82,7 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 ) (OperationResult, error) {
 	result := OperationResultNone
 
-	objMeta := resource.ToMeta(obj)
+	objMeta := resource.MustToMeta(obj)
 
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		existing, err := client.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
@@ -114,7 +114,7 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 			return err
 		}
 
-		resource.ToMeta(toUpdate).SetResourceVersion(origObj.GetResourceVersion())
+		resource.MustToMeta(toUpdate).SetResourceVersion(origObj.GetResourceVersion())
 
 		newObj := resource.MustToUnstructured(toUpdate)
 
@@ -129,7 +129,7 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 			// doesn't have the status subresource so we'll ignore it.
 			updated, err := client.UpdateStatus(ctx, toUpdate, metav1.UpdateOptions{})
 			if err == nil {
-				resource.ToMeta(toUpdate).SetResourceVersion(resource.ToMeta(updated).GetResourceVersion())
+				resource.MustToMeta(toUpdate).SetResourceVersion(resource.MustToMeta(updated).GetResourceVersion())
 
 				unstructured.RemoveNestedField(origObj.Object, StatusField)
 				unstructured.RemoveNestedField(newObj.Object, StatusField)
@@ -157,7 +157,7 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 }
 
 func createResource(ctx context.Context, client resource.Interface, obj runtime.Object) error {
-	objMeta := resource.ToMeta(obj)
+	objMeta := resource.MustToMeta(obj)
 
 	created, err := client.Create(ctx, obj, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
@@ -173,8 +173,8 @@ func createResource(ctx context.Context, client resource.Interface, obj runtime.
 	if ok && len(status) > 0 {
 		// If the resource CRD has the status subresource the Create won't set the status field so we need to
 		// do a separate UpdateStatus call.
-		objMeta.SetResourceVersion(resource.ToMeta(created).GetResourceVersion())
-		objMeta.SetUID(resource.ToMeta(created).GetUID())
+		objMeta.SetResourceVersion(resource.MustToMeta(created).GetResourceVersion())
+		objMeta.SetUID(resource.MustToMeta(created).GetUID())
 
 		_, err := client.UpdateStatus(ctx, obj, metav1.UpdateOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
@@ -194,7 +194,7 @@ func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Obje
 	createOptions metav1.CreateOptions, //nolint:gocritic // hugeParam - we're matching K8s API
 	deleteOptions metav1.DeleteOptions, //nolint:gocritic // hugeParam - we're matching K8s API
 ) (runtime.Object, error) {
-	name := resource.ToMeta(obj).GetName()
+	name := resource.MustToMeta(obj).GetName()
 
 	var retObj runtime.Object
 
@@ -206,7 +206,7 @@ func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Obje
 			return true, errors.Wrapf(err, "error creating %#v", obj)
 		}
 
-		retObj, err = client.Get(ctx, resource.ToMeta(obj).GetName(), metav1.GetOptions{})
+		retObj, err = client.Get(ctx, resource.MustToMeta(obj).GetName(), metav1.GetOptions{})
 		if !apierrors.IsNotFound(err) {
 			if err != nil {
 				return false, errors.Wrapf(err, "failed to retrieve pre-existing instance %q", name)

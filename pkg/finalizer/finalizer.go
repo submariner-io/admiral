@@ -29,7 +29,7 @@ import (
 )
 
 func Add(ctx context.Context, client resource.Interface, obj runtime.Object, finalizerName string) (bool, error) {
-	objMeta := resource.ToMeta(obj)
+	objMeta := resource.MustToMeta(obj)
 	if !objMeta.GetDeletionTimestamp().IsZero() {
 		return false, nil
 	}
@@ -39,7 +39,7 @@ func Add(ctx context.Context, client resource.Interface, obj runtime.Object, fin
 	}
 
 	err := util.Update(ctx, client, obj, func(existing runtime.Object) (runtime.Object, error) {
-		objMeta := resource.ToMeta(existing)
+		objMeta := resource.MustToMeta(existing)
 		objMeta.SetFinalizers(append(objMeta.GetFinalizers(), finalizerName))
 
 		return existing, nil
@@ -49,13 +49,13 @@ func Add(ctx context.Context, client resource.Interface, obj runtime.Object, fin
 }
 
 func Remove(ctx context.Context, client resource.Interface, obj runtime.Object, finalizerName string) error {
-	objMeta := resource.ToMeta(obj)
+	objMeta := resource.MustToMeta(obj)
 	if !IsPresent(objMeta, finalizerName) {
 		return nil
 	}
 
 	err := util.Update(ctx, client, obj, func(existing runtime.Object) (runtime.Object, error) {
-		objMeta := resource.ToMeta(existing)
+		objMeta := resource.MustToMeta(existing)
 
 		newFinalizers := []string{}
 		for _, f := range objMeta.GetFinalizers() {
