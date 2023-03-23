@@ -300,7 +300,7 @@ func newCreateOrUpdateTestDiver() *createOrUpdateTestDriver {
 
 		t.mutateFn = func(existing runtime.Object) (runtime.Object, error) {
 			obj := test.ToUnstructured(t.pod)
-			obj.SetUID(resource.ToMeta(existing).GetUID())
+			obj.SetUID(resource.MustToMeta(existing).GetUID())
 			return util.Replace(obj)(nil)
 		}
 	})

@@ -345,7 +345,7 @@ func (r *resourceSyncer) Reconcile(resourceLister func() []runtime.Object) {
 				return
 			}
 
-			metaObj := resourceUtil.ToMeta(resource)
+			metaObj := resourceUtil.MustToMeta(resource)
 			clusterID, found := getClusterIDLabel(resource)
 			ns := r.config.SourceNamespace
 
@@ -671,6 +671,6 @@ func (r *resourceSyncer) assertUnstructured(obj interface{}) *unstructured.Unstr
 }
 
 func getClusterIDLabel(resource runtime.Object) (string, bool) {
-	clusterID, found := resourceUtil.ToMeta(resource).GetLabels()[federate.ClusterIDLabelKey]
+	clusterID, found := resourceUtil.MustToMeta(resource).GetLabels()[federate.ClusterIDLabelKey]
 	return clusterID, found
 }

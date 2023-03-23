@@ -45,7 +45,7 @@ func NewWatchReactor(f *testing.Fake) *WatchReactor {
 }
 
 func filterEvent(event watch.Event, restrictions *testing.WatchRestrictions) (watch.Event, bool) {
-	if restrictions.Labels != nil && !restrictions.Labels.Matches(labels.Set(resource.ToMeta(event.Object).GetLabels())) {
+	if restrictions.Labels != nil && !restrictions.Labels.Matches(labels.Set(resource.MustToMeta(event.Object).GetLabels())) {
 		return event, false
 	}
 
