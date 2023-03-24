@@ -48,7 +48,7 @@ import (
 var _ = Describe("[syncer] Broker bi-directional syncer tests", func() {
 	Context("with a specific source namespace", testWithSpecificSourceNamespace)
 	Context("with source namespace all", testWithSourceNamespaceAll)
-	Context("with local transform", testWithLocalTransform)
+	Context("with local-to-broker transform", testWithTransformLocalToBroker)
 	Context("with a label selector", testWithLabelSelector)
 	Context("with a field selector", testWithFieldSelector)
 })
@@ -67,12 +67,12 @@ func testWithSourceNamespaceAll() {
 	newTestDriver().bidirectionalSyncTests()
 }
 
-func testWithLocalTransform() {
+func testWithTransformLocalToBroker() {
 	t := newTestDriver()
 
 	BeforeEach(func() {
 		t.brokerResourceType = &testV1.ExportedToaster{}
-		t.localTransform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+		t.transformLocalToBroker = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 			toaster, ok := from.(*testV1.Toaster)
 			Expect(ok).To(BeTrue())
 
@@ -147,14 +147,14 @@ func testWithFieldSelector() {
 }
 
 type testDriver struct {
-	framework            *framework.Framework
-	localSourceNamespace string
-	localTransform       func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool)
-	brokerResourceType   runtime.Object
-	labelSelector        string
-	fieldSelector        string
-	clusterClients       []dynamic.Interface
-	stopCh               chan struct{}
+	framework              *framework.Framework
+	localSourceNamespace   string
+	transformLocalToBroker func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool)
+	brokerResourceType     runtime.Object
+	labelSelector          string
+	fieldSelector          string
+	clusterClients         []dynamic.Interface
+	stopCh                 chan struct{}
 }
 
 func newTestDriver() *testDriver {
@@ -220,7 +220,7 @@ func (t *testDriver) newSyncer(cluster framework.ClusterIndex) *broker.Syncer {
 				LocalSourceNamespace:     t.localSourceNamespace,
 				LocalSourceLabelSelector: t.labelSelector,
 				LocalSourceFieldSelector: t.fieldSelector,
-				LocalTransform:           t.localTransform,
+				TransformLocalToBroker:   t.transformLocalToBroker,
 				BrokerResourceType:       t.brokerResourceType,
 			},
 		},

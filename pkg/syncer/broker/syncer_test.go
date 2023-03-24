@@ -218,7 +218,7 @@ var _ = Describe("Broker Syncer", func() {
 	When("a local transform function is specified", func() {
 		BeforeEach(func() {
 			transformed = test.NewPodWithImage(config.LocalNamespace, "transformed")
-			config.ResourceConfigs[0].LocalTransform = func(from runtime.Object, numRequeues int,
+			config.ResourceConfigs[0].TransformLocalToBroker = func(from runtime.Object, numRequeues int,
 				op sync.Operation,
 			) (runtime.Object, bool) {
 				return transformed, false
@@ -238,7 +238,7 @@ var _ = Describe("Broker Syncer", func() {
 	When("a broker transform function is specified", func() {
 		BeforeEach(func() {
 			transformed = test.NewPodWithImage(config.LocalNamespace, "transformed")
-			config.ResourceConfigs[0].BrokerTransform = func(from runtime.Object, numRequeues int,
+			config.ResourceConfigs[0].TransformBrokerToLocal = func(from runtime.Object, numRequeues int,
 				op sync.Operation,
 			) (runtime.Object, bool) {
 				return transformed, false
