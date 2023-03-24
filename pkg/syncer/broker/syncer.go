@@ -51,11 +51,11 @@ type ResourceConfig struct {
 	// LocalResourceType the type of the local resources to sync to the broker.
 	LocalResourceType runtime.Object
 
-	// LocalTransform function used to transform a local resource to the equivalent broker resource.
-	LocalTransform syncer.TransformFunc
+	// TransformLocalToBroker function used to transform a local resource to the equivalent broker resource.
+	TransformLocalToBroker syncer.TransformFunc
 
-	// OnSuccessfulSync function invoked after a successful sync operation to the broker.
-	LocalOnSuccessfulSync syncer.OnSuccessfulSyncFunc
+	// OnSuccessfulSyncToBroker function invoked after a successful sync operation to the broker.
+	OnSuccessfulSyncToBroker syncer.OnSuccessfulSyncFunc
 
 	// LocalResourcesEquivalent function to compare two local resources for equivalence. See ResourceSyncerConfig.ResourcesEquivalent
 	// for more details.
@@ -74,11 +74,11 @@ type ResourceConfig struct {
 	// BrokerResourceType the type of the broker resources to sync to the local source.
 	BrokerResourceType runtime.Object
 
-	// BrokerTransform function used to transform a broker resource to the equivalent local resource.
-	BrokerTransform syncer.TransformFunc
+	// TransformBrokerToLocal function used to transform a broker resource to the equivalent local resource.
+	TransformBrokerToLocal syncer.TransformFunc
 
-	// OnSuccessfulSync function invoked after a successful sync operation from the broker.
-	BrokerOnSuccessfulSync syncer.OnSuccessfulSyncFunc
+	// OnSuccessfulSyncFromBroker function invoked after a successful sync operation from the broker.
+	OnSuccessfulSyncFromBroker syncer.OnSuccessfulSyncFunc
 
 	// BrokerResourcesEquivalent function to compare two broker resources for equivalence. See ResourceSyncerConfig.ResourcesEquivalent
 	// for more details.
@@ -211,8 +211,8 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			RestMapper:          config.RestMapper,
 			Federator:           brokerSyncer.remoteFederator,
 			ResourceType:        rc.LocalResourceType,
-			Transform:           rc.LocalTransform,
-			OnSuccessfulSync:    rc.LocalOnSuccessfulSync,
+			Transform:           rc.TransformLocalToBroker,
+			OnSuccessfulSync:    rc.OnSuccessfulSyncToBroker,
 			ResourcesEquivalent: rc.LocalResourcesEquivalent,
 			ShouldProcess:       rc.LocalShouldProcess,
 			WaitForCacheSync:    rc.LocalWaitForCacheSync,
@@ -244,8 +244,8 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			RestMapper:          config.RestMapper,
 			Federator:           brokerSyncer.localFederator,
 			ResourceType:        rc.BrokerResourceType,
-			Transform:           rc.BrokerTransform,
-			OnSuccessfulSync:    rc.BrokerOnSuccessfulSync,
+			Transform:           rc.TransformBrokerToLocal,
+			OnSuccessfulSync:    rc.OnSuccessfulSyncFromBroker,
 			ResourcesEquivalent: rc.BrokerResourcesEquivalent,
 			WaitForCacheSync:    waitForCacheSync,
 			Scheme:              config.Scheme,
