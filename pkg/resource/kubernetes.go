@@ -48,9 +48,6 @@ func ForDaemonSet(client kubernetes.Interface, namespace string) Interface {
 		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
 			return client.AppsV1().DaemonSets(namespace).Update(ctx, obj.(*appsv1.DaemonSet), options)
 		},
-		UpdateStatusFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.AppsV1().DaemonSets(namespace).UpdateStatus(ctx, obj.(*appsv1.DaemonSet), options)
-		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.AppsV1().DaemonSets(namespace).Delete(ctx, name, options)
 		},
@@ -69,9 +66,6 @@ func ForDeployment(client kubernetes.Interface, namespace string) Interface {
 		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
 			return client.AppsV1().Deployments(namespace).Update(ctx, obj.(*appsv1.Deployment), options)
 		},
-		UpdateStatusFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.AppsV1().Deployments(namespace).UpdateStatus(ctx, obj.(*appsv1.Deployment), options)
-		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.AppsV1().Deployments(namespace).Delete(ctx, name, options)
 		},
@@ -80,6 +74,7 @@ func ForDeployment(client kubernetes.Interface, namespace string) Interface {
 
 // Core
 
+//nolint:dupl //false positive - lines are similar but not duplicated
 func ForNamespace(client kubernetes.Interface) Interface {
 	return &InterfaceFuncs{
 		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
@@ -90,9 +85,6 @@ func ForNamespace(client kubernetes.Interface) Interface {
 		},
 		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
 			return client.CoreV1().Namespaces().Update(ctx, obj.(*corev1.Namespace), options)
-		},
-		UpdateStatusFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.CoreV1().Namespaces().UpdateStatus(ctx, obj.(*corev1.Namespace), options)
 		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.CoreV1().Namespaces().Delete(ctx, name, options)
@@ -112,9 +104,6 @@ func ForPod(client kubernetes.Interface, namespace string) Interface {
 		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
 			return client.CoreV1().Pods(namespace).Update(ctx, obj.(*corev1.Pod), options)
 		},
-		UpdateStatusFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.CoreV1().Pods(namespace).UpdateStatus(ctx, obj.(*corev1.Pod), options)
-		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.CoreV1().Pods(namespace).Delete(ctx, name, options)
 		},
@@ -132,9 +121,6 @@ func ForService(client kubernetes.Interface, namespace string) Interface {
 		},
 		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
 			return client.CoreV1().Services(namespace).Update(ctx, obj.(*corev1.Service), options)
-		},
-		UpdateStatusFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.CoreV1().Services(namespace).UpdateStatus(ctx, obj.(*corev1.Service), options)
 		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.CoreV1().Services(namespace).Delete(ctx, name, options)

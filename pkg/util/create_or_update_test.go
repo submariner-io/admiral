@@ -376,6 +376,23 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 			})
 		})
 
+		Context("and the existing resource has a status but the status on update is empty", func() {
+			BeforeEach(func() {
+				t.pod.Status = corev1.PodStatus{Phase: corev1.PodPending}
+			})
+
+			JustBeforeEach(func() {
+				t.pod = test.GetPod(t.client, t.pod)
+				t.pod.Status = corev1.PodStatus{}
+			})
+
+			It("should not update the resource", func() {
+				Expect(doUpdate(util.OperationResultNone)).To(Succeed())
+				tests.EnsureNoActionsForResource(t.testingFake, "pods", "update")
+				tests.EnsureNoActionsForResource(t.testingFake, "pods/status", "update")
+			})
+		})
+
 		Context("and Update initially fails due to conflict", func() {
 			BeforeEach(func() {
 				t.client.FailOnUpdate = apierrors.NewConflict(schema.GroupResource{}, "", errors.New("conflict"))

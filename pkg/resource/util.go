@@ -19,6 +19,7 @@ limitations under the License.
 package resource
 
 import (
+	"encoding/json"
 	"strings"
 	"unicode"
 
@@ -74,4 +75,9 @@ func EnsureValidName(name string) string {
 
 		return c
 	}, name)
+}
+
+func ToJSON(o any) string {
+	out, _ := json.MarshalIndent(o, "", "  ")
+	return string(out)
 }
