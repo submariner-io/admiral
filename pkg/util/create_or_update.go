@@ -119,22 +119,26 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 		newObj := resource.MustToUnstructured(toUpdate)
 
 		origStatus := GetNestedField(origObj, StatusField)
-		newStatus := GetNestedField(newObj, StatusField)
-		if !equality.Semantic.DeepEqual(origStatus, newStatus) {
-			logger.V(log.LIBTRACE).Infof("Updating resource status: %#v", newStatus)
+		newStatus, ok := GetNestedField(newObj, StatusField).(map[string]interface{})
+
+		if !ok || len(newStatus) == 0 {
+			unstructured.RemoveNestedField(origObj.Object, StatusField)
+			unstructured.RemoveNestedField(newObj.Object, StatusField)
+		} else if !equality.Semantic.DeepEqual(origStatus, newStatus) {
+			logger.V(log.LIBTRACE).Infof("Updating resource status: %s", resource.ToJSON(newStatus))
 
 			result = OperationResultUpdated
+
+			unstructured.RemoveNestedField(origObj.Object, StatusField)
+			unstructured.RemoveNestedField(newObj.Object, StatusField)
 
 			// UpdateStatus for generic clients (eg dynamic client) will return NotFound error if the resource CRD
 			// doesn't have the status subresource so we'll ignore it.
 			updated, err := client.UpdateStatus(ctx, toUpdate, metav1.UpdateOptions{})
 			if err == nil {
 				resource.MustToMeta(toUpdate).SetResourceVersion(resource.MustToMeta(updated).GetResourceVersion())
-
-				unstructured.RemoveNestedField(origObj.Object, StatusField)
-				unstructured.RemoveNestedField(newObj.Object, StatusField)
 			} else if !apierrors.IsNotFound(err) {
-				return errors.Wrapf(err, "error updating status for %#v", toUpdate)
+				return errors.Wrapf(err, "error updating status %s", resource.ToJSON(toUpdate))
 			}
 		}
 
@@ -142,12 +146,12 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 			return nil
 		}
 
-		logger.V(log.LIBTRACE).Infof("Updating resource: %#v", obj)
+		logger.V(log.LIBTRACE).Infof("Updating resource: %s", resource.ToJSON(obj))
 
 		result = OperationResultUpdated
 		_, err = client.Update(ctx, toUpdate, metav1.UpdateOptions{})
 
-		return errors.Wrapf(err, "error updating %#v", toUpdate)
+		return errors.Wrapf(err, "error updating %s", resource.ToJSON(toUpdate))
 	})
 	if err != nil {
 		return OperationResultNone, errors.Wrap(err, "error creating or updating resource")
