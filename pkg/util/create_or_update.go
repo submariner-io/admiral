@@ -129,13 +129,12 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 
 			result = OperationResultUpdated
 
-			unstructured.RemoveNestedField(origObj.Object, StatusField)
-			unstructured.RemoveNestedField(newObj.Object, StatusField)
-
 			// UpdateStatus for generic clients (eg dynamic client) will return NotFound error if the resource CRD
 			// doesn't have the status subresource so we'll ignore it.
 			updated, err := client.UpdateStatus(ctx, toUpdate, metav1.UpdateOptions{})
 			if err == nil {
+				unstructured.RemoveNestedField(origObj.Object, StatusField)
+				unstructured.RemoveNestedField(newObj.Object, StatusField)
 				resource.MustToMeta(toUpdate).SetResourceVersion(resource.MustToMeta(updated).GetResourceVersion())
 			} else if !apierrors.IsNotFound(err) {
 				return errors.Wrapf(err, "error updating status %s", resource.ToJSON(toUpdate))
