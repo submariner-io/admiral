@@ -374,6 +374,17 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 				Expect(test.GetPod(t.client, t.pod).Status).To(Equal(t.pod.Status))
 				tests.EnsureNoActionsForResource(t.testingFake, "pods", "update")
 			})
+
+			Context("and UpdateStatus returns NotFound", func() {
+				JustBeforeEach(func() {
+					fake.FailOnAction(t.testingFake, "pods/status", "update", apierrors.NewNotFound(schema.GroupResource{}, ""), false)
+				})
+
+				It("should update the status", func() {
+					Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
+					Expect(test.GetPod(t.client, t.pod).Status).To(Equal(t.pod.Status))
+				})
+			})
 		})
 
 		Context("and the existing resource has a status but the status on update is empty", func() {
