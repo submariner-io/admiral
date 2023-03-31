@@ -107,7 +107,7 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 			return errors.Wrapf(err, "error retrieving %q", objMeta.GetName())
 		}
 
-		origObj := resource.MustToUnstructured(existing)
+		origObj := resource.MustToUnstructuredUsingDefaultConverter(existing)
 
 		toUpdate, err := mutate(existing)
 		if err != nil {
@@ -116,7 +116,7 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 
 		resource.MustToMeta(toUpdate).SetResourceVersion(origObj.GetResourceVersion())
 
-		newObj := resource.MustToUnstructured(toUpdate)
+		newObj := resource.MustToUnstructuredUsingDefaultConverter(toUpdate)
 
 		origStatus := GetNestedField(origObj, StatusField)
 		newStatus, ok := GetNestedField(newObj, StatusField).(map[string]interface{})
@@ -173,7 +173,7 @@ func createResource(ctx context.Context, client resource.Interface, obj runtime.
 		return errors.Wrapf(err, "error creating %#v", obj)
 	}
 
-	status, ok := GetNestedField(resource.MustToUnstructured(obj), StatusField).(map[string]interface{})
+	status, ok := GetNestedField(resource.MustToUnstructuredUsingDefaultConverter(obj), StatusField).(map[string]interface{})
 	if ok && len(status) > 0 {
 		// If the resource CRD has the status subresource the Create won't set the status field so we need to
 		// do a separate UpdateStatus call.
@@ -233,8 +233,8 @@ func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Obje
 }
 
 func mutableFieldsEqual(existingObj, newObj runtime.Object) bool {
-	existingU := resource.MustToUnstructured(existingObj)
-	newU := resource.MustToUnstructured(newObj)
+	existingU := resource.MustToUnstructuredUsingDefaultConverter(existingObj)
+	newU := resource.MustToUnstructuredUsingDefaultConverter(newObj)
 
 	newU = CopyImmutableMetadata(existingU, newU)
 
