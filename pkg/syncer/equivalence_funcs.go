@@ -32,7 +32,7 @@ func DefaultResourcesEquivalent(obj1, obj2 *unstructured.Unstructured) bool {
 		AreSpecsEquivalent(obj1, obj2)
 }
 
-func ResourcesNotEquivalent(obj1, obj2 *unstructured.Unstructured) bool {
+func ResourcesNotEquivalent(_, _ *unstructured.Unstructured) bool {
 	return false
 }
 

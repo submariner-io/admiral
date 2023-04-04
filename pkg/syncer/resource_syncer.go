@@ -392,7 +392,7 @@ func (r *resourceSyncer) Reconcile(resourceLister func() []runtime.Object) {
 	}()
 }
 
-func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error) {
+func (r *resourceSyncer) processNextWorkItem(key, _, _ string) (bool, error) {
 	obj, exists, err := r.store.GetByKey(key)
 	if err != nil {
 		return true, errors.Wrapf(err, "error retrieving resource %q", key)
