@@ -75,6 +75,7 @@ func (q *queueType) Enqueue(obj interface{}) {
 
 func (q *queueType) Run(stopCh <-chan struct{}, process ProcessFunc) {
 	go wait.Until(func() {
+		//nolint:revive // This is a while statement, we don't care about the empty block
 		for q.processNextWorkItem(process) {
 		}
 	}, time.Second, stopCh)
