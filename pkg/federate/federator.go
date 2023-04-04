@@ -48,10 +48,10 @@ func NewNoopFederator() Federator {
 	return &noopFederator{}
 }
 
-func (n noopFederator) Distribute(resource runtime.Object) error {
+func (n noopFederator) Distribute(_ runtime.Object) error {
 	return nil
 }
 
-func (n noopFederator) Delete(resource runtime.Object) error {
+func (n noopFederator) Delete(_ runtime.Object) error {
 	return nil
 }
