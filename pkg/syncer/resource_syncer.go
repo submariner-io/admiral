@@ -266,7 +266,7 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 			r.stopped <- struct{}{}
 			r.log.V(log.LIBDEBUG).Infof("Syncer %q stopped", r.config.Name)
 		}()
-		defer r.workQueue.ShutDown()
+		defer r.workQueue.ShutDownWithDrain()
 
 		r.informer.Run(stopCh)
 	}()
