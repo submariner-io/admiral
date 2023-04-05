@@ -39,6 +39,7 @@ type Interface interface {
 	NumRequeues(key string) int
 	Run(stopCh <-chan struct{}, process ProcessFunc)
 	ShutDown()
+	ShutDownWithDrain()
 }
 
 type queueType struct {
@@ -118,4 +119,20 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 
 func (q *queueType) NumRequeues(key string) int {
 	return q.RateLimitingInterface.NumRequeues(key)
+}
+
+func (q *queueType) ShutDownWithDrain() {
+	done := make(chan struct{})
+
+	// ShutDownWithDrain waits for all in-flight work to complete and thus could block indefinitely so put a deadline on it.
+	go func() {
+		q.RateLimitingInterface.ShutDownWithDrain()
+		done <- struct{}{}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		logger.Warningf("%s: timed out draining the queue on shut down", q.name)
+	}
 }
