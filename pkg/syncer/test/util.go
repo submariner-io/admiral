@@ -159,7 +159,7 @@ func GetRESTMapperFor(objs ...runtime.Object) metaapi.RESTMapper {
 func GetGroupVersionKindFor(obj runtime.Object) schema.GroupVersionKind {
 	gvks, _, err := scheme.Scheme.ObjectKinds(obj)
 	Expect(err).To(Succeed())
-	Expect(gvks).ToNot(HaveLen(0))
+	Expect(gvks).ToNot(BeEmpty())
 
 	return gvks[0]
 }
