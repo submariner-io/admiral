@@ -24,6 +24,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	"github.com/rs/zerolog"
@@ -88,7 +89,7 @@ type zeroLogContext struct {
 	zLogger      *zerolog.Logger
 	prefix       string
 	maxVerbosity int
-	skipFrames   int
+	skipFrames   atomic.Int32
 }
 
 func (ctx *zeroLogContext) clone() zeroLogContext {
@@ -111,11 +112,11 @@ func truncate(i interface{}, maxLen int) string {
 }
 
 func (ctx *zeroLogContext) calculateSkipFrames() int {
-	if ctx.skipFrames > 0 {
-		return ctx.skipFrames
+	skipFrames := ctx.skipFrames.Load()
+	if skipFrames > 0 {
+		return int(skipFrames)
 	}
 
-	skipFrames := 0
 	pc := make([]uintptr, 10)   // this should be enough frames to collect
 	n := runtime.Callers(2, pc) // skip runtime.Callers and this function
 	if n == 0 {
@@ -140,9 +141,9 @@ func (ctx *zeroLogContext) calculateSkipFrames() int {
 		}
 	}
 
-	ctx.skipFrames = skipFrames
+	ctx.skipFrames.Store(skipFrames)
 
-	return ctx.skipFrames
+	return int(skipFrames)
 }
 
 func (ctx *zeroLogContext) logEvent(evt *zerolog.Event, msg string, kvList ...interface{}) {
