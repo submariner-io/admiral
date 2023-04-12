@@ -141,7 +141,7 @@ func EnsureNoResource(client resource.Interface, name string) {
 	Consistently(func() bool {
 		_, err := client.Get(context.TODO(), name, metav1.GetOptions{})
 		return apierrors.IsNotFound(err)
-	}, 3).Should(BeTrue(), "Found unexpected resource %q", name)
+	}, 300*time.Millisecond).Should(BeTrue(), "Found unexpected resource %q", name)
 }
 
 func AwaitUpdateAction(f *testing.Fake, resourceType, name string) runtime.Object {
