@@ -20,7 +20,6 @@ package test
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
@@ -31,7 +30,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/testing"
 )
 
@@ -91,30 +89,19 @@ func AssertFinalizers(client resource.Interface, name string, finalizers ...stri
 func AwaitStatusCondition(expCond *metav1.Condition, get func() ([]metav1.Condition, error)) {
 	var found *metav1.Condition
 
-	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
+	Eventually(func() bool {
 		conditions, err := get()
-		if err != nil {
-			return false, err
-		}
+		Expect(err).To(Succeed())
 
 		found = meta.FindStatusCondition(conditions, expCond.Type)
 		if found == nil {
-			return false, nil
+			return false
 		}
 
-		return found.Status == expCond.Status && found.Reason == expCond.Reason, nil
-	})
+		return found.Status == expCond.Status && found.Reason == expCond.Reason
+	}, 5*time.Second, 50*time.Millisecond).Should(BeTrue(), "Status condition not found: %s", resource.ToJSON(expCond))
 
-	if errors.Is(err, wait.ErrWaitTimeout) {
-		Expect(found).ToNot(BeNil(), "Status condition not found")
-		Expect(found.Type).To(Equal(expCond.Type))
-		Expect(found.Status).To(Equal(expCond.Status))
-		Expect(found.LastTransitionTime).To(Not(BeNil()))
-		Expect(found.Message).To(Not(BeEmpty()))
-		Expect(found.Reason).To(Equal(expCond.Reason))
-	} else {
-		Expect(err).To(Succeed())
-	}
+	Expect(found.LastTransitionTime).To(Not(BeNil()))
 }
 
 func AwaitResource(client resource.Interface, name string) runtime.Object {
