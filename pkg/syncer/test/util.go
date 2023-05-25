@@ -21,6 +21,7 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/gomega"
@@ -34,7 +35,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/uuid"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 )
@@ -236,41 +236,30 @@ func AwaitAndVerifyResource(client dynamic.ResourceInterface, name string,
 ) *unstructured.Unstructured {
 	var found *unstructured.Unstructured
 
-	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
+	Eventually(func() error {
 		obj, err := client.Get(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-			return false, err
+			return err
 		}
 
 		if verify == nil || verify(obj) {
 			found = obj
-			return true, nil
+			return nil
 		}
 
-		return false, nil
-	})
-
-	Expect(err).To(Succeed())
+		return fmt.Errorf("resource %q was found but not verified", name)
+	}, 5*time.Second, 50*time.Millisecond).Should(Succeed())
 
 	return found
 }
 
 func AwaitNoResource(client dynamic.ResourceInterface, name string) {
-	err := wait.PollImmediate(50*time.Millisecond, 5*time.Second, func() (bool, error) {
+	Consistently(func() error {
 		_, err := client.Get(context.TODO(), name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
-			return true, nil
+			return nil
 		}
 
-		if err != nil {
-			return false, err
-		}
-
-		return false, nil
-	})
-
-	Expect(err).To(Succeed())
+		return err
+	}, 5*time.Second, 50*time.Millisecond).Should(Succeed())
 }
