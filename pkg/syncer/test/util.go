@@ -254,12 +254,14 @@ func AwaitAndVerifyResource(client dynamic.ResourceInterface, name string,
 }
 
 func AwaitNoResource(client dynamic.ResourceInterface, name string) {
-	Consistently(func() error {
+	Eventually(func() bool {
 		_, err := client.Get(context.TODO(), name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
-			return nil
+			return true
 		}
 
-		return err
-	}, 5*time.Second, 50*time.Millisecond).Should(Succeed())
+		Expect(err).To(Succeed())
+
+		return false
+	}, 5*time.Second, 50*time.Millisecond).Should(BeTrue(), "Resource %q still exists", name)
 }
