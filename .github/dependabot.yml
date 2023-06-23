@@ -2,36 +2,44 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: '/'
+    directory: /
     schedule:
       interval: monthly
   - package-ecosystem: github-actions
-    directory: '/'
-    target-branch: "release-0.12"
+    directory: /
+    target-branch: release-0.12
     schedule:
       interval: monthly
   - package-ecosystem: github-actions
-    directory: '/'
-    target-branch: "release-0.13"
+    directory: /
+    target-branch: release-0.13
     schedule:
       interval: monthly
   - package-ecosystem: github-actions
-    directory: '/'
-    target-branch: "release-0.14"
+    directory: /
+    target-branch: release-0.14
     schedule:
       interval: monthly
   - package-ecosystem: github-actions
-    directory: '/'
-    target-branch: "release-0.15"
+    directory: /
+    target-branch: release-0.15
     schedule:
       interval: monthly
   - package-ecosystem: gomod
-    directory: "/"
+    directory: /
     schedule:
       interval: weekly
     ignore:
       # Our own dependencies are handled during releases
       - dependency-name: github.com/submariner-io/*
-      # These are included by k8s.io/client-go
+      # Managed in shipyard
+      - dependency-name: github.com/go-logr/logr
+      - dependency-name: github.com/onsi/ginkgo/v2
+      - dependency-name: github.com/onsi/gomega
+      - dependency-name: github.com/pkg/errors
+      - dependency-name: golang.org/x/time
       - dependency-name: k8s.io/api
       - dependency-name: k8s.io/apimachinery
+      - dependency-name: k8s.io/client-go
+      - dependency-name: k8s.io/klog
+      - dependency-name: sigs.k8s.io/yaml
