@@ -33,13 +33,10 @@ updates:
       # Our own dependencies are handled during releases
       - dependency-name: github.com/submariner-io/*
       # Managed in shipyard
-      - dependency-name: github.com/go-logr/logr
       - dependency-name: github.com/onsi/ginkgo/v2
       - dependency-name: github.com/onsi/gomega
       - dependency-name: github.com/pkg/errors
-      - dependency-name: golang.org/x/time
       - dependency-name: k8s.io/api
       - dependency-name: k8s.io/apimachinery
       - dependency-name: k8s.io/client-go
       - dependency-name: k8s.io/klog
-      - dependency-name: sigs.k8s.io/yaml
