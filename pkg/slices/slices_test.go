@@ -22,7 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/slices"
-	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/set"
 )
 
 type Status struct {
@@ -33,7 +33,7 @@ var _ = Describe("Intersect", func() {
 	Specify("with non-empty slices", func() {
 		testIntersect := func(s1, s2 []string, exp ...string) {
 			actual := slices.Intersect(s1, s2, key)
-			Expect(sets.New(actual...).Equal(sets.New(exp...))).To(BeTrue(), "Expected: %s. Actual: %s", exp, actual)
+			Expect(set.New(actual...).Equal(set.New(exp...))).To(BeTrue(), "Expected: %s. Actual: %s", exp, actual)
 		}
 
 		testIntersect([]string{"1", "2"}, []string{"1", "2"}, "1", "2")
