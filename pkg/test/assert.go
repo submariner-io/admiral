@@ -29,8 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/testing"
+	"k8s.io/utils/set"
 )
 
 func EnsureNoActionsForResource(f *testing.Fake, resourceType string, expectedVerbs ...string) {
@@ -46,7 +46,7 @@ func EnsureActionsForResource(f *testing.Fake, resourceType string, expectedVerb
 }
 
 func GetOccurredActionVerbs(f *testing.Fake, resourceType string, expectedVerbs ...string) []string {
-	expSet := sets.NewString(expectedVerbs...)
+	expSet := set.New(expectedVerbs...)
 	verbs := []string{}
 
 	subresource := ""

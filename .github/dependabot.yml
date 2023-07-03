@@ -40,3 +40,4 @@ updates:
       - dependency-name: k8s.io/apimachinery
       - dependency-name: k8s.io/client-go
       - dependency-name: k8s.io/klog
+      - dependency-name: k8s.io/utils
