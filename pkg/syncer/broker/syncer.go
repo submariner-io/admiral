@@ -32,6 +32,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -370,6 +371,15 @@ func (s *Syncer) ListLocalResources(ofType runtime.Object) ([]runtime.Object, er
 	}
 
 	return ls.ListResources() //nolint:wrapcheck // OK to return the error as is.
+}
+
+func (s *Syncer) ListLocalResourcesBySelector(ofType runtime.Object, selector labels.Selector) []runtime.Object {
+	ls, found := s.localSyncers[reflect.TypeOf(ofType)]
+	if !found {
+		panic(fmt.Errorf("no Syncer found for %#v", ofType))
+	}
+
+	return ls.ListResourcesBySelector(selector)
 }
 
 func (s *Syncer) GetBrokerNamespace() string {

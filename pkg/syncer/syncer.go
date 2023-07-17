@@ -18,12 +18,16 @@ limitations under the License.
 
 package syncer
 
-import "k8s.io/apimachinery/pkg/runtime"
+import (
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+)
 
 type Interface interface {
 	Start(stopCh <-chan struct{}) error
 	AwaitStopped()
 	GetResource(name, namespace string) (runtime.Object, bool, error)
 	ListResources() ([]runtime.Object, error)
+	ListResourcesBySelector(selector labels.Selector) []runtime.Object
 	Reconcile(resourceLister func() []runtime.Object)
 }
