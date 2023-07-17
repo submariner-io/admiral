@@ -88,7 +88,7 @@ func MustToUnstructuredUsingDefaultConverter(from runtime.Object) *unstructured.
 	return u
 }
 
-func MustToMeta(obj runtime.Object) metav1.Object {
+func MustToMeta(obj interface{}) metav1.Object {
 	objMeta, err := meta.Accessor(obj)
 	if err != nil {
 		panic(err)

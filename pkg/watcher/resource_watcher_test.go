@@ -30,15 +30,18 @@ import (
 	"github.com/submariner-io/admiral/pkg/watcher"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/set"
 )
 
 var _ = Describe("Resource Watcher", func() {
 	var (
 		config          *watcher.Config
+		resourceWatcher watcher.Interface
 		pods            dynamic.ResourceInterface
 		services        dynamic.ResourceInterface
 		pod             *corev1.Pod
@@ -81,7 +84,7 @@ var _ = Describe("Resource Watcher", func() {
 					},
 				},
 				{
-					Name:            "Node watcher",
+					Name:            "Service watcher",
 					SourceNamespace: test.LocalNamespace,
 					ResourceType:    &corev1.Service{},
 					Handler: watcher.EventHandlerFuncs{
@@ -107,7 +110,9 @@ var _ = Describe("Resource Watcher", func() {
 		services = config.Client.Resource(*test.GetGroupVersionResourceFor(config.RestMapper, &corev1.Service{})).Namespace(
 			config.ResourceConfigs[0].SourceNamespace)
 
-		resourceWatcher, err := watcher.New(config)
+		var err error
+
+		resourceWatcher, err = watcher.New(config)
 		Expect(err).To(Succeed())
 
 		Expect(resourceWatcher.Start(stopCh)).To(Succeed())
@@ -133,7 +138,7 @@ var _ = Describe("Resource Watcher", func() {
 			Eventually(updatedPods).Should(Receive(Equal(pod)))
 			Consistently(updatedPods).ShouldNot(Receive())
 
-			Expect(pods.Delete(context.TODO(), pod.GetName(), v1.DeleteOptions{})).To(Succeed())
+			Expect(pods.Delete(context.TODO(), pod.GetName(), metav1.DeleteOptions{})).To(Succeed())
 
 			Eventually(deletedPods).Should(Receive(Equal(pod)))
 			Consistently(deletedPods).ShouldNot(Receive())
@@ -143,7 +148,7 @@ var _ = Describe("Resource Watcher", func() {
 	When("a Service is created", func() {
 		It("should notify the appropriate handler", func() {
 			service := &corev1.Service{
-				ObjectMeta: v1.ObjectMeta{
+				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-service",
 				},
 			}
@@ -190,6 +195,31 @@ var _ = Describe("Resource Watcher", func() {
 				test.CreateResource(pods, pod)
 				Consistently(createdPods, 300*time.Millisecond).ShouldNot(Receive())
 			})
+		})
+	})
+
+	When("ListLocalResources is called", func() {
+		It("should return the correct resources", func() {
+			pod2 := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pod2",
+					Namespace: pod.Namespace,
+					Labels:    map[string]string{"label1": "match"},
+				},
+			}
+
+			test.CreateResource(pods, pod)
+			Eventually(createdPods).Should(Receive())
+			test.CreateResource(pods, pod2)
+			Eventually(createdPods).Should(Receive())
+
+			list := resourceWatcher.ListResources(pod, labels.Everything())
+			Expect(list).To(HaveLen(2))
+			Expect(set.New(list[0].(*corev1.Pod).Name, list[1].(*corev1.Pod).Name)).To(Equal(set.New(pod.Name, pod2.Name)))
+
+			list = resourceWatcher.ListResources(pod, labels.Set(map[string]string{"label1": "match"}).AsSelector())
+			Expect(list).To(HaveLen(1))
+			Expect(list[0].(*corev1.Pod).Name).To(Equal(pod2.Name))
 		})
 	})
 })

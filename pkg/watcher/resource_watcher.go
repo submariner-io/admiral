@@ -22,6 +22,7 @@ package watcher
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/pkg/errors"
@@ -29,6 +30,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -36,6 +38,7 @@ import (
 
 type Interface interface {
 	Start(stopCh <-chan struct{}) error
+	ListResources(ofType runtime.Object, bySelector labels.Selector) []runtime.Object
 }
 
 // EventHandler can handle notifications of events that happen to a resource. The bool return value from each event
@@ -109,7 +112,7 @@ type Config struct {
 }
 
 type resourceWatcher struct {
-	syncers []Interface
+	syncers map[reflect.Type]syncer.Interface
 }
 
 func New(config *Config) (Interface, error) {
@@ -133,7 +136,7 @@ func New(config *Config) (Interface, error) {
 		}
 	}
 
-	watcher := &resourceWatcher{syncers: []Interface{}}
+	watcher := &resourceWatcher{syncers: make(map[reflect.Type]syncer.Interface)}
 
 	for _, rc := range config.ResourceConfigs {
 		handler := rc.Handler
@@ -169,7 +172,7 @@ func New(config *Config) (Interface, error) {
 			return nil, errors.Wrapf(err, "error creating resource syncer %q", rc.Name)
 		}
 
-		watcher.syncers = append(watcher.syncers, s)
+		watcher.syncers[reflect.TypeOf(rc.ResourceType)] = s
 	}
 
 	return watcher, nil
@@ -184,6 +187,19 @@ func (r *resourceWatcher) Start(stopCh <-chan struct{}) error {
 	}
 
 	return nil
+}
+
+func (r *resourceWatcher) ListResources(ofType runtime.Object, bySelector labels.Selector) []runtime.Object {
+	s, found := r.syncers[reflect.TypeOf(ofType)]
+	if !found {
+		panic(fmt.Errorf("no Syncer found for %#v", ofType))
+	}
+
+	if bySelector == nil {
+		bySelector = labels.Everything()
+	}
+
+	return s.ListResourcesBySelector(bySelector)
 }
 
 func (r EventHandlerFuncs) OnCreate(obj runtime.Object, numRequeues int) bool {
