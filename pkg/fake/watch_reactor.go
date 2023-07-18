@@ -23,70 +23,40 @@ import (
 	"sync"
 
 	. "github.com/onsi/gomega"
-	"github.com/pkg/errors"
-	"github.com/submariner-io/admiral/pkg/resource"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/testing"
 )
 
 type WatchReactor struct {
-	mutex    sync.Mutex
-	watches  map[string]*watchDelegator
-	reactors []testing.WatchReactor
+	mutex            sync.Mutex
+	watches          map[string]*watchDelegator
+	filteringReactor filteringWatchReactor
 }
 
 func NewWatchReactor(f *testing.Fake) *WatchReactor {
-	r := &WatchReactor{watches: map[string]*watchDelegator{}, reactors: f.WatchReactionChain[0:]}
-	chain := []testing.WatchReactor{&testing.SimpleWatchReactor{Resource: "*", Reaction: r.react}}
-	f.WatchReactionChain = append(chain, f.WatchReactionChain...)
+	r := &WatchReactor{watches: map[string]*watchDelegator{}, filteringReactor: filteringWatchReactor{reactors: f.WatchReactionChain[0:]}}
+	f.PrependWatchReactor("*", r.react)
 
 	return r
 }
 
-func filterEvent(event watch.Event, restrictions *testing.WatchRestrictions) (watch.Event, bool) {
-	if restrictions.Labels != nil && !restrictions.Labels.Matches(labels.Set(resource.MustToMeta(event.Object).GetLabels())) {
-		return event, false
-	}
-
-	return event, true
-}
-
 func (r *WatchReactor) react(action testing.Action) (bool, watch.Interface, error) {
-	switch w := action.(type) {
-	case testing.WatchActionImpl:
-		r.mutex.Lock()
-		defer r.mutex.Unlock()
-
-		if r.watches[w.Resource.Resource] != nil {
-			return true, nil, fmt.Errorf("watch for %q was already started", w.Resource.Resource)
-		}
-
-		for _, reactor := range r.reactors {
-			if !reactor.Handles(action) {
-				continue
-			}
-
-			handled, watcher, err := reactor.React(action)
-			if !handled {
-				continue
-			}
-
-			watcher = watch.Filter(watcher, func(in watch.Event) (out watch.Event, keep bool) {
-				return filterEvent(in, &w.WatchRestrictions)
-			})
-
-			delegator := &watchDelegator{Interface: watcher, stopped: make(chan struct{})}
-			r.watches[w.Resource.Resource] = delegator
-
-			return true, delegator, err
-		}
-
-		return true, nil, errors.New("action not handled")
-	default:
+	handled, watcher, err := r.filteringReactor.react(action)
+	if !handled || err != nil {
+		return handled, nil, err
 	}
 
-	return false, nil, nil
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if r.watches[action.GetResource().Resource] != nil {
+		return true, nil, fmt.Errorf("watch for %q was already started", action.GetResource().Resource)
+	}
+
+	delegator := &watchDelegator{Interface: watcher, stopped: make(chan struct{})}
+	r.watches[action.GetResource().Resource] = delegator
+
+	return true, delegator, nil
 }
 
 func (r *WatchReactor) getDelegator(forResource string) *watchDelegator {
