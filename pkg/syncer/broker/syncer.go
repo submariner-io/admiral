@@ -321,27 +321,12 @@ func (s *Syncer) Start(stopCh <-chan struct{}) error {
 		}
 	}
 
-	lister := func(s syncer.Interface) []runtime.Object {
-		list, err := s.ListResources()
-		if err != nil {
-			logger.Error(err, "Unable to reconcile - error listing resources")
-			return nil
-		}
-
-		return list
-	}
-
 	for i := 0; i < len(s.syncers); i += 2 {
 		localSyncer := s.syncers[i]
 		remoteSyncer := s.syncers[i+1]
 
-		remoteSyncer.Reconcile(func() []runtime.Object {
-			return lister(localSyncer)
-		})
-
-		localSyncer.Reconcile(func() []runtime.Object {
-			return lister(remoteSyncer)
-		})
+		remoteSyncer.Reconcile(localSyncer.ListResources)
+		localSyncer.Reconcile(remoteSyncer.ListResources)
 	}
 
 	return nil
@@ -364,13 +349,13 @@ func (s *Syncer) GetLocalResource(name, namespace string, ofType runtime.Object)
 	return ls.GetResource(name, namespace) //nolint:wrapcheck // OK to return the error as is.
 }
 
-func (s *Syncer) ListLocalResources(ofType runtime.Object) ([]runtime.Object, error) {
+func (s *Syncer) ListLocalResources(ofType runtime.Object) []runtime.Object {
 	ls, found := s.localSyncers[reflect.TypeOf(ofType)]
 	if !found {
-		return nil, fmt.Errorf("no Syncer found for %#v", ofType)
+		panic(fmt.Errorf("no Syncer found for %#v", ofType))
 	}
 
-	return ls.ListResources() //nolint:wrapcheck // OK to return the error as is.
+	return ls.ListResources()
 }
 
 func (s *Syncer) ListLocalResourcesBySelector(ofType runtime.Object, selector labels.Selector) []runtime.Object {

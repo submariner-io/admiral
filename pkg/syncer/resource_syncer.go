@@ -38,7 +38,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -310,8 +309,8 @@ func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bo
 	return converted, true, nil
 }
 
-func (r *resourceSyncer) ListResources() ([]runtime.Object, error) {
-	return r.ListResourcesBySelector(k8slabels.Everything()), nil
+func (r *resourceSyncer) ListResources() []runtime.Object {
+	return r.ListResourcesBySelector(k8slabels.Everything())
 }
 
 func (r *resourceSyncer) ListResourcesBySelector(selector k8slabels.Selector) []runtime.Object {
@@ -330,10 +329,7 @@ func (r *resourceSyncer) ListResourcesBySelector(selector k8slabels.Selector) []
 			continue
 		}
 
-		converted, err := r.convert(obj.(*unstructured.Unstructured))
-		utilruntime.Must(err)
-
-		retObjects = append(retObjects, converted)
+		retObjects = append(retObjects, r.convertNoError(obj.(*unstructured.Unstructured)))
 	}
 
 	return retObjects

@@ -872,8 +872,7 @@ func testListResources() {
 	})
 
 	It("should return all the resources", func() {
-		list, err := d.syncer.ListResources()
-		Expect(err).To(Succeed())
+		list := d.syncer.ListResources()
 		assertResourceList(list, d.resource, resource2)
 	})
 }
