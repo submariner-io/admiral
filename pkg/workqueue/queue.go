@@ -103,7 +103,7 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 		return process(key, name, ns)
 	}()
 	if err != nil {
-		utilruntime.HandleError(fmt.Errorf("%s: Failed to process object with key %q: %w", q.name, key, err))
+		utilruntime.HandleError(fmt.Errorf("%s: Failed to process object with key %q using function %#v: %w", q.name, key, process, err))
 	}
 
 	if requeue {
