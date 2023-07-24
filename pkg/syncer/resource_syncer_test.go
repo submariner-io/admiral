@@ -20,6 +20,7 @@ package syncer_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 	metaapi "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -58,6 +60,7 @@ var _ = Describe("Resource Syncer", func() {
 	Describe("Update Suppression", testUpdateSuppression)
 	Describe("GetResource", testGetResource)
 	Describe("ListResources", testListResources)
+	Describe("ListResourcesBySelector", testListResourcesBySelector)
 })
 
 func testLocalToRemote() {
@@ -852,6 +855,7 @@ func testListResources() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "apache-pod",
 				Namespace: d.resource.Namespace,
+				Labels:    map[string]string{"foo": "bar"},
 			},
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
@@ -868,20 +872,106 @@ func testListResources() {
 	})
 
 	It("should return all the resources", func() {
-		list, err := d.syncer.ListResources()
-		Expect(err).To(Succeed())
-
-		expected := map[string]*corev1.PodSpec{d.resource.Name: &d.resource.Spec, resource2.Name: &resource2.Spec}
-
-		Expect(list).To(HaveLen(len(expected)))
-		for _, actual := range list {
-			meta, err := metaapi.Accessor(actual)
-			Expect(err).To(Succeed())
-			Expect(actual).To(BeAssignableToTypeOf(&corev1.Pod{}))
-			Expect(&actual.(*corev1.Pod).Spec).To(Equal(expected[meta.GetName()]))
-			delete(expected, meta.GetName())
-		}
+		list := d.syncer.ListResources()
+		assertResourceList(list, d.resource, resource2)
 	})
+}
+
+func testListResourcesBySelector() {
+	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	newPod := func(i int, labels map[string]string) *corev1.Pod {
+		return &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("pod%d", i),
+				Namespace: fmt.Sprintf("namespace%d", i),
+				Labels:    labels,
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Image: fmt.Sprintf("image%d", i),
+						Name:  fmt.Sprintf("container%d", i),
+					},
+				},
+			},
+		}
+	}
+
+	var (
+		pod1 = newPod(1, map[string]string{
+			"foo":    "bar",
+			"label1": "match",
+			"label2": "no-match",
+		})
+
+		pod2 = newPod(2, map[string]string{
+			"label1": "match",
+		})
+
+		pod3 = newPod(3, map[string]string{
+			"label1": "no-match",
+			"label2": "match",
+		})
+
+		pod4 = newPod(4, map[string]string{
+			"label1": "no-match",
+		})
+
+		pod5 = newPod(5, map[string]string{
+			"label1": "match",
+			"label2": "match",
+		})
+	)
+
+	BeforeEach(func() {
+		d.addInitialResource(d.resource)
+		d.addInitialResource(pod1)
+		d.addInitialResource(pod2)
+		d.addInitialResource(pod3)
+		d.addInitialResource(pod4)
+		d.addInitialResource(pod5)
+	})
+
+	It("should return correct resources for label1 selector", func() {
+		list := d.syncer.ListResourcesBySelector(labels.Set(map[string]string{"label1": "match"}).AsSelector())
+		assertResourceList(list, pod1, pod2, pod5)
+	})
+
+	It("should return correct resources for label2 selector", func() {
+		list := d.syncer.ListResourcesBySelector(labels.Set(map[string]string{"label2": "match"}).AsSelector())
+		assertResourceList(list, pod3, pod5)
+	})
+
+	It("should return correct resources for label1 and label2 selector", func() {
+		list := d.syncer.ListResourcesBySelector(labels.Set(map[string]string{
+			"label1": "match",
+			"label2": "match",
+		}).AsSelector())
+		assertResourceList(list, pod5)
+	})
+
+	It("should return no resources for label3 selector", func() {
+		list := d.syncer.ListResourcesBySelector(labels.Set(map[string]string{"label3": "match"}).AsSelector())
+		assertResourceList(list)
+	})
+}
+
+func assertResourceList(actual []runtime.Object, expected ...*corev1.Pod) {
+	expSpecs := map[string]*corev1.PodSpec{}
+	for _, p := range expected {
+		expSpecs[p.Name] = &p.Spec
+	}
+
+	Expect(actual).To(HaveLen(len(expSpecs)))
+
+	for _, obj := range actual {
+		meta, err := metaapi.Accessor(obj)
+		Expect(err).To(Succeed())
+		Expect(obj).To(BeAssignableToTypeOf(&corev1.Pod{}))
+		Expect(&obj.(*corev1.Pod).Spec).To(Equal(expSpecs[meta.GetName()]))
+		delete(expSpecs, meta.GetName())
+	}
 }
 
 type testDriver struct {

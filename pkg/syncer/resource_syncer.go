@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
@@ -308,24 +309,30 @@ func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bo
 	return converted, true, nil
 }
 
-func (r *resourceSyncer) ListResources() ([]runtime.Object, error) {
+func (r *resourceSyncer) ListResources() []runtime.Object {
+	return r.ListResourcesBySelector(k8slabels.Everything())
+}
+
+func (r *resourceSyncer) ListResourcesBySelector(selector k8slabels.Selector) []runtime.Object {
 	if ok := cache.WaitForCacheSync(r.stopCh, r.informer.HasSynced); !ok {
-		return nil, fmt.Errorf("failed to wait for informer cache to sync")
+		// This means the cache was stopped.
+		r.log.Warningf("Syncer %q failed to wait for informer cache to sync while listing resources", r.config.Name)
+
+		return []runtime.Object{}
 	}
 
 	list := r.store.List()
 	retObjects := make([]runtime.Object, 0, len(list))
 
 	for _, obj := range list {
-		converted, err := r.convert(obj.(*unstructured.Unstructured))
-		if err != nil {
-			return nil, err
+		if !selector.Matches(k8slabels.Set(resourceUtil.MustToMeta(obj).GetLabels())) {
+			continue
 		}
 
-		retObjects = append(retObjects, converted)
+		retObjects = append(retObjects, r.convertNoError(obj.(*unstructured.Unstructured)))
 	}
 
-	return retObjects, nil
+	return retObjects
 }
 
 func (r *resourceSyncer) Reconcile(resourceLister func() []runtime.Object) {

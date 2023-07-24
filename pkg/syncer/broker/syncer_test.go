@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -439,8 +440,19 @@ var _ = Describe("Broker Syncer", func() {
 			test.CreateResource(localClient, resource)
 			test.AwaitResource(brokerClient, resource.GetName())
 
-			list, err := syncer.ListLocalResources(resource)
-			Expect(err).To(Succeed())
+			list := syncer.ListLocalResources(resource)
+			Expect(list).To(HaveLen(1))
+			Expect(list[0]).To(BeAssignableToTypeOf(&corev1.Pod{}))
+			Expect(&list[0].(*corev1.Pod).Spec).To(Equal(&resource.Spec))
+		})
+	})
+
+	When("ListLocalResourcesBySelector is called", func() {
+		It("should return the correct resources", func() {
+			test.CreateResource(localClient, resource)
+			test.AwaitResource(brokerClient, resource.GetName())
+
+			list := syncer.ListLocalResourcesBySelector(resource, labels.Set(resource.Labels).AsSelector())
 			Expect(list).To(HaveLen(1))
 			Expect(list[0]).To(BeAssignableToTypeOf(&corev1.Pod{}))
 			Expect(&list[0].(*corev1.Pod).Spec).To(Equal(&resource.Spec))
