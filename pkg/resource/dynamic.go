@@ -71,6 +71,13 @@ func (d *dynamicType) Delete(ctx context.Context, name string,
 	return d.client.Delete(ctx, name, options)
 }
 
+func (d *dynamicType) List(ctx context.Context,
+	options metav1.ListOptions, //nolint:gocritic // hugeParam - we're matching K8s API
+) ([]runtime.Object, error) {
+	l, err := d.client.List(ctx, options)
+	return MustExtractList(l), err
+}
+
 func ForDynamic(client dynamic.ResourceInterface) *InterfaceFuncs {
 	t := &dynamicType{client: client}
 
@@ -80,5 +87,6 @@ func ForDynamic(client dynamic.ResourceInterface) *InterfaceFuncs {
 		UpdateFunc:       t.Update,
 		UpdateStatusFunc: t.UpdateStatus,
 		DeleteFunc:       t.Delete,
+		ListFunc:         t.List,
 	}
 }
