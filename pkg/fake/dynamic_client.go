@@ -68,7 +68,7 @@ type DynamicResourceClient struct {
 func NewDynamicClient(scheme *runtime.Scheme, objects ...runtime.Object) *DynamicClient {
 	f := fake.NewSimpleDynamicClient(scheme, objects...)
 
-	AddDeleteCollectionReactor(&f.Fake, schema.GroupVersionKind{Group: "fake-dynamic-client-group", Version: "v1", Kind: ""})
+	AddDeleteCollectionReactor(&f.Fake)
 	AddFilteringListReactor(&f.Fake)
 
 	return &DynamicClient{
