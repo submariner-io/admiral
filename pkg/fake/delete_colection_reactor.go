@@ -20,29 +20,41 @@ package fake
 
 import (
 	"fmt"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/testing"
 )
 
 type DeleteCollectionReactor struct {
-	gvk      schema.GroupVersionKind
+	gvrToGVK map[schema.GroupVersionResource]schema.GroupVersionKind
 	reactors []testing.Reactor
 }
 
-func AddDeleteCollectionReactor(f *testing.Fake, gvk schema.GroupVersionKind) {
-	r := &DeleteCollectionReactor{gvk: gvk, reactors: f.ReactionChain[0:]}
-	chain := []testing.Reactor{&testing.SimpleReactor{Verb: "delete-collection", Resource: "*", Reaction: r.react}}
-	f.ReactionChain = append(chain, f.ReactionChain...)
+func AddDeleteCollectionReactor(f *testing.Fake) {
+	r := &DeleteCollectionReactor{gvrToGVK: map[schema.GroupVersionResource]schema.GroupVersionKind{}, reactors: f.ReactionChain[0:]}
+	f.PrependReactor("delete-collection", "*", r.react)
+
+	for gvk := range scheme.Scheme.AllKnownTypes() {
+		if !strings.HasSuffix(gvk.Kind, "List") {
+			continue
+		}
+
+		nonListGVK := gvk.GroupVersion().WithKind(gvk.Kind[:len(gvk.Kind)-4])
+		plural, _ := meta.UnsafeGuessKindToResource(nonListGVK)
+		r.gvrToGVK[plural] = nonListGVK
+	}
 }
 
 func (r *DeleteCollectionReactor) react(action testing.Action) (bool, runtime.Object, error) {
@@ -50,10 +62,11 @@ func (r *DeleteCollectionReactor) react(action testing.Action) (bool, runtime.Ob
 	case testing.DeleteCollectionActionImpl:
 		defer GinkgoRecover()
 
-		obj, err := invokeReactors(testing.NewListAction(action.GetResource(), r.gvk, action.GetNamespace(), metav1.ListOptions{
-			LabelSelector: dc.ListRestrictions.Labels.String(),
-			FieldSelector: dc.ListRestrictions.Fields.String(),
-		}), r.reactors)
+		obj, err := invokeReactors(testing.NewListAction(action.GetResource(), r.gvrToGVK[action.GetResource()],
+			action.GetNamespace(), metav1.ListOptions{
+				LabelSelector: dc.ListRestrictions.Labels.String(),
+				FieldSelector: dc.ListRestrictions.Fields.String(),
+			}), r.reactors)
 		if err != nil {
 			return true, nil, err
 		}

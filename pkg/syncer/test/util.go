@@ -26,7 +26,8 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/federate"
-	resourceUtil "github.com/submariner-io/admiral/pkg/resource"
+	"github.com/submariner-io/admiral/pkg/resource"
+	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metaapi "k8s.io/apimachinery/pkg/api/meta"
@@ -52,24 +53,28 @@ func GetResourceAndError(resourceInterface dynamic.ResourceInterface, obj runtim
 }
 
 func GetResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
-	resource, err := GetResourceAndError(resourceInterface, obj)
+	ret, err := GetResourceAndError(resourceInterface, obj)
 	Expect(err).To(Succeed())
 
-	return resource
+	return ret
 }
 
-func CreateResource(resourceInterface dynamic.ResourceInterface, resource runtime.Object) *unstructured.Unstructured {
-	obj, err := resourceInterface.Create(context.TODO(), ToUnstructured(resource), metav1.CreateOptions{})
+func CreateResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
+	u := ToUnstructured(obj)
+	u.SetResourceVersion("")
+
+	created, err := resourceInterface.Create(context.TODO(), u, metav1.CreateOptions{})
 	Expect(err).To(Succeed())
 
-	return obj
+	return created
 }
 
-func UpdateResource(resourceInterface dynamic.ResourceInterface, resource runtime.Object) *unstructured.Unstructured {
-	obj, err := resourceInterface.Update(context.TODO(), ToUnstructured(resource), metav1.UpdateOptions{})
+func UpdateResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
+	err := util.Update(context.Background(), resource.ForDynamic(resourceInterface), obj,
+		util.Replace(obj))
 	Expect(err).To(Succeed())
 
-	return obj
+	return GetResource(resourceInterface, obj)
 }
 
 func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev1.Pod, expNamespace, clusterID string) {
@@ -201,7 +206,7 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 }
 
 func ToUnstructured(obj runtime.Object) *unstructured.Unstructured {
-	raw, err := resourceUtil.ToUnstructured(obj)
+	raw, err := resource.ToUnstructured(obj)
 	Expect(err).To(Succeed())
 
 	return raw

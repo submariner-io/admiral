@@ -21,8 +21,8 @@ package fake
 import (
 	"fmt"
 
-	"github.com/submariner-io/admiral/pkg/syncer/test"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"github.com/submariner-io/admiral/pkg/resource"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/testing"
@@ -45,22 +45,24 @@ func (r *filteringListReactor) react(action testing.Action) (bool, runtime.Objec
 			return true, nil, err
 		}
 
-		list, err := test.ToUnstructured(obj).ToList()
+		objs, err := meta.ExtractList(obj)
 		if err != nil {
 			return true, nil, err
 		}
 
-		filtered := &unstructured.UnstructuredList{Object: list.Object}
+		filtered := []runtime.Object{}
 
-		for i := range list.Items {
-			item := &list.Items[i]
-			fieldSet := fields.Set{"metadata.namespace": item.GetNamespace(), "metadata.name": item.GetName()}
+		for i := range objs {
+			objMeta := resource.MustToMeta(objs[i])
+			fieldSet := fields.Set{"metadata.namespace": objMeta.GetNamespace(), "metadata.name": objMeta.GetName()}
 			if listAction.ListRestrictions.Fields.Matches(fieldSet) {
-				filtered.Items = append(filtered.Items, *item)
+				filtered = append(filtered, objs[i])
 			}
 		}
 
-		return true, filtered, nil
+		err = meta.SetList(obj, filtered)
+
+		return true, obj, err
 	default:
 		return false, nil, fmt.Errorf("invalid action: %#v", action)
 	}
