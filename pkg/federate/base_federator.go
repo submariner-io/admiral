@@ -46,10 +46,13 @@ func newBaseFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, t
 	keepMetadataField ...string,
 ) *baseFederator {
 	b := &baseFederator{
-		dynClient:          dynClient,
-		restMapper:         restMapper,
-		targetNamespace:    targetNamespace,
-		keepMetadataFields: map[string]bool{"name": true, "namespace": true, util.LabelsField: true, util.AnnotationsField: true},
+		dynClient:       dynClient,
+		restMapper:      restMapper,
+		targetNamespace: targetNamespace,
+		keepMetadataFields: map[string]bool{
+			"name": true, "namespace": true, "generateName": true,
+			util.LabelsField: true, util.AnnotationsField: true,
+		},
 	}
 
 	for _, field := range keepMetadataField {

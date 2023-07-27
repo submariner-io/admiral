@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	utilrand "k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/fake"
@@ -146,6 +147,14 @@ func (f *DynamicResourceClient) Create(ctx context.Context, obj *unstructured.Un
 	fail = getError(f.PersistentFailOnCreate)
 	if fail != nil {
 		return nil, fail
+	}
+
+	if obj.GetName() == "" && obj.GetGenerateName() != "" {
+		obj.SetName(fmt.Sprintf("%s%s", obj.GetGenerateName(), utilrand.String(5)))
+	}
+
+	if obj.GetName() == "" {
+		return nil, fmt.Errorf("resource name may not be empty")
 	}
 
 	obj.SetUID(uuid.NewUUID())

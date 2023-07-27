@@ -144,6 +144,10 @@ var _ = Describe("CreateOrUpdate function", func() {
 
 	createOrUpdate := func(expResult util.OperationResult) error {
 		result, err := util.CreateOrUpdate(context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
+		if err != nil && expResult != util.OperationResultNone {
+			return err
+		}
+
 		Expect(result).To(Equal(expResult))
 
 		return err
@@ -154,6 +158,20 @@ var _ = Describe("CreateOrUpdate function", func() {
 			Expect(createOrUpdate(util.OperationResultCreated)).To(Succeed())
 			t.verifyPod()
 			tests.EnsureNoActionsForResource(t.testingFake, "pods/status", "update")
+		})
+
+		Context("and GenerateName is set", func() {
+			BeforeEach(func() {
+				t.pod.Name = ""
+				t.pod.GenerateName = "name-prefix-"
+				t.pod.Labels = map[string]string{"label1": "value1", "label2": "value2"}
+			})
+
+			It("should successfully create the resource", func() {
+				Expect(createOrUpdate(util.OperationResultCreated)).To(Succeed())
+				actual := t.verifyPod()
+				Expect(actual.Name).To(HavePrefix("name-prefix-"))
+			})
 		})
 
 		Context("and the status field is specified", func() {
@@ -328,14 +346,48 @@ func (t *createOrUpdateTestDriver) testGetFailure(doOper func(util.OperationResu
 func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult) error) {
 	When("the resource already exists", func() {
 		JustBeforeEach(func() {
+			labels := t.pod.Labels
+			generateName := t.pod.GenerateName
 			t.createPod()
+
 			t.pod = test.NewPodWithImage("", "apache")
+			t.pod.GenerateName = generateName
+			t.pod.Labels = labels
 		})
 
 		It("should update the resource", func() {
 			Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
 			t.verifyPod()
 			tests.EnsureNoActionsForResource(t.testingFake, "pods/status", "update")
+		})
+
+		Context("and GenerateName is set", func() {
+			BeforeEach(func() {
+				t.pod.Name = ""
+				t.pod.GenerateName = "name-prefix-g"
+				t.pod.Labels = map[string]string{"label1": "value1", "label2": "value2"}
+			})
+
+			JustBeforeEach(func() {
+				t.pod.Name = ""
+			})
+
+			It("should update the resource", func() {
+				Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
+				t.verifyPod()
+			})
+
+			Context("but more than one matching resources exist", func() {
+				It("should return an error", func() {
+					test.CreateResource(t.client, &corev1.Pod{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:   "another",
+							Labels: t.pod.Labels,
+						},
+					})
+					Expect(doUpdate(util.OperationResultNone)).ToNot(Succeed())
+				})
+			})
 		})
 
 		Context("and the status is also modified", func() {
@@ -459,8 +511,19 @@ func (t *createOrUpdateTestDriver) createPod() {
 	test.CreateResource(t.client, t.pod)
 }
 
-func (t *createOrUpdateTestDriver) verifyPod() {
-	t.compareWithPod(test.GetPod(t.client, t.pod))
+func (t *createOrUpdateTestDriver) verifyPod() *corev1.Pod {
+	pod := t.pod.DeepCopy()
+
+	if pod.Name == "" {
+		list, err := t.client.List(context.Background(), metav1.ListOptions{})
+		Expect(err).To(Succeed())
+		Expect(scheme.Scheme.Convert(&list.Items[0], pod, nil)).To(Succeed())
+	}
+
+	actual := test.GetPod(t.client, pod)
+	t.compareWithPod(actual)
+
+	return actual
 }
 
 func (t *createOrUpdateTestDriver) compareWithPod(actual *corev1.Pod) {
