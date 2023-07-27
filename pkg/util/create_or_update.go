@@ -20,6 +20,7 @@ package util
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -29,6 +30,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -63,15 +65,21 @@ var backOff wait.Backoff = wait.Backoff{
 
 var logger = log.Logger{Logger: logf.Log}
 
+// CreateOrUpdate tries to obtain an existing resource and, if not found, creates 'obj' otherwise updates it. The existing resource
+// is normally retrieved via 'obj's Name field but if it's empty and the GenerateName field is non-empty, it will try to retrieve it
+// via the List method using 'obj's Labels. This assumes that the labels uniquely identify the resource. If more than one resource is
+// found, an error is returned.
 func CreateOrUpdate(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn) (OperationResult, error) {
 	return maybeCreateOrUpdate(ctx, client, obj, mutate, opCreate)
 }
 
+// Update tries to obtain an existing resource and, if found, updates it. If not found, no error is returned.
 func Update(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn) error {
 	_, err := maybeCreateOrUpdate(ctx, client, obj, mutate, opUpdate)
 	return err
 }
 
+// Update tries to obtain an existing resource and, if found, updates it. If not found, a NotFound error is returned.
 func MustUpdate(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn) error {
 	_, err := maybeCreateOrUpdate(ctx, client, obj, mutate, opMustUpdate)
 	return err
@@ -85,13 +93,13 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 	objMeta := resource.MustToMeta(obj)
 
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		existing, err := client.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
+		existing, err := getResource(ctx, client, obj)
 		if apierrors.IsNotFound(err) {
 			if op != opCreate {
 				logger.V(log.LIBTRACE).Infof("Resource %q does not exist - not updating", objMeta.GetName())
 
 				if op == opMustUpdate {
-					return err //nolint:wrapcheck // No need to wrap
+					return err
 				}
 
 				return nil
@@ -114,7 +122,10 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 			return err
 		}
 
-		resource.MustToMeta(toUpdate).SetResourceVersion(origObj.GetResourceVersion())
+		objMeta := resource.MustToMeta(toUpdate)
+		objMeta.SetResourceVersion(origObj.GetResourceVersion())
+		objMeta.SetName(origObj.GetName())
+		objMeta.SetGenerateName("")
 
 		newObj := resource.MustToUnstructuredUsingDefaultConverter(toUpdate)
 
@@ -157,6 +168,33 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 	}
 
 	return result, nil
+}
+
+//nolint:wrapcheck // No need to wrap errors
+func getResource(ctx context.Context, client resource.Interface, obj runtime.Object) (runtime.Object, error) {
+	objMeta := resource.MustToMeta(obj)
+
+	if objMeta.GetName() != "" || objMeta.GetGenerateName() == "" {
+		return client.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
+	}
+
+	list, err := client.List(ctx, metav1.ListOptions{
+		LabelSelector: labels.SelectorFromSet(objMeta.GetLabels()).String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	count := len(list)
+	if count == 0 {
+		return nil, apierrors.NewNotFound(schema.GroupResource{}, "")
+	}
+
+	if count != 1 {
+		return nil, fmt.Errorf("found %d resources with labels %#v, expected 1", count, objMeta.GetLabels())
+	}
+
+	return list[0], nil
 }
 
 func createResource(ctx context.Context, client resource.Interface, obj runtime.Object) error {
