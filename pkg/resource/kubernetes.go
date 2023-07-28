@@ -26,8 +26,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	controllerClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -51,6 +53,10 @@ func ForDaemonSet(client kubernetes.Interface, namespace string) Interface {
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.AppsV1().DaemonSets(namespace).Delete(ctx, name, options)
 		},
+		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+			l, err := client.AppsV1().DaemonSets(namespace).List(ctx, options)
+			return MustExtractList(l), err
+		},
 	}
 }
 
@@ -68,6 +74,10 @@ func ForDeployment(client kubernetes.Interface, namespace string) Interface {
 		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.AppsV1().Deployments(namespace).Delete(ctx, name, options)
+		},
+		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+			l, err := client.AppsV1().Deployments(namespace).List(ctx, options)
+			return MustExtractList(l), err
 		},
 	}
 }
@@ -89,6 +99,10 @@ func ForNamespace(client kubernetes.Interface) Interface {
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.CoreV1().Namespaces().Delete(ctx, name, options)
 		},
+		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+			l, err := client.CoreV1().Namespaces().List(ctx, options)
+			return MustExtractList(l), err
+		},
 	}
 }
 
@@ -106,6 +120,10 @@ func ForPod(client kubernetes.Interface, namespace string) Interface {
 		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.CoreV1().Pods(namespace).Delete(ctx, name, options)
+		},
+		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+			l, err := client.CoreV1().Pods(namespace).List(ctx, options)
+			return MustExtractList(l), err
 		},
 	}
 }
@@ -125,6 +143,10 @@ func ForService(client kubernetes.Interface, namespace string) Interface {
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.CoreV1().Services(namespace).Delete(ctx, name, options)
 		},
+		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+			l, err := client.CoreV1().Services(namespace).List(ctx, options)
+			return MustExtractList(l), err
+		},
 	}
 }
 
@@ -142,6 +164,10 @@ func ForServiceAccount(client kubernetes.Interface, namespace string) Interface 
 		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.CoreV1().ServiceAccounts(namespace).Delete(ctx, name, options)
+		},
+		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+			l, err := client.CoreV1().ServiceAccounts(namespace).List(ctx, options)
+			return MustExtractList(l), err
 		},
 	}
 }
@@ -163,6 +189,10 @@ func ForClusterRole(client kubernetes.Interface) Interface {
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.RbacV1().ClusterRoles().Delete(ctx, name, options)
 		},
+		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+			l, err := client.RbacV1().ClusterRoles().List(ctx, options)
+			return MustExtractList(l), err
+		},
 	}
 }
 
@@ -180,6 +210,10 @@ func ForClusterRoleBinding(client kubernetes.Interface) Interface {
 		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.RbacV1().ClusterRoleBindings().Delete(ctx, name, options)
+		},
+		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+			l, err := client.RbacV1().ClusterRoleBindings().List(ctx, options)
+			return MustExtractList(l), err
 		},
 	}
 }
@@ -199,6 +233,10 @@ func ForRole(client kubernetes.Interface, namespace string) Interface {
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.RbacV1().Roles(namespace).Delete(ctx, name, options)
 		},
+		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+			l, err := client.RbacV1().Roles(namespace).List(ctx, options)
+			return MustExtractList(l), err
+		},
 	}
 }
 
@@ -217,6 +255,10 @@ func ForRoleBinding(client kubernetes.Interface, namespace string) Interface {
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.RbacV1().RoleBindings(namespace).Delete(ctx, name, options)
 		},
+		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+			l, err := client.RbacV1().RoleBindings(namespace).List(ctx, options)
+			return MustExtractList(l), err
+		},
 	}
 }
 
@@ -234,6 +276,10 @@ func ForConfigMap(client kubernetes.Interface, namespace string) Interface {
 		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
 			return client.CoreV1().ConfigMaps(namespace).Delete(ctx, name, options)
+		},
+		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+			l, err := client.CoreV1().ConfigMaps(namespace).List(ctx, options)
+			return MustExtractList(l), err
 		},
 	}
 }
@@ -268,4 +314,28 @@ func ForControllerClient(client controllerClient.Client, namespace string, objTy
 			return client.Delete(ctx, obj)
 		},
 	}
+}
+
+func ForListableControllerClient(client controllerClient.Client, namespace string, objType controllerClient.Object,
+	listType controllerClient.ObjectList,
+) *InterfaceFuncs {
+	i := ForControllerClient(client, namespace, objType)
+	i.ListFunc = func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+		opts := []controllerClient.ListOption{controllerClient.InNamespace(namespace)}
+
+		if options.LabelSelector != "" {
+			s, err := labels.Parse(options.LabelSelector)
+			utilruntime.Must(err)
+
+			opts = append(opts, controllerClient.MatchingLabelsSelector{Selector: s})
+		}
+
+		list := listType.DeepCopyObject().(controllerClient.ObjectList)
+
+		err := client.List(ctx, list, opts...)
+
+		return MustExtractList(list), err
+	}
+
+	return i
 }
