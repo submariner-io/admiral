@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -301,12 +302,7 @@ func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bo
 		return nil, false, nil
 	}
 
-	converted, err := r.convert(obj.(*unstructured.Unstructured))
-	if err != nil {
-		return nil, false, err
-	}
-
-	return converted, true, nil
+	return r.mustConvert(obj.(*unstructured.Unstructured)), true, nil
 }
 
 func (r *resourceSyncer) ListResources() []runtime.Object {
@@ -329,7 +325,7 @@ func (r *resourceSyncer) ListResourcesBySelector(selector k8slabels.Selector) []
 			continue
 		}
 
-		retObjects = append(retObjects, r.convertNoError(obj.(*unstructured.Unstructured)))
+		retObjects = append(retObjects, r.mustConvert(obj.(*unstructured.Unstructured)))
 	}
 
 	return retObjects
@@ -392,7 +388,7 @@ func (r *resourceSyncer) Reconcile(resourceLister func() []runtime.Object) {
 				continue
 			}
 
-			obj, _ := resourceUtil.ToUnstructured(resource)
+			obj := resourceUtil.MustToUnstructuredUsingScheme(resource, r.config.Scheme)
 			r.deleted.Store(key, obj)
 			r.workQueue.Enqueue(obj)
 		}
@@ -512,20 +508,12 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 	return requeue, nil
 }
 
-func (r *resourceSyncer) convertNoError(from interface{}) runtime.Object {
-	converted, err := r.convert(from)
-	if err != nil {
-		r.log.Error(err, "Unable to convert: %#v", from)
-	}
-
-	return converted
-}
-
-func (r *resourceSyncer) convert(from interface{}) (runtime.Object, error) {
+func (r *resourceSyncer) mustConvert(from interface{}) runtime.Object {
 	converted := r.config.ResourceType.DeepCopyObject()
 	err := r.config.Scheme.Convert(from, converted, nil)
+	utilruntime.Must(err)
 
-	return converted, errors.Wrapf(err, "Syncer %q: error converting %#v to %T", r.config.Name, from, r.config.ResourceType)
+	return converted
 }
 
 //nolint:interfacer //false positive for "`from` can be `k8s.io/apimachinery/pkg/runtime.Object`" as it returns 'from' as Unstructured
@@ -538,10 +526,7 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 
 	clusterID, _ := getClusterIDLabel(from)
 
-	converted := r.convertNoError(from)
-	if converted == nil {
-		return nil, nil, false
-	}
+	converted := r.mustConvert(from)
 
 	transformed, requeue := r.config.Transform(converted, r.workQueue.NumRequeues(key), op)
 	if transformed == nil {
@@ -549,11 +534,7 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 		return nil, nil, requeue
 	}
 
-	result, err := resourceUtil.ToUnstructured(transformed)
-	if err != nil {
-		r.log.Errorf(err, "Syncer %q: error converting transform function result", r.config.Name)
-		return nil, nil, false
-	}
+	result := resourceUtil.MustToUnstructuredUsingScheme(transformed, r.config.Scheme)
 
 	// Preserve the cluster ID label
 	if clusterID != "" {
@@ -569,10 +550,7 @@ func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op
 	}
 
 	if converted == nil {
-		converted = r.convertNoError(resource)
-		if converted == nil {
-			return false
-		}
+		converted = r.mustConvert(resource)
 	}
 
 	r.log.V(log.LIBTRACE).Infof("Syncer %q: invoking OnSuccessfulSync function with: %#v", r.config.Name, converted)
