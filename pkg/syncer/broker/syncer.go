@@ -340,31 +340,25 @@ func (s *Syncer) GetLocalFederator() federate.Federator {
 	return s.localFederator
 }
 
-func (s *Syncer) GetLocalResource(name, namespace string, ofType runtime.Object) (runtime.Object, bool, error) {
+func (s *Syncer) localSyncerFor(ofType runtime.Object) syncer.Interface {
 	ls, found := s.localSyncers[reflect.TypeOf(ofType)]
 	if !found {
-		return nil, false, fmt.Errorf("no Syncer found for %#v", ofType)
+		panic(fmt.Errorf("no Syncer found for %#v", ofType))
 	}
 
-	return ls.GetResource(name, namespace) //nolint:wrapcheck // OK to return the error as is.
+	return ls
+}
+
+func (s *Syncer) GetLocalResource(name, namespace string, ofType runtime.Object) (runtime.Object, bool, error) {
+	return s.localSyncerFor(ofType).GetResource(name, namespace) //nolint:wrapcheck // OK to return the error as is.
 }
 
 func (s *Syncer) ListLocalResources(ofType runtime.Object) []runtime.Object {
-	ls, found := s.localSyncers[reflect.TypeOf(ofType)]
-	if !found {
-		panic(fmt.Errorf("no Syncer found for %#v", ofType))
-	}
-
-	return ls.ListResources()
+	return s.localSyncerFor(ofType).ListResources()
 }
 
 func (s *Syncer) ListLocalResourcesBySelector(ofType runtime.Object, selector labels.Selector) []runtime.Object {
-	ls, found := s.localSyncers[reflect.TypeOf(ofType)]
-	if !found {
-		panic(fmt.Errorf("no Syncer found for %#v", ofType))
-	}
-
-	return ls.ListResourcesBySelector(selector)
+	return s.localSyncerFor(ofType).ListResourcesBySelector(selector)
 }
 
 func (s *Syncer) GetBrokerNamespace() string {
