@@ -24,27 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// TryAppendCondition appends the given Condition if it's not equal to the last Condition.
-func TryAppendCondition(conditions []metav1.Condition, newCondition *metav1.Condition) []metav1.Condition {
-	if newCondition == nil {
-		logger.Warning("TryAppendCondition call with nil newCondition")
-		return conditions
-	}
-
-	newCondition.LastTransitionTime = metav1.Now()
-
-	numCond := len(conditions)
-	if numCond > 0 && conditionsEqual(&conditions[numCond-1], newCondition) {
-		return conditions
-	}
-
-	return append(conditions, *newCondition)
-}
-
-func conditionsEqual(c1, c2 *metav1.Condition) bool {
-	return c1.Type == c2.Type && c1.Status == c2.Status && c1.Reason == c2.Reason && c1.Message == c2.Message
-}
-
 func ConditionsFromUnstructured(from *unstructured.Unstructured, fields ...string) []metav1.Condition {
 	rawConditions, _, _ := unstructured.NestedSlice(from.Object, fields...)
 
