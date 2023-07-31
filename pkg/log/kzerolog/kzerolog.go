@@ -153,6 +153,7 @@ func (ctx *zeroLogContext) logEvent(evt *zerolog.Event, msg string, kvList ...in
 }
 
 func (ctx *zeroLogContext) Init(logr.RuntimeInfo) {
+	// Intentionally empty to satisfy the LogSink interface.
 }
 
 func (ctx *zeroLogContext) Info(level int, msg string, kvList ...interface{}) {

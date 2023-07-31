@@ -31,6 +31,7 @@ func (k klogType) Start(message string, args ...interface{}) {
 }
 
 func (k klogType) End() {
+	// Intentionally empty to satisfy the reporter Interface.
 }
 
 func (k klogType) Success(message string, args ...interface{}) {
