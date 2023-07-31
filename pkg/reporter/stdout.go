@@ -31,6 +31,7 @@ func (s stdout) Start(message string, args ...interface{}) {
 }
 
 func (s stdout) End() {
+	// Intentionally empty to satisfy the reporter Interface.
 }
 
 func (s stdout) Success(message string, args ...interface{}) {
