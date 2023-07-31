@@ -433,6 +433,14 @@ var _ = Describe("Broker Syncer", func() {
 			Expect(pod.Name).To(Equal(resource.Name))
 			Expect(pod.Spec).To(Equal(resource.Spec))
 		})
+
+		Context("with an invalid resource type", func() {
+			It("should panic", func() {
+				Expect(func() {
+					_, _, _ = syncer.GetLocalResource("", "", &corev1.Namespace{})
+				}).To(Panic())
+			})
+		})
 	})
 
 	When("ListLocalResources is called", func() {
@@ -445,6 +453,14 @@ var _ = Describe("Broker Syncer", func() {
 			Expect(list[0]).To(BeAssignableToTypeOf(&corev1.Pod{}))
 			Expect(&list[0].(*corev1.Pod).Spec).To(Equal(&resource.Spec))
 		})
+
+		Context("with an invalid resource type", func() {
+			It("should panic", func() {
+				Expect(func() {
+					_, _, _ = syncer.GetLocalResource("", "", &corev1.Namespace{})
+				}).To(Panic())
+			})
+		})
 	})
 
 	When("ListLocalResourcesBySelector is called", func() {
@@ -456,6 +472,14 @@ var _ = Describe("Broker Syncer", func() {
 			Expect(list).To(HaveLen(1))
 			Expect(list[0]).To(BeAssignableToTypeOf(&corev1.Pod{}))
 			Expect(&list[0].(*corev1.Pod).Spec).To(Equal(&resource.Spec))
+		})
+
+		Context("with an invalid resource type", func() {
+			It("should panic", func() {
+				Expect(func() {
+					_, _, _ = syncer.GetLocalResource("", "", &corev1.Namespace{})
+				}).To(Panic())
+			})
 		})
 	})
 })
