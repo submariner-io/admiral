@@ -61,6 +61,7 @@ var _ = Describe("Resource Syncer", func() {
 	Describe("GetResource", testGetResource)
 	Describe("ListResources", testListResources)
 	Describe("ListResourcesBySelector", testListResourcesBySelector)
+	Describe("RequeueResource", testRequeueResource)
 })
 
 func testLocalToRemote() {
@@ -954,6 +955,41 @@ func testListResourcesBySelector() {
 	It("should return no resources for label3 selector", func() {
 		list := d.syncer.ListResourcesBySelector(labels.Set(map[string]string{"label3": "match"}).AsSelector())
 		assertResourceList(list)
+	})
+}
+
+func testRequeueResource() {
+	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	var transformed *corev1.Pod
+
+	BeforeEach(func() {
+		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
+
+		d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+			return transformed, false
+		}
+	})
+
+	When("the requested resource exists", func() {
+		JustBeforeEach(func() {
+			test.CreateResource(d.sourceClient, d.resource)
+		})
+
+		It("should requeue it", func() {
+			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+
+			d.syncer.RequeueResource(d.resource.Name, d.resource.Namespace)
+
+			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+		})
+	})
+
+	When("the requested resource does not exist", func() {
+		It("should not requeue it", func() {
+			d.syncer.RequeueResource(d.resource.Name, d.resource.Namespace)
+			d.federator.VerifyNoDistribute()
+		})
 	})
 }
 
