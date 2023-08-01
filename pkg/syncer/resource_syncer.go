@@ -309,6 +309,18 @@ func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bo
 	return converted, true, nil
 }
 
+func (r *resourceSyncer) RequeueResource(name, namespace string) {
+	obj, exists, err := r.store.GetByKey(namespace + "/" + name)
+	if err != nil {
+		r.log.Errorf(err, "Error retrieving resource - unable to requeue")
+		return
+	}
+
+	if exists {
+		r.onCreate(obj)
+	}
+}
+
 func (r *resourceSyncer) ListResources() []runtime.Object {
 	return r.ListResourcesBySelector(k8slabels.Everything())
 }
