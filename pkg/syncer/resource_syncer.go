@@ -617,21 +617,13 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
 }
 
 func (r *resourceSyncer) onDelete(obj interface{}) {
-	var resource *unstructured.Unstructured
-	var ok bool
-	if resource, ok = obj.(*unstructured.Unstructured); !ok {
-		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
-		if !ok {
-			r.log.Errorf(nil, "Syncer %q: could not convert object %v to DeletedFinalStateUnknown", r.config.Name, obj)
-			return
-		}
-
-		resource, ok = tombstone.Obj.(*unstructured.Unstructured)
-		if !ok {
-			r.log.Errorf(nil, "Syncer %q: could not convert object tombstone %v to Unstructured", r.config.Name, tombstone.Obj)
-			return
-		}
+	switch t := obj.(type) {
+	case cache.DeletedFinalStateUnknown:
+		obj = t.Obj
+	default:
 	}
+
+	resource := r.assertUnstructured(obj)
 
 	if !r.shouldProcess(resource, Delete) {
 		return
