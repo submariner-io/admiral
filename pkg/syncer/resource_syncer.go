@@ -269,6 +269,10 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 
 	go func() {
 		defer func() {
+			if r.config.SyncCounterOpts != nil {
+				prometheus.Unregister(r.syncCounter)
+			}
+
 			r.stopped <- struct{}{}
 			r.log.V(log.LIBDEBUG).Infof("Syncer %q stopped", r.config.Name)
 		}()
