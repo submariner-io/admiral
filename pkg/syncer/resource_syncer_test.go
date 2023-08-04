@@ -28,6 +28,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/federate/fake"
 	. "github.com/submariner-io/admiral/pkg/gomega"
+	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -62,7 +63,153 @@ var _ = Describe("Resource Syncer", func() {
 	Describe("ListResources", testListResources)
 	Describe("ListResourcesBySelector", testListResourcesBySelector)
 	Describe("RequeueResource", testRequeueResource)
+	Describe("Reconcile", func() {
+		Context(fmt.Sprintf("Direction: %s", syncer.LocalToRemote), testReconcileLocalToRemote)
+		Context(fmt.Sprintf("Direction: %s", syncer.RemoteToLocal), testReconcileRemoteToLocal)
+		Context(fmt.Sprintf("Direction: %s", syncer.None), testReconcileNoDirection)
+	})
 })
+
+func testReconcileLocalToRemote() {
+	d := newTestDriver(metav1.NamespaceAll, "local", syncer.LocalToRemote)
+
+	BeforeEach(func() {
+		test.SetClusterIDLabel(d.resource, "local")
+		d.resource.Labels[syncer.OrigNamespaceLabelKey] = test.LocalNamespace
+	})
+
+	JustBeforeEach(func() {
+		d.resource.Namespace = test.RemoteNamespace
+		obj := d.resource.DeepCopyObject()
+		d.syncer.Reconcile(func() []runtime.Object {
+			return []runtime.Object{obj}
+		})
+	})
+
+	When("the resource to reconcile is local and does not exist", func() {
+		It("should invoke delete", func() {
+			d.resource.Namespace = test.LocalNamespace
+			d.federator.VerifyDelete(test.SetClusterIDLabel(resource.MustToUnstructured(d.resource), ""))
+		})
+	})
+
+	When("the resource to reconcile is local and does exist", func() {
+		BeforeEach(func() {
+			d.resource.Namespace = test.LocalNamespace
+			d.addInitialResource(d.resource)
+		})
+
+		It("should not invoke delete", func() {
+			d.federator.VerifyNoDelete()
+		})
+	})
+
+	When("the resource to reconcile is not local", func() {
+		BeforeEach(func() {
+			test.SetClusterIDLabel(d.resource, "remote")
+		})
+
+		It("should not invoke delete", func() {
+			d.federator.VerifyNoDelete()
+		})
+	})
+}
+
+func testReconcileRemoteToLocal() {
+	d := newTestDriver(test.RemoteNamespace, "local", syncer.RemoteToLocal)
+
+	BeforeEach(func() {
+		d.resource.Namespace = test.RemoteNamespace
+		test.SetClusterIDLabel(d.resource, "remote")
+	})
+
+	JustBeforeEach(func() {
+		obj := d.resource.DeepCopyObject()
+		d.syncer.Reconcile(func() []runtime.Object {
+			return []runtime.Object{obj}
+		})
+	})
+
+	When("the resource to reconcile is remote and does not exist", func() {
+		It("should invoke delete", func() {
+			d.federator.VerifyDelete(resource.MustToUnstructured(d.resource))
+		})
+	})
+
+	When("the resource to reconcile is remote and does exist", func() {
+		BeforeEach(func() {
+			d.addInitialResource(d.resource)
+		})
+
+		It("should not invoke delete", func() {
+			d.federator.VerifyNoDelete()
+		})
+	})
+
+	When("the resource to reconcile is not remote", func() {
+		BeforeEach(func() {
+			test.SetClusterIDLabel(d.resource, "local")
+		})
+
+		It("should not invoke delete", func() {
+			d.federator.VerifyNoDelete()
+		})
+	})
+}
+
+func testReconcileNoDirection() {
+	d := newTestDriver(test.LocalNamespace, "local", syncer.None)
+
+	var toReconcile runtime.Object
+
+	BeforeEach(func() {
+		toReconcile = d.resource
+		d.resource.Namespace = test.LocalNamespace
+	})
+
+	JustBeforeEach(func() {
+		obj := toReconcile.DeepCopyObject()
+		d.syncer.Reconcile(func() []runtime.Object {
+			return []runtime.Object{obj}
+		})
+	})
+
+	When("the resource to reconcile does not exist", func() {
+		It("should invoke delete", func() {
+			d.federator.VerifyDelete(resource.MustToUnstructured(d.resource))
+		})
+	})
+
+	When("the resource to reconcile does exist", func() {
+		BeforeEach(func() {
+			d.addInitialResource(d.resource)
+		})
+
+		It("should not invoke delete", func() {
+			d.federator.VerifyNoDelete()
+		})
+	})
+
+	When("the originating namespace of the resource to reconcile cannot be determined", func() {
+		BeforeEach(func() {
+			d.resource.Namespace = ""
+		})
+
+		It("should not invoke delete", func() {
+			d.federator.VerifyNoDelete()
+		})
+	})
+
+	When("the type of the resource to reconcile is invalid", func() {
+		BeforeEach(func() {
+			toReconcile = &corev1.Namespace{}
+		})
+
+		It("should ignore it", func() {
+			d.federator.VerifyNoDelete()
+		})
+	})
+}
 
 func testLocalToRemote() {
 	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)

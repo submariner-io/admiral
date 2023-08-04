@@ -61,16 +61,18 @@ const (
 )
 
 func (d SyncDirection) String() string {
+	s := "unknown"
+
 	switch d {
 	case LocalToRemote:
-		return "localToRemote"
+		s = "localToRemote"
 	case RemoteToLocal:
-		return "remoteToLocal"
+		s = "remoteToLocal"
 	case None:
-		return "none"
+		s = "none"
 	}
 
-	return "unknown"
+	return s
 }
 
 type Operation int
@@ -82,16 +84,18 @@ const (
 )
 
 func (o Operation) String() string {
+	s := "unknown"
+
 	switch o {
 	case Create:
-		return "create"
+		s = "create"
 	case Update:
-		return "update"
+		s = "update"
 	case Delete:
-		return "delete"
+		s = "delete"
 	}
 
-	return "unknown"
+	return s
 }
 
 const (
@@ -322,89 +326,99 @@ func (r *resourceSyncer) ListResources() []runtime.Object {
 }
 
 func (r *resourceSyncer) ListResourcesBySelector(selector k8slabels.Selector) []runtime.Object {
-	if ok := cache.WaitForCacheSync(r.stopCh, r.informer.HasSynced); !ok {
-		// This means the cache was stopped.
-		r.log.Warningf("Syncer %q failed to wait for informer cache to sync while listing resources", r.config.Name)
+	var retObjects []runtime.Object
 
-		return []runtime.Object{}
-	}
+	return r.runIfCacheSynced(retObjects, func() any {
+		list := r.store.List()
+		retObjects := make([]runtime.Object, 0, len(list))
 
-	list := r.store.List()
-	retObjects := make([]runtime.Object, 0, len(list))
+		for _, obj := range list {
+			if !selector.Matches(k8slabels.Set(resourceUtil.MustToMeta(obj).GetLabels())) {
+				continue
+			}
 
-	for _, obj := range list {
-		if !selector.Matches(k8slabels.Set(resourceUtil.MustToMeta(obj).GetLabels())) {
-			continue
+			retObjects = append(retObjects, r.mustConvert(obj.(*unstructured.Unstructured)))
 		}
 
-		retObjects = append(retObjects, r.mustConvert(obj.(*unstructured.Unstructured)))
-	}
-
-	return retObjects
+		return retObjects
+	}).([]runtime.Object)
 }
 
 func (r *resourceSyncer) Reconcile(resourceLister func() []runtime.Object) {
 	go func() {
-		if ok := cache.WaitForCacheSync(r.stopCh, r.informer.HasSynced); !ok {
-			r.log.Error(nil, "Unable to reconcile - failed to wait for informer cache to sync")
+		_ = r.runIfCacheSynced(nil, func() any {
+			r.doReconcile(resourceLister)
+			return nil
+		})
+	}()
+}
+
+func (r *resourceSyncer) doReconcile(resourceLister func() []runtime.Object) {
+	resourceType := reflect.TypeOf(r.config.ResourceType)
+
+	for _, resource := range resourceLister() {
+		if reflect.TypeOf(resource) != resourceType {
+			// This would happen if the custom transform function returned a different type. We would need a custom
+			// reverse transform function to handle this. Possible future work, for now bail.
+			r.log.Warningf("Unable to reconcile type %T - expected type %v", resource, resourceType)
 			return
 		}
 
-		resourceType := reflect.TypeOf(r.config.ResourceType)
+		metaObj := resourceUtil.MustToMeta(resource)
+		clusterID, found := getClusterIDLabel(resource)
+		ns := r.config.SourceNamespace
 
-		for _, resource := range resourceLister() {
-			if reflect.TypeOf(resource) != resourceType {
-				// This would happen if the custom transform function returned a different type. We would need a custom
-				// reverse transform function to handle this. Possible future work, for now bail.
-				r.log.Warningf("Unable to reconcile type %T - expected type %T", resource, resourceType)
-				return
+		switch r.config.Direction {
+		case None:
+			ns = metaObj.GetNamespace()
+		case RemoteToLocal:
+			if !found || clusterID == r.config.LocalClusterID {
+				continue
 			}
-
-			metaObj := resourceUtil.MustToMeta(resource)
-			clusterID, found := getClusterIDLabel(resource)
-			ns := r.config.SourceNamespace
-
-			switch r.config.Direction {
-			case None:
-				ns = metaObj.GetNamespace()
-			case RemoteToLocal:
-				if !found || clusterID == r.config.LocalClusterID {
-					continue
-				}
-			case LocalToRemote:
-				if clusterID != r.config.LocalClusterID {
-					continue
-				}
-
-				labels := metaObj.GetLabels()
-				delete(labels, federate.ClusterIDLabelKey)
-				metaObj.SetLabels(labels)
-
-				if ns == metav1.NamespaceAll {
-					ns = metaObj.GetLabels()[OrigNamespaceLabelKey]
-				}
-			}
-
-			if ns == "" {
-				r.log.Warningf("Unable to reconcile resource %s/%s - cannot determine originating namespace",
-					metaObj.GetNamespace(), metaObj.GetName())
+		case LocalToRemote:
+			if clusterID != r.config.LocalClusterID {
 				continue
 			}
 
-			metaObj.SetNamespace(ns)
+			labels := metaObj.GetLabels()
+			delete(labels, federate.ClusterIDLabelKey)
+			metaObj.SetLabels(labels)
 
-			key, _ := cache.MetaNamespaceKeyFunc(resource)
-
-			_, exists, _ := r.store.GetByKey(key)
-			if exists {
-				continue
+			if ns == metav1.NamespaceAll {
+				ns = metaObj.GetLabels()[OrigNamespaceLabelKey]
 			}
-
-			obj := resourceUtil.MustToUnstructuredUsingScheme(resource, r.config.Scheme)
-			r.deleted.Store(key, obj)
-			r.workQueue.Enqueue(obj)
 		}
-	}()
+
+		if ns == "" {
+			r.log.Warningf("Unable to reconcile resource %s/%s - cannot determine originating namespace",
+				metaObj.GetNamespace(), metaObj.GetName())
+			continue
+		}
+
+		metaObj.SetNamespace(ns)
+
+		key, _ := cache.MetaNamespaceKeyFunc(resource)
+
+		_, exists, _ := r.store.GetByKey(key)
+		if exists {
+			continue
+		}
+
+		obj := resourceUtil.MustToUnstructuredUsingScheme(resource, r.config.Scheme)
+		r.deleted.Store(key, obj)
+		r.workQueue.Enqueue(obj)
+	}
+}
+
+func (r *resourceSyncer) runIfCacheSynced(defaultReturn any, run func() any) any {
+	if ok := cache.WaitForCacheSync(r.stopCh, r.informer.HasSynced); !ok {
+		// This means the cache was stopped.
+		r.log.Warningf("Syncer %q failed to wait for informer cache to sync", r.config.Name)
+
+		return defaultReturn
+	}
+
+	return run()
 }
 
 func (r *resourceSyncer) processNextWorkItem(key, _, _ string) (bool, error) {
