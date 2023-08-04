@@ -26,6 +26,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate/fake"
 	. "github.com/submariner-io/admiral/pkg/gomega"
 	"github.com/submariner-io/admiral/pkg/resource"
@@ -214,6 +215,13 @@ func testReconcileNoDirection() {
 func testLocalToRemote() {
 	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 
+	BeforeEach(func() {
+		d.config.SyncCounterOpts = &prometheus.GaugeOpts{
+			Namespace: "ns",
+			Name:      "test",
+		}
+	})
+
 	When("a resource without a cluster ID label is created in the local datastore", func() {
 		d.verifyDistributeOnCreateTest("")
 	})
@@ -241,6 +249,17 @@ func testLocalToRemote() {
 
 func testRemoteToLocalWithLocalClusterID() {
 	d := newTestDriver(test.RemoteNamespace, "local", syncer.RemoteToLocal)
+
+	BeforeEach(func() {
+		d.config.SyncCounter = prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{},
+			[]string{
+				syncer.DirectionLabel,
+				syncer.OperationLabel,
+				syncer.SyncerNameLabel,
+			},
+		)
+	})
 
 	When("a resource with a non-local cluster ID label is created in the remote datastore", func() {
 		d.verifyDistributeOnCreateTest("remote")
