@@ -61,10 +61,11 @@ var _ = Describe("Resource Syncer", func() {
 	Describe("GetResource", testGetResource)
 	Describe("ListResources", testListResources)
 	Describe("ListResourcesBySelector", testListResourcesBySelector)
+	Describe("RequeueResource", testRequeueResource)
 })
 
 func testLocalToRemote() {
-	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 
 	When("a resource without a cluster ID label is created in the local datastore", func() {
 		d.verifyDistributeOnCreateTest("")
@@ -92,7 +93,7 @@ func testLocalToRemote() {
 }
 
 func testRemoteToLocalWithLocalClusterID() {
-	d := newTestDiver(test.RemoteNamespace, "local", syncer.RemoteToLocal)
+	d := newTestDriver(test.RemoteNamespace, "local", syncer.RemoteToLocal)
 
 	When("a resource with a non-local cluster ID label is created in the remote datastore", func() {
 		d.verifyDistributeOnCreateTest("remote")
@@ -132,7 +133,7 @@ func testRemoteToLocalWithLocalClusterID() {
 }
 
 func testRemoteToLocalWithoutLocalClusterID() {
-	d := newTestDiver(test.RemoteNamespace, "", syncer.RemoteToLocal)
+	d := newTestDriver(test.RemoteNamespace, "", syncer.RemoteToLocal)
 
 	When("a resource with a cluster ID label is created in the remote datastore", func() {
 		d.verifyDistributeOnCreateTest("remote")
@@ -160,7 +161,7 @@ func testRemoteToLocalWithoutLocalClusterID() {
 }
 
 func testTransformFunction() {
-	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 	ctx := context.TODO()
 
 	var transformed *corev1.Pod
@@ -375,7 +376,7 @@ func testTransformFunction() {
 }
 
 func testOnSuccessfulSyncFunction() {
-	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 	ctx := context.TODO()
 
 	var (
@@ -523,7 +524,7 @@ func testOnSuccessfulSyncFunction() {
 }
 
 func testShouldProcessFunction() {
-	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 	ctx := context.TODO()
 
 	var (
@@ -636,7 +637,7 @@ func testShouldProcessFunction() {
 }
 
 func testSyncErrors() {
-	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 	ctx := context.TODO()
 
 	var expectedErr error
@@ -689,7 +690,7 @@ func testSyncErrors() {
 }
 
 func testUpdateSuppression() {
-	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 
 	BeforeEach(func() {
 		d.addInitialResource(d.resource)
@@ -817,7 +818,7 @@ func testUpdateSuppression() {
 }
 
 func testGetResource() {
-	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 
 	When("the requested resource exists", func() {
 		BeforeEach(func() {
@@ -846,7 +847,7 @@ func testGetResource() {
 }
 
 func testListResources() {
-	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 
 	var resource2 *corev1.Pod
 
@@ -878,7 +879,7 @@ func testListResources() {
 }
 
 func testListResourcesBySelector() {
-	d := newTestDiver(test.LocalNamespace, "", syncer.LocalToRemote)
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 
 	newPod := func(i int, labels map[string]string) *corev1.Pod {
 		return &corev1.Pod{
@@ -957,6 +958,41 @@ func testListResourcesBySelector() {
 	})
 }
 
+func testRequeueResource() {
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	var transformed *corev1.Pod
+
+	BeforeEach(func() {
+		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
+
+		d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+			return transformed, false
+		}
+	})
+
+	When("the requested resource exists", func() {
+		JustBeforeEach(func() {
+			test.CreateResource(d.sourceClient, d.resource)
+		})
+
+		It("should requeue it", func() {
+			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+
+			d.syncer.RequeueResource(d.resource.Name, d.resource.Namespace)
+
+			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+		})
+	})
+
+	When("the requested resource does not exist", func() {
+		It("should not requeue it", func() {
+			d.syncer.RequeueResource(d.resource.Name, d.resource.Namespace)
+			d.federator.VerifyNoDistribute()
+		})
+	})
+}
+
 func assertResourceList(actual []runtime.Object, expected ...*corev1.Pod) {
 	expSpecs := map[string]*corev1.PodSpec{}
 	for _, p := range expected {
@@ -986,7 +1022,7 @@ type testDriver struct {
 	handledError       chan error
 }
 
-func newTestDiver(sourceNamespace, localClusterID string, syncDirection syncer.SyncDirection) *testDriver {
+func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.SyncDirection) *testDriver {
 	resourceType := &corev1.Pod{}
 	d := &testDriver{
 		config: syncer.ResourceSyncerConfig{

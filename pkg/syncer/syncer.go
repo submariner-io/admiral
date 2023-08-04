@@ -27,6 +27,7 @@ type Interface interface {
 	Start(stopCh <-chan struct{}) error
 	AwaitStopped()
 	GetResource(name, namespace string) (runtime.Object, bool, error)
+	RequeueResource(name, namespace string)
 	ListResources() []runtime.Object
 	ListResourcesBySelector(selector labels.Selector) []runtime.Object
 	Reconcile(resourceLister func() []runtime.Object)
