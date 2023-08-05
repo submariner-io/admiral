@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/fake"
 	sync "github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/broker"
@@ -35,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	utilrand "k8s.io/apimachinery/pkg/util/rand"
 )
 
 var _ = Describe("Broker Syncer", func() {
@@ -101,6 +103,13 @@ var _ = Describe("Broker Syncer", func() {
 	})
 
 	When("a local resource is created in the local datastore", func() {
+		BeforeEach(func() {
+			config.ResourceConfigs[0].SyncCounterOpts = &prometheus.GaugeOpts{
+				Namespace: "ns",
+				Name:      utilrand.String(5),
+			}
+		})
+
 		JustBeforeEach(func() {
 			test.CreateResource(localClient, resource)
 			test.AwaitResource(brokerClient, resource.GetName())
