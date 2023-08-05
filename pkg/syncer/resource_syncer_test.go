@@ -327,7 +327,7 @@ func testRemoteToLocalWithoutLocalClusterID() {
 }
 
 func testTransformFunction() {
-	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
+	d := newTestDriver(test.LocalNamespace, "", syncer.RemoteToLocal)
 	ctx := context.TODO()
 
 	var transformed *corev1.Pod
@@ -336,6 +336,7 @@ func testTransformFunction() {
 	var requeue bool
 
 	BeforeEach(func() {
+		test.SetClusterIDLabel(d.resource, "remote")
 		atomic.StoreInt32(&invocationCount, 0)
 		expOperation = make(chan syncer.Operation, 20)
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
@@ -353,13 +354,21 @@ func testTransformFunction() {
 		}
 	})
 
+	verifyDistribute := func() {
+		d.federator.VerifyDistribute(test.SetClusterIDLabel(test.ToUnstructured(transformed), "remote"))
+	}
+
+	verifyDelete := func() {
+		d.federator.VerifyDelete(test.SetClusterIDLabel(test.ToUnstructured(transformed), "remote"))
+	}
+
 	When("a resource is created in the datastore", func() {
 		JustBeforeEach(func() {
 			test.CreateResource(d.sourceClient, d.resource)
 		})
 
 		It("should distribute the transformed resource", func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			verifyDistribute()
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 			Consistently(func() int {
 				return int(atomic.LoadInt32(&invocationCount))
@@ -385,7 +394,7 @@ func testTransformFunction() {
 		})
 
 		It("should distribute the transformed resource", func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			verifyDistribute()
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
 			d.resource = test.NewPodWithImage(d.config.SourceNamespace, "updated")
@@ -401,14 +410,14 @@ func testTransformFunction() {
 		})
 
 		JustBeforeEach(func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			verifyDistribute()
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 			atomic.StoreInt32(&invocationCount, 0)
 		})
 
 		It("should delete the transformed resource", func() {
 			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
-			d.federator.VerifyDelete(test.ToUnstructured(transformed))
+			verifyDelete()
 			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 			Consistently(func() int {
 				return int(atomic.LoadInt32(&invocationCount))
@@ -436,11 +445,11 @@ func testTransformFunction() {
 		})
 
 		It("should retry until it succeeds", func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			verifyDistribute()
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 
 			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
-			d.federator.VerifyDelete(test.ToUnstructured(transformed))
+			verifyDelete()
 			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 		})
@@ -453,7 +462,7 @@ func testTransformFunction() {
 
 		It("retry until it succeeds", func() {
 			test.CreateResource(d.sourceClient, d.resource)
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			verifyDistribute()
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 		})
@@ -518,7 +527,7 @@ func testTransformFunction() {
 		Context("and a resource is created in the datastore", func() {
 			It("should eventually distribute the transformed resource", func() {
 				test.CreateResource(d.sourceClient, d.resource)
-				d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+				verifyDistribute()
 				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 			})
 		})
@@ -529,12 +538,12 @@ func testTransformFunction() {
 			})
 
 			It("should eventually delete the resource", func() {
-				d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+				verifyDistribute()
 				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 				transformFuncRet.Store(nilResource)
 
 				Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
-				d.federator.VerifyDelete(test.ToUnstructured(transformed))
+				verifyDelete()
 				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
 			})
 		})
