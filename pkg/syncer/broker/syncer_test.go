@@ -19,12 +19,18 @@ package broker_test
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/base64"
+	"errors"
+	"os"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/fake"
+	resourceutils "github.com/submariner-io/admiral/pkg/resource"
 	sync "github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/broker"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
@@ -37,24 +43,38 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 )
 
 var _ = Describe("Broker Syncer", func() {
 	var (
 		syncer                 *broker.Syncer
 		config                 *broker.SyncerConfig
+		localDynClient         *fake.DynamicClient
 		localClient            *fake.DynamicResourceClient
+		brokerDynClient        *fake.DynamicClient
 		brokerClient           *fake.DynamicResourceClient
 		resource               *corev1.Pod
 		transformed            *corev1.Pod
 		initialLocalResources  []runtime.Object
 		initialBrokerResources []runtime.Object
 		stopCh                 chan struct{}
+		actualBrokerRestConfig *rest.Config
+		expectInitError        bool
 	)
 
 	ctx := context.TODO()
 
 	BeforeEach(func() {
+		os.Unsetenv("BROKER_K8S_APISERVER")
+		os.Unsetenv("BROKER_K8S_APISERVERTOKEN")
+		os.Unsetenv("BROKER_K8S_REMOTENAMESPACE")
+		os.Unsetenv("BROKER_K8S_INSECURE")
+		os.Unsetenv("BROKER_K8S_SECRET")
+
+		expectInitError = false
+		actualBrokerRestConfig = nil
 		initialLocalResources = nil
 		initialBrokerResources = nil
 		stopCh = make(chan struct{})
@@ -75,24 +95,72 @@ var _ = Describe("Broker Syncer", func() {
 			},
 			Scheme: runtime.NewScheme(),
 		}
+
+		Expect(corev1.AddToScheme(config.Scheme)).To(Succeed())
+
+		localDynClient = fake.NewDynamicClient(config.Scheme)
+		brokerDynClient = fake.NewDynamicClient(config.Scheme)
 	})
 
 	JustBeforeEach(func() {
-		Expect(corev1.AddToScheme(config.Scheme)).To(Succeed())
-
 		var gvr *schema.GroupVersionResource
 
 		config.RestMapper, gvr = test.GetRESTMapperAndGroupVersionResourceFor(resource)
 
-		config.LocalClient = fake.NewDynamicClient(config.Scheme, test.PrepInitialClientObjs("", "", initialLocalResources...)...)
-		config.BrokerClient = fake.NewDynamicClient(config.Scheme, test.PrepInitialClientObjs(config.BrokerNamespace,
-			"", initialBrokerResources...)...)
+		if config.LocalRestConfig == nil {
+			config.LocalClient = localDynClient
+		}
 
-		localClient, _ = config.LocalClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace).(*fake.DynamicResourceClient)
-		brokerClient, _ = config.BrokerClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)
+		brokerAPIServer := os.Getenv("BROKER_K8S_APISERVER")
+
+		if config.BrokerRestConfig == nil && brokerAPIServer == "" {
+			config.BrokerClient = brokerDynClient
+		}
+
+		if config.LocalRestConfig != nil || config.BrokerRestConfig != nil || brokerAPIServer != "" {
+			resourceutils.NewDynamicClient = func(inConfig *rest.Config) (dynamic.Interface, error) {
+				if equality.Semantic.DeepDerivative(inConfig, config.LocalRestConfig) {
+					return localDynClient, nil
+				} else if equality.Semantic.DeepDerivative(inConfig, config.BrokerRestConfig) ||
+					(brokerAPIServer != "" && strings.HasSuffix(inConfig.Host, brokerAPIServer)) {
+					actualBrokerRestConfig = inConfig
+					return brokerDynClient, nil
+				}
+
+				Fail("Unexpected rest.Config instance")
+
+				return nil, errors.New("unexpected rest.Config instance")
+			}
+		}
+
+		localClient, _ = localDynClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace).(*fake.DynamicResourceClient)
+		brokerClient, _ = brokerDynClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)
+
+		for i := range initialLocalResources {
+			test.CreateResource(localDynClient.Resource(*gvr).Namespace(resourceutils.MustToMeta(initialLocalResources[i]).GetNamespace()),
+				initialLocalResources[i])
+		}
+
+		for i := range initialBrokerResources {
+			test.CreateResource(brokerDynClient.Resource(*gvr).Namespace(resourceutils.MustToMeta(initialBrokerResources[i]).GetNamespace()),
+				initialBrokerResources[i])
+		}
+
+		configCopy := *config
+
+		if os.Getenv("BROKER_K8S_REMOTENAMESPACE") != "" {
+			configCopy.BrokerNamespace = ""
+		}
 
 		var err error
-		syncer, err = broker.NewSyncer(*config)
+		syncer, err = broker.NewSyncer(configCopy)
+
+		if expectInitError {
+			Expect(err).To(HaveOccurred())
+
+			return
+		}
+
 		Expect(err).To(Succeed())
 
 		Expect(syncer.Start(stopCh)).To(Succeed())
@@ -488,6 +556,70 @@ var _ = Describe("Broker Syncer", func() {
 				Expect(func() {
 					_, _, _ = syncer.GetLocalResource("", "", &corev1.Namespace{})
 				}).To(Panic())
+			})
+		})
+	})
+
+	When("rest config instances are specified", func() {
+		BeforeEach(func() {
+			config.LocalRestConfig = &rest.Config{
+				Host: "https://local",
+			}
+
+			config.BrokerRestConfig = &rest.Config{
+				Host: "https://broker",
+			}
+		})
+
+		It("should work correctly", func() {
+			test.CreateResource(localClient, resource)
+			test.AwaitResource(brokerClient, resource.GetName())
+		})
+
+		Context("and broker authorization fails", func() {
+			BeforeEach(func() {
+				expectInitError = true
+				fake.FailOnAction(&brokerDynClient.Fake, "pods", "get", x509.UnknownAuthorityError{}, false)
+			})
+
+			It("should return an error", func() {
+			})
+		})
+	})
+
+	When("broker config environment vars are specified", func() {
+		apiServerToken := base64.StdEncoding.EncodeToString([]byte("token"))
+
+		BeforeEach(func() {
+			os.Setenv("BROKER_K8S_APISERVER", "broker-host")
+			os.Setenv("BROKER_K8S_APISERVERTOKEN", apiServerToken)
+			os.Setenv("BROKER_K8S_REMOTENAMESPACE", test.RemoteNamespace)
+			os.Setenv("BROKER_K8S_INSECURE", "true")
+		})
+
+		It("should work correctly", func() {
+			Expect(actualBrokerRestConfig.BearerToken).To(Equal(apiServerToken))
+			Expect(actualBrokerRestConfig.TLSClientConfig.Insecure).To(BeTrue())
+
+			test.CreateResource(localClient, resource)
+			test.AwaitResource(brokerClient, resource.GetName())
+		})
+
+		Context("with a secret", func() {
+			secret := "test-secret"
+
+			BeforeEach(func() {
+				os.Setenv("BROKER_K8S_SECRET", secret)
+				os.Unsetenv("BROKER_K8S_APISERVERTOKEN")
+			})
+
+			It("should work correctly", func() {
+				Expect(actualBrokerRestConfig.BearerToken).To(BeEmpty())
+				Expect(actualBrokerRestConfig.BearerTokenFile).To(ContainSubstring(secret))
+				Expect(actualBrokerRestConfig.TLSClientConfig.Insecure).To(BeTrue())
+
+				test.CreateResource(localClient, resource)
+				test.AwaitResource(brokerClient, resource.GetName())
 			})
 		})
 	})
