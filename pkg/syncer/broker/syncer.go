@@ -164,7 +164,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 	}
 
 	if config.LocalClient == nil {
-		config.LocalClient, err = dynamic.NewForConfig(config.LocalRestConfig)
+		config.LocalClient, err = resource.NewDynamicClient(config.LocalRestConfig)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating dynamic client")
 		}
@@ -305,7 +305,7 @@ func createBrokerClient(config *SyncerConfig) error {
 		logger.Error(err, "Error accessing the broker API server")
 	}
 
-	config.BrokerClient, err = dynamic.NewForConfig(config.BrokerRestConfig)
+	config.BrokerClient, err = resource.NewDynamicClient(config.BrokerRestConfig)
 
 	return errors.Wrap(err, "error creating dynamic client")
 }

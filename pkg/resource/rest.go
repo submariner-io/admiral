@@ -32,6 +32,11 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+var NewDynamicClient = func(config *rest.Config) (dynamic.Interface, error) {
+	c, err := dynamic.NewForConfig(config)
+	return c, err //nolint:wrapcheck // No need to wrap
+}
+
 func GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig,
 	gvr schema.GroupVersionResource, namespace string,
 ) (restConfig *rest.Config, authorized bool, err error) {
@@ -109,7 +114,7 @@ func BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile string, tls 
 }
 
 func IsAuthorizedFor(restConfig *rest.Config, gvr schema.GroupVersionResource, namespace string) (bool, error) {
-	client, err := dynamic.NewForConfig(restConfig)
+	client, err := NewDynamicClient(restConfig)
 	if err != nil {
 		return false, errors.Wrap(err, "error creating dynamic client")
 	}
