@@ -43,6 +43,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 )
@@ -490,10 +491,44 @@ var _ = Describe("Broker Syncer", func() {
 		})
 	})
 
-	When("GetBrokerFederatorFor is called", func() {
-		It("should return the Federator", func() {
-			Expect(syncer.GetBrokerFederator()).ToNot(BeNil())
-		})
+	Specify("GetBrokerFederator should return the correct instance", func() {
+		f := syncer.GetBrokerFederator()
+		Expect(f).ToNot(BeNil())
+
+		name := string(uuid.NewUUID())
+		Expect(f.Distribute(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+		})).To(Succeed())
+
+		test.AwaitResource(brokerClient, name)
+	})
+
+	Specify("GetBrokerClient should return the correct instance", func() {
+		Expect(syncer.GetBrokerClient()).To(Equal(brokerDynClient))
+	})
+
+	Specify("GetBrokerNamespace should return the correct instance", func() {
+		Expect(syncer.GetBrokerNamespace()).To(Equal(test.RemoteNamespace))
+	})
+
+	Specify("GetLocalFederator should return the correct instance", func() {
+		f := syncer.GetLocalFederator()
+		Expect(f).ToNot(BeNil())
+
+		name := string(uuid.NewUUID())
+		Expect(f.Distribute(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+		})).To(Succeed())
+
+		test.AwaitResource(localClient, name)
+	})
+
+	Specify("GetLocalClient should return the correct instance", func() {
+		Expect(syncer.GetLocalClient()).To(Equal(localDynClient))
 	})
 
 	When("GetLocalResource is called", func() {
