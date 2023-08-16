@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -163,7 +164,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 	}
 
 	if config.LocalClient == nil {
-		config.LocalClient, err = dynamic.NewForConfig(config.LocalRestConfig)
+		config.LocalClient, err = resource.NewDynamicClient(config.LocalRestConfig)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating dynamic client")
 		}
@@ -228,11 +229,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 		brokerSyncer.syncers = append(brokerSyncer.syncers, localSyncer)
 		brokerSyncer.localSyncers[reflect.TypeOf(rc.LocalResourceType)] = localSyncer
 
-		waitForCacheSync := rc.BrokerWaitForCacheSync
-		if waitForCacheSync == nil {
-			f := false
-			waitForCacheSync = &f
-		}
+		waitForCacheSync := ptr.Deref(rc.BrokerWaitForCacheSync, false)
 
 		remoteSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
 			Name:                fmt.Sprintf("broker -> local for %T", rc.BrokerResourceType),
@@ -248,7 +245,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			Transform:           rc.TransformBrokerToLocal,
 			OnSuccessfulSync:    rc.OnSuccessfulSyncFromBroker,
 			ResourcesEquivalent: rc.BrokerResourcesEquivalent,
-			WaitForCacheSync:    waitForCacheSync,
+			WaitForCacheSync:    &waitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.BrokerResyncPeriod,
 			SyncCounter:         syncCounter,
@@ -308,7 +305,7 @@ func createBrokerClient(config *SyncerConfig) error {
 		logger.Error(err, "Error accessing the broker API server")
 	}
 
-	config.BrokerClient, err = dynamic.NewForConfig(config.BrokerRestConfig)
+	config.BrokerClient, err = resource.NewDynamicClient(config.BrokerRestConfig)
 
 	return errors.Wrap(err, "error creating dynamic client")
 }
