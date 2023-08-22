@@ -1170,8 +1170,8 @@ func testRequeueResource() {
 
 func assertResourceList(actual []runtime.Object, expected ...*corev1.Pod) {
 	expSpecs := map[string]*corev1.PodSpec{}
-	for _, p := range expected {
-		expSpecs[p.Name] = &p.Spec
+	for i := range expected {
+		expSpecs[expected[i].Name] = &expected[i].Spec
 	}
 
 	Expect(actual).To(HaveLen(len(expSpecs)))
