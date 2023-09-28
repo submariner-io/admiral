@@ -33,7 +33,7 @@ type createFederator struct {
 	*baseFederator
 }
 
-func NewCreateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string) Federator {
+func NewCreateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string) FederatorExt {
 	return &createFederator{
 		baseFederator: newBaseFederator(dynClient, restMapper, targetNamespace),
 	}
@@ -53,6 +53,11 @@ func (f *createFederator) Distribute(obj runtime.Object) error {
 	_, err = resourceClient.Create(context.TODO(), toDistribute, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
 		return nil
+	}
+
+	if f.eventLogName != "" && err == nil {
+		logger.Infof("%s: Created %s \"%s/%s\" ", f.eventLogName, toDistribute.GetKind(), toDistribute.GetNamespace(),
+			toDistribute.GetName())
 	}
 
 	return err

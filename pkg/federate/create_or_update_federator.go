@@ -37,7 +37,7 @@ type createOrUpdateFederator struct {
 
 func NewCreateOrUpdateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace,
 	localClusterID string, keepMetadataField ...string,
-) Federator {
+) FederatorExt {
 	return &createOrUpdateFederator{
 		baseFederator:  newBaseFederator(dynClient, restMapper, targetNamespace, keepMetadataField...),
 		localClusterID: localClusterID,
@@ -59,10 +59,20 @@ func (f *createOrUpdateFederator) Distribute(obj runtime.Object) error {
 
 	f.prepareResourceForSync(toDistribute)
 
-	_, err = util.CreateOrUpdate(context.TODO(), resource.ForDynamic(resourceClient), toDistribute,
+	result, err := util.CreateOrUpdate(context.TODO(), resource.ForDynamic(resourceClient), toDistribute,
 		func(obj runtime.Object) (runtime.Object, error) {
 			return util.CopyImmutableMetadata(obj.(*unstructured.Unstructured), toDistribute), nil
 		})
+
+	if f.eventLogName != "" {
+		if result == util.OperationResultCreated {
+			logger.Infof("%s: Created %s \"%s/%s\" ", f.eventLogName, toDistribute.GetKind(), toDistribute.GetNamespace(),
+				toDistribute.GetName())
+		} else if result == util.OperationResultUpdated {
+			logger.Infof("%s: Updated %s \"%s/%s\" ", f.eventLogName, toDistribute.GetKind(), toDistribute.GetNamespace(),
+				toDistribute.GetName())
+		}
+	}
 
 	return err
 }
