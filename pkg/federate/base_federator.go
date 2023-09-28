@@ -38,6 +38,7 @@ type baseFederator struct {
 	restMapper         meta.RESTMapper
 	targetNamespace    string
 	keepMetadataFields map[string]bool
+	eventLogName       string
 }
 
 var logger = log.Logger{Logger: logf.Log.WithName("Federator")}
@@ -70,7 +71,17 @@ func (f *baseFederator) Delete(obj runtime.Object) error {
 
 	logger.V(log.LIBTRACE).Infof("Deleting resource: %#v", toDelete)
 
-	return resourceClient.Delete(context.TODO(), toDelete.GetName(), metav1.DeleteOptions{})
+	err = resourceClient.Delete(context.TODO(), toDelete.GetName(), metav1.DeleteOptions{})
+
+	if f.eventLogName != "" && err == nil {
+		logger.Infof("%s: Deleted %s \"%s/%s\" ", f.eventLogName, toDelete.GetKind(), toDelete.GetNamespace(), toDelete.GetName())
+	}
+
+	return err
+}
+
+func (f *baseFederator) LogEvents(withName string) {
+	f.eventLogName = withName
 }
 
 func (f *baseFederator) toUnstructured(from runtime.Object) (*unstructured.Unstructured, dynamic.ResourceInterface, error) {
