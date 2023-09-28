@@ -45,7 +45,7 @@ var (
 
 func testCreateOrUpdateFederator() {
 	var (
-		f federate.Federator
+		f federate.FederatorExt
 		t *testDriver
 	)
 
@@ -55,6 +55,7 @@ func testCreateOrUpdateFederator() {
 
 	JustBeforeEach(func() {
 		f = federate.NewCreateOrUpdateFederator(t.dynClient, t.restMapper, t.federatorNamespace, t.localClusterID, t.keepMetadataFields...)
+		f.LogEvents("test")
 	})
 
 	When("the resource does not already exist in the datastore", func() {
@@ -193,7 +194,7 @@ func testCreateOrUpdateFederator() {
 
 func testCreateFederator() {
 	var (
-		f federate.Federator
+		f federate.FederatorExt
 		t *testDriver
 	)
 
@@ -204,6 +205,7 @@ func testCreateFederator() {
 
 	JustBeforeEach(func() {
 		f = federate.NewCreateFederator(t.dynClient, t.restMapper, t.federatorNamespace)
+		f.LogEvents("test")
 	})
 
 	When("the resource does not already exist in the datastore", func() {
@@ -385,7 +387,7 @@ func testUpdateStatusFederator() {
 
 func testDelete() {
 	var (
-		f federate.Federator
+		f federate.FederatorExt
 		t *testDriver
 	)
 
@@ -395,6 +397,7 @@ func testDelete() {
 
 	JustBeforeEach(func() {
 		f = federate.NewCreateOrUpdateFederator(t.dynClient, t.restMapper, t.federatorNamespace, "")
+		f.LogEvents("test")
 	})
 
 	When("the resource exists in the datastore", func() {
