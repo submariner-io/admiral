@@ -42,6 +42,12 @@ type Federator interface {
 	Delete(resource runtime.Object) error
 }
 
+type FederatorExt interface {
+	Federator
+
+	LogEvents(withName string)
+}
+
 type noopFederator struct{}
 
 func NewNoopFederator() Federator {
