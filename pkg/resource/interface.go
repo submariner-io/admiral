@@ -29,40 +29,40 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
-type Interface interface {
-	Get(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error)
-	Create(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error)
-	Update(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error)
-	UpdateStatus(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error)
+type Interface[T runtime.Object] interface {
+	Get(ctx context.Context, name string, options metav1.GetOptions) (T, error)
+	Create(ctx context.Context, obj T, options metav1.CreateOptions) (T, error)
+	Update(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error)
+	UpdateStatus(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error)
 	Delete(ctx context.Context, name string, options metav1.DeleteOptions) error
-	List(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error)
+	List(ctx context.Context, options metav1.ListOptions) ([]T, error)
 }
 
-type InterfaceFuncs struct {
-	GetFunc          func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error)
-	CreateFunc       func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error)
-	UpdateFunc       func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error)
-	UpdateStatusFunc func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error)
+type InterfaceFuncs[T runtime.Object] struct {
+	GetFunc          func(ctx context.Context, name string, options metav1.GetOptions) (T, error)
+	CreateFunc       func(ctx context.Context, obj T, options metav1.CreateOptions) (T, error)
+	UpdateFunc       func(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error)
+	UpdateStatusFunc func(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error)
 	DeleteFunc       func(ctx context.Context, name string, options metav1.DeleteOptions) error
-	ListFunc         func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error)
+	ListFunc         func(ctx context.Context, options metav1.ListOptions) ([]T, error)
 }
 
-func (i *InterfaceFuncs) Get(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+func (i *InterfaceFuncs[T]) Get(ctx context.Context, name string, options metav1.GetOptions) (T, error) {
 	return i.GetFunc(ctx, name, options)
 }
 
 //nolint:gocritic // hugeParam - we're matching K8s API
-func (i *InterfaceFuncs) Create(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
+func (i *InterfaceFuncs[T]) Create(ctx context.Context, obj T, options metav1.CreateOptions) (T, error) {
 	return i.CreateFunc(ctx, obj, options)
 }
 
 //nolint:gocritic // hugeParam - we're matching K8s API
-func (i *InterfaceFuncs) Update(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+func (i *InterfaceFuncs[T]) Update(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error) {
 	return i.UpdateFunc(ctx, obj, options)
 }
 
 //nolint:gocritic // hugeParam - we're matching K8s API
-func (i *InterfaceFuncs) UpdateStatus(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
+func (i *InterfaceFuncs[T]) UpdateStatus(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error) {
 	if i.UpdateStatusFunc == nil {
 		// The function isn't defined so assume the status subresource isn't supported.
 		return DefaultUpdateStatus(ctx, obj, options)
@@ -71,25 +71,25 @@ func (i *InterfaceFuncs) UpdateStatus(ctx context.Context, obj runtime.Object, o
 	return i.UpdateStatusFunc(ctx, obj, options)
 }
 
-func (i *InterfaceFuncs) Delete(ctx context.Context, name string,
+func (i *InterfaceFuncs[T]) Delete(ctx context.Context, name string,
 	options metav1.DeleteOptions, //nolint:gocritic // hugeParam - we're matching K8s API
 ) error {
 	return i.DeleteFunc(ctx, name, options)
 }
 
 //nolint:gocritic // hugeParam - we're matching K8s API
-func (i *InterfaceFuncs) List(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+func (i *InterfaceFuncs[T]) List(ctx context.Context, options metav1.ListOptions) ([]T, error) {
 	return i.ListFunc(ctx, options)
 }
 
 // DefaultUpdateStatus returns NotFound error indicating the status subresource isn't supported.
 //
 //nolint:gocritic // hugeParam - we're matching K8s API
-func DefaultUpdateStatus(_ context.Context, _ runtime.Object, _ metav1.UpdateOptions) (runtime.Object, error) {
-	return nil, apierrors.NewNotFound(schema.GroupResource{}, "")
+func DefaultUpdateStatus[T runtime.Object](_ context.Context, _ T, _ metav1.UpdateOptions) (T, error) {
+	return *new(T), apierrors.NewNotFound(schema.GroupResource{}, "")
 }
 
-func MustExtractList(from runtime.Object) []runtime.Object {
+func MustExtractList[T runtime.Object](from runtime.Object) []T {
 	if from == nil {
 		return nil
 	}
@@ -97,5 +97,10 @@ func MustExtractList(from runtime.Object) []runtime.Object {
 	objs, err := meta.ExtractList(from)
 	utilruntime.Must(err)
 
-	return objs
+	list := []T{}
+	for i := range objs {
+		list = append(list, objs[i].(T))
+	}
+
+	return list
 }

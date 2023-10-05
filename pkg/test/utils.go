@@ -25,9 +25,10 @@ import (
 	"github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func SetDeleting(client resource.Interface, name string) {
+func SetDeleting[T runtime.Object](client resource.Interface[T], name string) {
 	obj, err := client.Get(context.TODO(), name, metav1.GetOptions{})
 	Expect(err).To(Succeed())
 
@@ -41,7 +42,7 @@ func SetDeleting(client resource.Interface, name string) {
 	Expect(err).To(Succeed())
 }
 
-func GetFinalizers(client resource.Interface, name string) []string {
+func GetFinalizers[T runtime.Object](client resource.Interface[T], name string) []string {
 	obj, err := client.Get(context.TODO(), name, metav1.GetOptions{})
 	Expect(err).To(Succeed())
 

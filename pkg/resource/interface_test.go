@@ -41,7 +41,7 @@ import (
 
 var _ = Describe("Interface", func() {
 	Context("ForDaemonSet", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*appsv1.DaemonSet] {
 			return resource.ForDaemonSet(k8sfake.NewSimpleClientset(), test.LocalNamespace)
 		}, &appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
@@ -55,7 +55,7 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForDeployment", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*appsv1.Deployment] {
 			return resource.ForDeployment(k8sfake.NewSimpleClientset(), test.LocalNamespace)
 		}, &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
@@ -69,7 +69,7 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForNamespace", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*corev1.Namespace] {
 			return resource.ForNamespace(k8sfake.NewSimpleClientset())
 		}, &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -79,7 +79,7 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForPod", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*corev1.Pod] {
 			return resource.ForPod(k8sfake.NewSimpleClientset(), test.LocalNamespace)
 		}, &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -93,7 +93,7 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForService", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*corev1.Service] {
 			return resource.ForService(k8sfake.NewSimpleClientset(), test.LocalNamespace)
 		}, &corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
@@ -107,7 +107,7 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForServiceAccount", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*corev1.ServiceAccount] {
 			return resource.ForServiceAccount(k8sfake.NewSimpleClientset(), test.LocalNamespace)
 		}, &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
@@ -118,7 +118,7 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForClusterRole", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*rbacv1.ClusterRole] {
 			return resource.ForClusterRole(k8sfake.NewSimpleClientset())
 		}, &rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{
@@ -128,7 +128,7 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForClusterRoleBinding", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*rbacv1.ClusterRoleBinding] {
 			return resource.ForClusterRoleBinding(k8sfake.NewSimpleClientset())
 		}, &rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
@@ -138,7 +138,7 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForRole", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*rbacv1.Role] {
 			return resource.ForRole(k8sfake.NewSimpleClientset(), test.LocalNamespace)
 		}, &rbacv1.Role{
 			ObjectMeta: metav1.ObjectMeta{
@@ -149,7 +149,7 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForRoleBinding", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*rbacv1.RoleBinding] {
 			return resource.ForRoleBinding(k8sfake.NewSimpleClientset(), test.LocalNamespace)
 		}, &rbacv1.RoleBinding{
 			ObjectMeta: metav1.ObjectMeta{
@@ -160,7 +160,7 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForConfigMap", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*corev1.ConfigMap] {
 			return resource.ForConfigMap(k8sfake.NewSimpleClientset(), test.LocalNamespace)
 		}, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -172,7 +172,7 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForListableControllerClient", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[*corev1.Pod] {
 			return resource.ForListableControllerClient(clientfake.NewClientBuilder().WithScheme(scheme.Scheme).Build(),
 				test.LocalNamespace, &corev1.Pod{}, &corev1.PodList{})
 		}, &corev1.Pod{
@@ -191,14 +191,14 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForDynamic", func() {
-		testInterfaceFuncs(func() resource.Interface {
+		testInterfaceFuncs(func() resource.Interface[runtime.Object] {
 			return resource.ForDynamic(dynamicfake.NewSimpleDynamicClient(scheme.Scheme).Resource(
 				schema.GroupVersionResource{
 					Group:    corev1.SchemeGroupVersion.Group,
 					Version:  corev1.SchemeGroupVersion.Version,
 					Resource: "pods",
 				}).Namespace(test.LocalNamespace))
-		}, resource.MustToUnstructured(&corev1.Pod{
+		}, runtime.Object(resource.MustToUnstructured(&corev1.Pod{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Pod",
 				APIVersion: "v1",
@@ -210,13 +210,13 @@ var _ = Describe("Interface", func() {
 			Spec: corev1.PodSpec{
 				Hostname: "my-host",
 			},
-		}))
+		})))
 	})
 })
 
-func testInterfaceFuncs(newInterface func() resource.Interface, initialObj runtime.Object) {
+func testInterfaceFuncs[T runtime.Object](newInterface func() resource.Interface[T], initialObj T) {
 	Specify("verify functions", func() {
-		sanitize := func(o runtime.Object) runtime.Object {
+		sanitize := func(o T) T {
 			m := resource.MustToMeta(o)
 			m.SetResourceVersion("")
 			m.SetCreationTimestamp(metav1.Time{})
@@ -227,7 +227,7 @@ func testInterfaceFuncs(newInterface func() resource.Interface, initialObj runti
 		i := newInterface()
 		initialObj = sanitize(initialObj)
 
-		another := initialObj.DeepCopyObject()
+		another := initialObj.DeepCopyObject().(T)
 		resource.MustToMeta(another).SetName(resource.MustToMeta(initialObj).GetName() + "-2")
 
 		// Create

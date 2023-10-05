@@ -197,7 +197,7 @@ var _ = Describe("Remove", func() {
 type testDriver struct {
 	pod        *corev1.Pod
 	kubeClient *kubeFake.Clientset
-	client     resource.Interface
+	client     resource.Interface[*corev1.Pod]
 }
 
 func newTestDriver() *testDriver {

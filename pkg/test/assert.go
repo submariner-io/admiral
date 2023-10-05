@@ -66,19 +66,19 @@ func GetOccurredActionVerbs(f *testing.Fake, resourceType string, expectedVerbs 
 	return verbs
 }
 
-func AwaitFinalizer(client resource.Interface, name, finalizer string) {
+func AwaitFinalizer[T runtime.Object](client resource.Interface[T], name, finalizer string) {
 	Eventually(func() []string {
 		return GetFinalizers(client, name)
 	}).Should(ContainElement(finalizer))
 }
 
-func AwaitNoFinalizer(client resource.Interface, name, finalizer string) {
+func AwaitNoFinalizer[T runtime.Object](client resource.Interface[T], name, finalizer string) {
 	Eventually(func() []string {
 		return GetFinalizers(client, name)
 	}).ShouldNot(ContainElement(finalizer))
 }
 
-func AssertFinalizers(client resource.Interface, name string, finalizers ...string) {
+func AssertFinalizers[T runtime.Object](client resource.Interface[T], name string, finalizers ...string) {
 	if finalizers == nil {
 		finalizers = []string{}
 	}
@@ -104,7 +104,7 @@ func AwaitStatusCondition(expCond *metav1.Condition, get func() ([]metav1.Condit
 	Expect(found.LastTransitionTime).To(Not(BeNil()))
 }
 
-func AwaitResource(client resource.Interface, name string) runtime.Object {
+func AwaitResource[T runtime.Object](client resource.Interface[T], name string) runtime.Object {
 	var obj runtime.Object
 
 	Eventually(func() error {
@@ -117,14 +117,14 @@ func AwaitResource(client resource.Interface, name string) runtime.Object {
 	return obj
 }
 
-func AwaitNoResource(client resource.Interface, name string) {
+func AwaitNoResource[T runtime.Object](client resource.Interface[T], name string) {
 	Eventually(func() bool {
 		_, err := client.Get(context.TODO(), name, metav1.GetOptions{})
 		return apierrors.IsNotFound(err)
 	}, 3).Should(BeTrue(), "Found unexpected resource %q", name)
 }
 
-func EnsureNoResource(client resource.Interface, name string) {
+func EnsureNoResource[T runtime.Object](client resource.Interface[T], name string) {
 	Consistently(func() bool {
 		_, err := client.Get(context.TODO(), name, metav1.GetOptions{})
 		return apierrors.IsNotFound(err)

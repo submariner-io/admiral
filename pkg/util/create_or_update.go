@@ -46,7 +46,7 @@ const (
 	OperationResultUpdated OperationResult = "updated"
 )
 
-type MutateFn func(existing runtime.Object) (runtime.Object, error)
+type MutateFn[T runtime.Object] func(existing T) (T, error)
 
 type opType int
 
@@ -69,23 +69,24 @@ var logger = log.Logger{Logger: logf.Log}
 // is normally retrieved via 'obj's Name field but if it's empty and the GenerateName field is non-empty, it will try to retrieve it
 // via the List method using 'obj's Labels. This assumes that the labels uniquely identify the resource. If more than one resource is
 // found, an error is returned.
-func CreateOrUpdate(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn) (OperationResult, error) {
+func CreateOrUpdate[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T, mutate MutateFn[T],
+) (OperationResult, error) {
 	return maybeCreateOrUpdate(ctx, client, obj, mutate, opCreate)
 }
 
 // Update tries to obtain an existing resource and, if found, updates it. If not found, no error is returned.
-func Update(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn) error {
+func Update[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T, mutate MutateFn[T]) error {
 	_, err := maybeCreateOrUpdate(ctx, client, obj, mutate, opUpdate)
 	return err
 }
 
 // Update tries to obtain an existing resource and, if found, updates it. If not found, a NotFound error is returned.
-func MustUpdate(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn) error {
+func MustUpdate[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T, mutate MutateFn[T]) error {
 	_, err := maybeCreateOrUpdate(ctx, client, obj, mutate, opMustUpdate)
 	return err
 }
 
-func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj runtime.Object, mutate MutateFn,
+func maybeCreateOrUpdate[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T, mutate MutateFn[T],
 	op opType,
 ) (OperationResult, error) {
 	result := OperationResultNone
@@ -171,33 +172,34 @@ func maybeCreateOrUpdate(ctx context.Context, client resource.Interface, obj run
 }
 
 //nolint:wrapcheck // No need to wrap errors
-func getResource(ctx context.Context, client resource.Interface, obj runtime.Object) (runtime.Object, error) {
+func getResource[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T) (T, error) {
 	objMeta := resource.MustToMeta(obj)
 
 	if objMeta.GetName() != "" || objMeta.GetGenerateName() == "" {
-		return client.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
+		obj, err := client.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
+		return obj, err
 	}
 
 	list, err := client.List(ctx, metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(objMeta.GetLabels()).String(),
 	})
 	if err != nil {
-		return nil, err
+		return *new(T), err
 	}
 
 	count := len(list)
 	if count == 0 {
-		return nil, apierrors.NewNotFound(schema.GroupResource{}, "")
+		return *new(T), apierrors.NewNotFound(schema.GroupResource{}, "")
 	}
 
 	if count != 1 {
-		return nil, fmt.Errorf("found %d resources with labels %#v, expected 1", count, objMeta.GetLabels())
+		return *new(T), fmt.Errorf("found %d resources with labels %#v, expected 1", count, objMeta.GetLabels())
 	}
 
 	return list[0], nil
 }
 
-func createResource(ctx context.Context, client resource.Interface, obj runtime.Object) error {
+func createResource[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T) error {
 	objMeta := resource.MustToMeta(obj)
 
 	created, err := client.Create(ctx, obj, metav1.CreateOptions{})
@@ -231,7 +233,7 @@ func createResource(ctx context.Context, client resource.Interface, obj runtime.
 // this will wait for the deletion to be complete before creating the new object:
 // with foreground propagation, Get will continue to return the object being deleted
 // and Create will fail with “already exists” until deletion is complete.
-func CreateAnew(ctx context.Context, client resource.Interface, obj runtime.Object,
+func CreateAnew[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T,
 	createOptions metav1.CreateOptions, //nolint:gocritic // hugeParam - we're matching K8s API
 	deleteOptions metav1.DeleteOptions, //nolint:gocritic // hugeParam - we're matching K8s API
 ) (runtime.Object, error) {
@@ -289,8 +291,8 @@ func SetBackoff(b wait.Backoff) wait.Backoff {
 	return prev
 }
 
-func Replace(with runtime.Object) MutateFn {
-	return func(existing runtime.Object) (runtime.Object, error) {
+func Replace[T runtime.Object](with T) MutateFn[T] {
+	return func(existing T) (T, error) {
 		return with, nil
 	}
 }

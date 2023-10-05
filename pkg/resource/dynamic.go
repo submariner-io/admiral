@@ -75,13 +75,13 @@ func (d *dynamicType) List(ctx context.Context,
 	options metav1.ListOptions, //nolint:gocritic // hugeParam - we're matching K8s API
 ) ([]runtime.Object, error) {
 	l, err := d.client.List(ctx, options)
-	return MustExtractList(l), err
+	return MustExtractList[runtime.Object](l), err
 }
 
-func ForDynamic(client dynamic.ResourceInterface) *InterfaceFuncs {
+func ForDynamic(client dynamic.ResourceInterface) *InterfaceFuncs[runtime.Object] {
 	t := &dynamicType{client: client}
 
-	return &InterfaceFuncs{
+	return &InterfaceFuncs[runtime.Object]{
 		GetFunc:          t.Get,
 		CreateFunc:       t.Create,
 		UpdateFunc:       t.Update,
