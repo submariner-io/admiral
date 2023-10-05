@@ -34,276 +34,122 @@ import (
 	controllerClient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type KubernetesInterface[T runtime.Object, L runtime.Object] interface {
+	Get(ctx context.Context, name string, options metav1.GetOptions) (T, error)
+	Create(ctx context.Context, obj T, options metav1.CreateOptions) (T, error)
+	Update(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error)
+	Delete(ctx context.Context, name string, options metav1.DeleteOptions) error
+	List(ctx context.Context, options metav1.ListOptions) (L, error)
+}
+
+type KubernetesStatusInterface[T runtime.Object, L runtime.Object] interface {
+	KubernetesInterface[T, L]
+	UpdateStatus(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error)
+}
+
+func buildListItemExtractor[T runtime.Object, L runtime.Object](k8sInterface KubernetesInterface[T, L],
+) func(context.Context, metav1.ListOptions) ([]T, error) {
+	return func(ctx context.Context, options metav1.ListOptions) ([]T, error) {
+		l, err := k8sInterface.List(ctx, options)
+		return MustExtractList[T](l), err
+	}
+}
+
+func kubernetesInterfaceAdapter[T runtime.Object, L runtime.Object](k8sInterface KubernetesInterface[T, L]) Interface[T] {
+	return &InterfaceFuncs[T]{
+		GetFunc:    k8sInterface.Get,
+		CreateFunc: k8sInterface.Create,
+		UpdateFunc: k8sInterface.Update,
+		DeleteFunc: k8sInterface.Delete,
+		ListFunc:   buildListItemExtractor[T, L](k8sInterface),
+	}
+}
+
+func kubernetesStatusInterfaceAdapter[T runtime.Object, L runtime.Object](k8sInterface KubernetesStatusInterface[T, L]) Interface[T] {
+	return &InterfaceFuncs[T]{
+		GetFunc:          k8sInterface.Get,
+		CreateFunc:       k8sInterface.Create,
+		UpdateFunc:       k8sInterface.Update,
+		UpdateStatusFunc: k8sInterface.UpdateStatus,
+		DeleteFunc:       k8sInterface.Delete,
+		ListFunc:         buildListItemExtractor[T, L](k8sInterface),
+	}
+}
+
 // Entries are sorted alphabetically by group and resource
 
 // Apps
 
-//nolint:dupl //false positive - lines are similar but not duplicated
-func ForDaemonSet(client kubernetes.Interface, namespace string) Interface {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.AppsV1().DaemonSets(namespace).Get(ctx, name, options)
-		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			return client.AppsV1().DaemonSets(namespace).Create(ctx, obj.(*appsv1.DaemonSet), options)
-		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.AppsV1().DaemonSets(namespace).Update(ctx, obj.(*appsv1.DaemonSet), options)
-		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-			return client.AppsV1().DaemonSets(namespace).Delete(ctx, name, options)
-		},
-		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
-			l, err := client.AppsV1().DaemonSets(namespace).List(ctx, options)
-			return MustExtractList(l), err
-		},
-	}
+func ForDaemonSet(client kubernetes.Interface, namespace string) Interface[*appsv1.DaemonSet] {
+	return kubernetesStatusInterfaceAdapter[*appsv1.DaemonSet, *appsv1.DaemonSetList](client.AppsV1().DaemonSets(namespace))
 }
 
-//nolint:dupl //false positive - lines are similar but not duplicated
-func ForDeployment(client kubernetes.Interface, namespace string) Interface {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.AppsV1().Deployments(namespace).Get(ctx, name, options)
-		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			return client.AppsV1().Deployments(namespace).Create(ctx, obj.(*appsv1.Deployment), options)
-		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.AppsV1().Deployments(namespace).Update(ctx, obj.(*appsv1.Deployment), options)
-		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-			return client.AppsV1().Deployments(namespace).Delete(ctx, name, options)
-		},
-		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
-			l, err := client.AppsV1().Deployments(namespace).List(ctx, options)
-			return MustExtractList(l), err
-		},
-	}
+func ForDeployment(client kubernetes.Interface, namespace string) Interface[*appsv1.Deployment] {
+	return kubernetesStatusInterfaceAdapter[*appsv1.Deployment, *appsv1.DeploymentList](client.AppsV1().Deployments(namespace))
 }
 
 // Core
 
-//nolint:dupl //false positive - lines are similar but not duplicated
-func ForNamespace(client kubernetes.Interface) Interface {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.CoreV1().Namespaces().Get(ctx, name, options)
-		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			return client.CoreV1().Namespaces().Create(ctx, obj.(*corev1.Namespace), options)
-		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.CoreV1().Namespaces().Update(ctx, obj.(*corev1.Namespace), options)
-		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-			return client.CoreV1().Namespaces().Delete(ctx, name, options)
-		},
-		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
-			l, err := client.CoreV1().Namespaces().List(ctx, options)
-			return MustExtractList(l), err
-		},
-	}
+func ForConfigMap(client kubernetes.Interface, namespace string) Interface[*corev1.ConfigMap] {
+	return kubernetesInterfaceAdapter[*corev1.ConfigMap, *corev1.ConfigMapList](client.CoreV1().ConfigMaps(namespace))
 }
 
-//nolint:dupl //false positive - lines are similar but not duplicated
-func ForPod(client kubernetes.Interface, namespace string) Interface {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.CoreV1().Pods(namespace).Get(ctx, name, options)
-		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			return client.CoreV1().Pods(namespace).Create(ctx, obj.(*corev1.Pod), options)
-		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.CoreV1().Pods(namespace).Update(ctx, obj.(*corev1.Pod), options)
-		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-			return client.CoreV1().Pods(namespace).Delete(ctx, name, options)
-		},
-		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
-			l, err := client.CoreV1().Pods(namespace).List(ctx, options)
-			return MustExtractList(l), err
-		},
-	}
+func ForNamespace(client kubernetes.Interface) Interface[*corev1.Namespace] {
+	return kubernetesStatusInterfaceAdapter[*corev1.Namespace, *corev1.NamespaceList](client.CoreV1().Namespaces())
 }
 
-//nolint:dupl //false positive - lines are similar but not duplicated
-func ForService(client kubernetes.Interface, namespace string) Interface {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.CoreV1().Services(namespace).Get(ctx, name, options)
-		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			return client.CoreV1().Services(namespace).Create(ctx, obj.(*corev1.Service), options)
-		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.CoreV1().Services(namespace).Update(ctx, obj.(*corev1.Service), options)
-		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-			return client.CoreV1().Services(namespace).Delete(ctx, name, options)
-		},
-		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
-			l, err := client.CoreV1().Services(namespace).List(ctx, options)
-			return MustExtractList(l), err
-		},
-	}
+func ForPod(client kubernetes.Interface, namespace string) Interface[*corev1.Pod] {
+	return kubernetesStatusInterfaceAdapter[*corev1.Pod, *corev1.PodList](client.CoreV1().Pods(namespace))
 }
 
-//nolint:dupl //false positive - lines are similar but not duplicated
-func ForServiceAccount(client kubernetes.Interface, namespace string) Interface {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.CoreV1().ServiceAccounts(namespace).Get(ctx, name, options)
-		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			return client.CoreV1().ServiceAccounts(namespace).Create(ctx, obj.(*corev1.ServiceAccount), options)
-		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.CoreV1().ServiceAccounts(namespace).Update(ctx, obj.(*corev1.ServiceAccount), options)
-		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-			return client.CoreV1().ServiceAccounts(namespace).Delete(ctx, name, options)
-		},
-		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
-			l, err := client.CoreV1().ServiceAccounts(namespace).List(ctx, options)
-			return MustExtractList(l), err
-		},
-	}
+func ForService(client kubernetes.Interface, namespace string) Interface[*corev1.Service] {
+	return kubernetesStatusInterfaceAdapter[*corev1.Service, *corev1.ServiceList](client.CoreV1().Services(namespace))
+}
+
+func ForServiceAccount(client kubernetes.Interface, namespace string) Interface[*corev1.ServiceAccount] {
+	return kubernetesInterfaceAdapter[*corev1.ServiceAccount, *corev1.ServiceAccountList](client.CoreV1().ServiceAccounts(namespace))
 }
 
 // RBAC
 
-//nolint:dupl //false positive - lines are similar but not duplicated
-func ForClusterRole(client kubernetes.Interface) Interface {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoles().Get(ctx, name, options)
-		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoles().Create(ctx, obj.(*rbacv1.ClusterRole), options)
-		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoles().Update(ctx, obj.(*rbacv1.ClusterRole), options)
-		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-			return client.RbacV1().ClusterRoles().Delete(ctx, name, options)
-		},
-		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
-			l, err := client.RbacV1().ClusterRoles().List(ctx, options)
-			return MustExtractList(l), err
-		},
-	}
+func ForClusterRole(client kubernetes.Interface) Interface[*rbacv1.ClusterRole] {
+	return kubernetesInterfaceAdapter[*rbacv1.ClusterRole, *rbacv1.ClusterRoleList](client.RbacV1().ClusterRoles())
 }
 
-//nolint:dupl //false positive - lines are similar but not duplicated
-func ForClusterRoleBinding(client kubernetes.Interface) Interface {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoleBindings().Get(ctx, name, options)
-		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoleBindings().Create(ctx, obj.(*rbacv1.ClusterRoleBinding), options)
-		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.RbacV1().ClusterRoleBindings().Update(ctx, obj.(*rbacv1.ClusterRoleBinding), options)
-		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-			return client.RbacV1().ClusterRoleBindings().Delete(ctx, name, options)
-		},
-		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
-			l, err := client.RbacV1().ClusterRoleBindings().List(ctx, options)
-			return MustExtractList(l), err
-		},
-	}
+func ForClusterRoleBinding(client kubernetes.Interface) Interface[*rbacv1.ClusterRoleBinding] {
+	return kubernetesInterfaceAdapter[*rbacv1.ClusterRoleBinding, *rbacv1.ClusterRoleBindingList](client.RbacV1().ClusterRoleBindings())
 }
 
-//nolint:dupl //false positive - lines are similar but not duplicated
-func ForRole(client kubernetes.Interface, namespace string) Interface {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.RbacV1().Roles(namespace).Get(ctx, name, options)
-		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			return client.RbacV1().Roles(namespace).Create(ctx, obj.(*rbacv1.Role), options)
-		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.RbacV1().Roles(namespace).Update(ctx, obj.(*rbacv1.Role), options)
-		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-			return client.RbacV1().Roles(namespace).Delete(ctx, name, options)
-		},
-		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
-			l, err := client.RbacV1().Roles(namespace).List(ctx, options)
-			return MustExtractList(l), err
-		},
-	}
+func ForRole(client kubernetes.Interface, namespace string) Interface[*rbacv1.Role] {
+	return kubernetesInterfaceAdapter[*rbacv1.Role, *rbacv1.RoleList](client.RbacV1().Roles(namespace))
 }
 
-//nolint:dupl //false positive - lines are similar but not duplicated
-func ForRoleBinding(client kubernetes.Interface, namespace string) Interface {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.RbacV1().RoleBindings(namespace).Get(ctx, name, options)
-		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			return client.RbacV1().RoleBindings(namespace).Create(ctx, obj.(*rbacv1.RoleBinding), options)
-		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.RbacV1().RoleBindings(namespace).Update(ctx, obj.(*rbacv1.RoleBinding), options)
-		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-			return client.RbacV1().RoleBindings(namespace).Delete(ctx, name, options)
-		},
-		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
-			l, err := client.RbacV1().RoleBindings(namespace).List(ctx, options)
-			return MustExtractList(l), err
-		},
-	}
+func ForRoleBinding(client kubernetes.Interface, namespace string) Interface[*rbacv1.RoleBinding] {
+	return kubernetesInterfaceAdapter[*rbacv1.RoleBinding, *rbacv1.RoleBindingList](client.RbacV1().RoleBindings(namespace))
 }
 
-//nolint:dupl //false positive - lines are similar but not duplicated
-func ForConfigMap(client kubernetes.Interface, namespace string) Interface {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			return client.CoreV1().ConfigMaps(namespace).Get(ctx, name, options)
-		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			return client.CoreV1().ConfigMaps(namespace).Create(ctx, obj.(*corev1.ConfigMap), options)
-		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			return client.CoreV1().ConfigMaps(namespace).Update(ctx, obj.(*corev1.ConfigMap), options)
-		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-			return client.CoreV1().ConfigMaps(namespace).Delete(ctx, name, options)
-		},
-		ListFunc: func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
-			l, err := client.CoreV1().ConfigMaps(namespace).List(ctx, options)
-			return MustExtractList(l), err
-		},
-	}
-}
+// Controller client wrappers
 
-func ForControllerClient(client controllerClient.Client, namespace string, objType controllerClient.Object) *InterfaceFuncs {
-	return &InterfaceFuncs{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
-			obj := objType.DeepCopyObject()
-			err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, obj.(controllerClient.Object))
+func ForControllerClient[T controllerClient.Object](client controllerClient.Client, namespace string, objType T) *InterfaceFuncs[T] {
+	return &InterfaceFuncs[T]{
+		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (T, error) {
+			obj := objType.DeepCopyObject().(T)
+			err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, obj)
 			return obj, err
 		},
-		CreateFunc: func(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-			obj = obj.DeepCopyObject()
-			err := client.Create(ctx, obj.(controllerClient.Object))
+		CreateFunc: func(ctx context.Context, obj T, options metav1.CreateOptions) (T, error) {
+			obj = obj.DeepCopyObject().(T)
+			err := client.Create(ctx, obj)
 			return obj, err
 		},
-		UpdateFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			obj = obj.DeepCopyObject()
-			err := client.Update(ctx, obj.(controllerClient.Object))
+		UpdateFunc: func(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error) {
+			obj = obj.DeepCopyObject().(T)
+			err := client.Update(ctx, obj)
 			return obj, err
 		},
-		UpdateStatusFunc: func(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-			obj = obj.DeepCopyObject()
-			err := client.Status().Update(ctx, obj.(controllerClient.Object))
+		UpdateStatusFunc: func(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error) {
+			obj = obj.DeepCopyObject().(T)
+			err := client.Status().Update(ctx, obj)
 			return obj, err
 		},
 		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
@@ -316,11 +162,11 @@ func ForControllerClient(client controllerClient.Client, namespace string, objTy
 	}
 }
 
-func ForListableControllerClient(client controllerClient.Client, namespace string, objType controllerClient.Object,
+func ForListableControllerClient[T controllerClient.Object](client controllerClient.Client, namespace string, objType T,
 	listType controllerClient.ObjectList,
-) *InterfaceFuncs {
-	i := ForControllerClient(client, namespace, objType)
-	i.ListFunc = func(ctx context.Context, options metav1.ListOptions) ([]runtime.Object, error) {
+) *InterfaceFuncs[T] {
+	i := ForControllerClient[T](client, namespace, objType)
+	i.ListFunc = func(ctx context.Context, options metav1.ListOptions) ([]T, error) {
 		opts := []controllerClient.ListOption{controllerClient.InNamespace(namespace)}
 
 		if options.LabelSelector != "" {
@@ -334,7 +180,7 @@ func ForListableControllerClient(client controllerClient.Client, namespace strin
 
 		err := client.List(ctx, list, opts...)
 
-		return MustExtractList(list), err
+		return MustExtractList[T](list), err
 	}
 
 	return i

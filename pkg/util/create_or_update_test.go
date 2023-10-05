@@ -44,7 +44,8 @@ var _ = Describe("CreateAnew function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	createAnew := func() (runtime.Object, error) {
-		return util.CreateAnew(context.TODO(), resource.ForDynamic(t.client), t.pod, metav1.CreateOptions{}, metav1.DeleteOptions{})
+		return util.CreateAnew[runtime.Object](context.TODO(), resource.ForDynamic(t.client), t.pod, metav1.CreateOptions{},
+			metav1.DeleteOptions{})
 	}
 
 	createAnewSuccess := func() *corev1.Pod {
@@ -143,7 +144,7 @@ var _ = Describe("CreateOrUpdate function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	createOrUpdate := func(expResult util.OperationResult) error {
-		result, err := util.CreateOrUpdate(context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
+		result, err := util.CreateOrUpdate[runtime.Object](context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
 		if err != nil && expResult != util.OperationResultNone {
 			return err
 		}
@@ -245,7 +246,7 @@ var _ = Describe("Update function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	update := func() error {
-		return util.Update(context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
+		return util.Update[runtime.Object](context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
 	}
 
 	When("the resource doesn't exist", func() {
@@ -267,7 +268,7 @@ var _ = Describe("MustUpdate function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	mustUpdate := func() error {
-		return util.MustUpdate(context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
+		return util.MustUpdate[runtime.Object](context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
 	}
 
 	When("the resource doesn't exist", func() {
@@ -291,7 +292,7 @@ type createOrUpdateTestDriver struct {
 	client      *fake.DynamicResourceClient
 	origBackoff wait.Backoff
 	expectedErr error
-	mutateFn    util.MutateFn
+	mutateFn    util.MutateFn[runtime.Object]
 }
 
 func newCreateOrUpdateTestDiver() *createOrUpdateTestDriver {

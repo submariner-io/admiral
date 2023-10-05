@@ -70,7 +70,7 @@ func CreateResource(resourceInterface dynamic.ResourceInterface, obj runtime.Obj
 }
 
 func UpdateResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
-	err := util.Update(context.Background(), resource.ForDynamic(resourceInterface), obj,
+	err := util.Update[runtime.Object](context.Background(), resource.ForDynamic(resourceInterface), obj,
 		util.Replace(obj))
 	Expect(err).To(Succeed())
 

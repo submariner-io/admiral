@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func Add(ctx context.Context, client resource.Interface, obj runtime.Object, finalizerName string) (bool, error) {
+func Add[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T, finalizerName string) (bool, error) {
 	objMeta := resource.MustToMeta(obj)
 	if !objMeta.GetDeletionTimestamp().IsZero() {
 		return false, nil
@@ -38,7 +38,7 @@ func Add(ctx context.Context, client resource.Interface, obj runtime.Object, fin
 		return false, nil
 	}
 
-	err := util.Update(ctx, client, obj, func(existing runtime.Object) (runtime.Object, error) {
+	err := util.Update(ctx, client, obj, func(existing T) (T, error) {
 		objMeta := resource.MustToMeta(existing)
 		objMeta.SetFinalizers(append(objMeta.GetFinalizers(), finalizerName))
 
@@ -48,13 +48,13 @@ func Add(ctx context.Context, client resource.Interface, obj runtime.Object, fin
 	return err == nil, errors.Wrapf(err, "error adding finalizer %q to %q", finalizerName, objMeta.GetName())
 }
 
-func Remove(ctx context.Context, client resource.Interface, obj runtime.Object, finalizerName string) error {
+func Remove[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T, finalizerName string) error {
 	objMeta := resource.MustToMeta(obj)
 	if !IsPresent(objMeta, finalizerName) {
 		return nil
 	}
 
-	err := util.Update(ctx, client, obj, func(existing runtime.Object) (runtime.Object, error) {
+	err := util.Update(ctx, client, obj, func(existing T) (T, error) {
 		objMeta := resource.MustToMeta(existing)
 
 		newFinalizers := []string{}

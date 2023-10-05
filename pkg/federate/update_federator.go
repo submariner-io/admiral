@@ -52,7 +52,6 @@ func NewUpdateStatusFederator(dynClient dynamic.Interface, restMapper meta.RESTM
 		})
 }
 
-//nolint:wrapcheck // This function is effectively a wrapper so no need to wrap errors.
 func (f *updateFederator) Distribute(obj runtime.Object) error {
 	logger.V(log.LIBTRACE).Infof("In Distribute for %#v", obj)
 
@@ -63,7 +62,8 @@ func (f *updateFederator) Distribute(obj runtime.Object) error {
 
 	f.prepareResourceForSync(toUpdate)
 
-	return util.Update(context.TODO(), resource.ForDynamic(resourceClient), toUpdate, func(obj runtime.Object) (runtime.Object, error) {
-		return f.update(obj.(*unstructured.Unstructured), toUpdate), nil
-	})
+	return util.Update[runtime.Object](context.TODO(), resource.ForDynamic(resourceClient), toUpdate,
+		func(obj runtime.Object) (runtime.Object, error) {
+			return f.update(obj.(*unstructured.Unstructured), toUpdate), nil
+		})
 }
