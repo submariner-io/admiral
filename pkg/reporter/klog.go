@@ -18,7 +18,7 @@ limitations under the License.
 
 package reporter
 
-import "k8s.io/klog"
+import "k8s.io/klog/v2"
 
 type klogType struct{}
 
