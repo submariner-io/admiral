@@ -37,6 +37,9 @@ type updateReactor struct {
 
 // AddUpdateReactor adds a reactor to mimic real K8s update behavior to handle ResourceVersion et al.
 func AddUpdateReactor(f *testing.Fake) {
+	f.Lock()
+	defer f.Unlock()
+
 	r := &updateReactor{reactors: f.ReactionChain[0:]}
 	f.PrependReactor("update", "*", r.react)
 }
