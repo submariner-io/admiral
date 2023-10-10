@@ -43,8 +43,10 @@ type DeleteCollectionReactor struct {
 }
 
 func AddDeleteCollectionReactor(f *testing.Fake) {
+	f.Lock()
 	r := &DeleteCollectionReactor{gvrToGVK: map[schema.GroupVersionResource]schema.GroupVersionKind{}, reactors: f.ReactionChain[0:]}
 	f.PrependReactor("delete-collection", "*", r.react)
+	f.Unlock()
 
 	for gvk := range scheme.Scheme.AllKnownTypes() {
 		if !strings.HasSuffix(gvk.Kind, "List") {

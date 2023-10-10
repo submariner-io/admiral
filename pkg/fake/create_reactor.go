@@ -36,6 +36,9 @@ type createReactor struct {
 
 // AddCreateReactor adds a reactor to mimic real K8s create behavior to handle GenerateName, validation et al.
 func AddCreateReactor(f *testing.Fake) {
+	f.Lock()
+	defer f.Unlock()
+
 	r := &createReactor{reactors: f.ReactionChain[0:]}
 	f.PrependReactor("create", "*", r.react)
 }

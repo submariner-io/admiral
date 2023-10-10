@@ -41,8 +41,11 @@ func NewFailingReactor(f *testing.Fake) *FailingReactor {
 
 func NewFailingReactorForResource(f *testing.Fake, resource string) *FailingReactor {
 	r := &FailingReactor{}
-	chain := []testing.Reactor{&testing.SimpleReactor{Verb: "*", Resource: resource, Reaction: r.react}}
-	f.ReactionChain = append(chain, f.ReactionChain...)
+
+	f.Lock()
+	defer f.Unlock()
+
+	f.PrependReactor("*", resource, r.react)
 
 	return r
 }

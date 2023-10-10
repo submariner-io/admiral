@@ -43,22 +43,20 @@ func FailOnAction(f *testing.Fake, resource, verb string, customErr error, autoR
 		retErr = errors.New("fake error")
 	}
 
-	chain := []testing.Reactor{&testing.SimpleReactor{
-		Verb:     verb,
-		Resource: resource,
-		Reaction: func(action testing.Action) (bool, runtime.Object, error) {
-			if r.fail.Load().(bool) {
-				if autoReset {
-					r.fail.Store(false)
-				}
+	f.Lock()
+	defer f.Unlock()
 
-				return true, nil, retErr
+	f.PrependReactor(verb, resource, func(action testing.Action) (bool, runtime.Object, error) {
+		if r.fail.Load().(bool) {
+			if autoReset {
+				r.fail.Store(false)
 			}
 
-			return false, nil, nil
-		},
-	}}
-	f.ReactionChain = append(chain, f.ReactionChain...)
+			return true, nil, retErr
+		}
+
+		return false, nil, nil
+	})
 
 	return r
 }
