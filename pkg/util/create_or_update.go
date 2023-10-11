@@ -236,10 +236,10 @@ func createResource[T runtime.Object](ctx context.Context, client resource.Inter
 func CreateAnew[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T,
 	createOptions metav1.CreateOptions, //nolint:gocritic // hugeParam - we're matching K8s API
 	deleteOptions metav1.DeleteOptions, //nolint:gocritic // hugeParam - we're matching K8s API
-) (runtime.Object, error) {
+) (T, error) {
 	name := resource.MustToMeta(obj).GetName()
 
-	var retObj runtime.Object
+	var retObj T
 
 	err := wait.ExponentialBackoff(backOff, func() (bool, error) {
 		var err error
