@@ -30,6 +30,9 @@ import (
 )
 
 func ConflictOnUpdateReactor(f *testing.Fake, resource string) {
+	f.Lock()
+	defer f.Unlock()
+
 	reactors := f.ReactionChain[0:]
 	resourceVersion := "100"
 	state := sync.Map{}

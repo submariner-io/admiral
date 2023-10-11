@@ -30,7 +30,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	loga "github.com/submariner-io/admiral/pkg/log"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
