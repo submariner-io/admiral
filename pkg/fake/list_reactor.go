@@ -33,6 +33,9 @@ type filteringListReactor struct {
 }
 
 func AddFilteringListReactor(f *testing.Fake) {
+	f.Lock()
+	defer f.Unlock()
+
 	r := &filteringListReactor{reactors: f.ReactionChain[0:]}
 	f.PrependReactor("list", "*", r.react)
 }

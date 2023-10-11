@@ -34,6 +34,9 @@ type deleteReactor struct {
 
 // AddDeleteReactor adds a reactor to mimic real K8s delete behavior to handle ResourceVersion, DeletionTimestamp et al.
 func AddDeleteReactor(f *testing.Fake) {
+	f.Lock()
+	defer f.Unlock()
+
 	r := &deleteReactor{reactors: f.ReactionChain[0:]}
 	f.PrependReactor("delete", "*", r.react)
 }
