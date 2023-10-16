@@ -19,9 +19,9 @@ limitations under the License.
 package fake
 
 import (
+	"errors"
 	"sync/atomic"
 
-	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/testing"
 )

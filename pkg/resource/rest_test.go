@@ -21,10 +21,10 @@ package resource_test
 import (
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/fake"
 	"github.com/submariner-io/admiral/pkg/resource"
 	corev1 "k8s.io/api/core/v1"
