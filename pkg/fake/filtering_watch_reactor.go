@@ -19,7 +19,8 @@ limitations under the License.
 package fake
 
 import (
-	"github.com/pkg/errors"
+	"errors"
+
 	"github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/watch"
