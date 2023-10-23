@@ -284,9 +284,7 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 	if *r.config.WaitForCacheSync {
 		r.log.V(log.LIBDEBUG).Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
 
-		if ok := cache.WaitForCacheSync(stopCh, r.informer.HasSynced); !ok {
-			return fmt.Errorf("failed to wait for informer cache to sync")
-		}
+		_ = cache.WaitForCacheSync(stopCh, r.informer.HasSynced)
 	}
 
 	r.workQueue.Run(stopCh, r.processNextWorkItem)
