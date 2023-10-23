@@ -19,14 +19,17 @@ limitations under the License.
 package util
 
 import (
+	"crypto/x509"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
-	resourceUtil "github.com/submariner-io/admiral/pkg/resource"
+	"github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
@@ -38,6 +41,8 @@ const (
 	AnnotationsField = "annotations"
 	StatusField      = "status"
 )
+
+var lastBadCertificate atomic.Value
 
 func BuildRestMapper(restConfig *rest.Config) (meta.RESTMapper, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(restConfig)
@@ -55,7 +60,7 @@ func BuildRestMapper(restConfig *rest.Config) (meta.RESTMapper, error) {
 
 func ToUnstructuredResource(from runtime.Object, restMapper meta.RESTMapper,
 ) (*unstructured.Unstructured, *schema.GroupVersionResource, error) {
-	to, err := resourceUtil.ToUnstructured(from)
+	to, err := resource.ToUnstructured(from)
 	if err != nil {
 		return nil, nil, err //nolint:wrapcheck // ok to return as is
 	}
@@ -130,4 +135,24 @@ func CopyImmutableMetadata(from, to *unstructured.Unstructured) *unstructured.Un
 	SetNestedField(to.Object, fromMetadata, MetadataField)
 
 	return to
+}
+
+func AddCertificateErrorHandler(fatal bool) {
+	logCertificateError := logger.Errorf
+	if fatal {
+		logCertificateError = logger.FatalfOnError
+	}
+
+	//nolint:reassign // We need to reassign ErrorHandlers to register our handler
+	utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers, func(err error) {
+		var unknownAuthorityError x509.UnknownAuthorityError
+		if errors.As(err, &unknownAuthorityError) && lastBadCertificate.Swap(unknownAuthorityError.Cert) != unknownAuthorityError.Cert {
+			logCertificateError(err, "Certificate error: %s", resource.ToJSON(err))
+		}
+		var certificateInvalidError x509.CertificateInvalidError
+		if errors.As(err, &certificateInvalidError) && lastBadCertificate.Swap(certificateInvalidError.Cert) != certificateInvalidError.Cert {
+			logCertificateError(err, "Certificate error: %s", resource.ToJSON(err))
+		}
+		// The generic handler has already logged the error, no need to repeat if we don't want extra detail
+	})
 }
