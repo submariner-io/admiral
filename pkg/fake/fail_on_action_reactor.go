@@ -27,7 +27,7 @@ import (
 )
 
 type FailOnActionReactor struct {
-	fail atomic.Value
+	fail atomic.Bool
 }
 
 func (r *FailOnActionReactor) Fail(v bool) {
@@ -47,7 +47,7 @@ func FailOnAction(f *testing.Fake, resource, verb string, customErr error, autoR
 	defer f.Unlock()
 
 	f.PrependReactor(verb, resource, func(action testing.Action) (bool, runtime.Object, error) {
-		if r.fail.Load().(bool) {
+		if r.fail.Load() {
 			if autoReset {
 				r.fail.Store(false)
 			}
