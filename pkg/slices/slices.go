@@ -98,3 +98,7 @@ func mapFrom[E any, K comparable](s []E, key func(E) K) map[K]bool {
 
 	return m
 }
+
+func Key[K comparable](k K) K {
+	return k
+}
