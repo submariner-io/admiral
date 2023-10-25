@@ -32,7 +32,7 @@ type Status struct {
 var _ = Describe("Intersect", func() {
 	Specify("with non-empty slices", func() {
 		testIntersect := func(s1, s2 []string, exp ...string) {
-			actual := slices.Intersect(s1, s2, key)
+			actual := slices.Intersect(s1, s2, slices.Key[string])
 			Expect(set.New(actual...).Equal(set.New(exp...))).To(BeTrue(), "Expected: %s. Actual: %s", exp, actual)
 		}
 
@@ -45,16 +45,16 @@ var _ = Describe("Intersect", func() {
 	})
 
 	Specify("with empty an slice", func() {
-		Expect(slices.Intersect([]string{"1"}, []string{}, key)).To(BeEmpty())
-		Expect(slices.Intersect([]string{"1"}, nil, key)).To(BeEmpty())
-		Expect(slices.Intersect([]string{}, []string{"1"}, key)).To(BeEmpty())
-		Expect(slices.Intersect(nil, []string{"1"}, key)).To(BeEmpty())
+		Expect(slices.Intersect([]string{"1"}, []string{}, slices.Key[string])).To(BeEmpty())
+		Expect(slices.Intersect([]string{"1"}, nil, slices.Key[string])).To(BeEmpty())
+		Expect(slices.Intersect([]string{}, []string{"1"}, slices.Key[string])).To(BeEmpty())
+		Expect(slices.Intersect(nil, []string{"1"}, slices.Key[string])).To(BeEmpty())
 	})
 })
 
 var _ = Specify("Union", func() {
 	testUnion := func(s1, s2 []string, exp ...string) {
-		actual := slices.Union(s1, s2, key)
+		actual := slices.Union(s1, s2, slices.Key[string])
 		Expect(actual).To(Equal(exp))
 	}
 
@@ -172,10 +172,6 @@ var _ = Describe("Equivalent", func() {
 			[]Status{{Name: "2"}, {Name: "3"}, {Name: "1"}, {Name: "1"}, {Name: "2"}}, statusKey)).To(BeTrue())
 	})
 })
-
-func key(e string) string {
-	return e
-}
 
 func statusKey(s Status) string {
 	return s.Name
