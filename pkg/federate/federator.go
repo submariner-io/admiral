@@ -19,6 +19,8 @@ limitations under the License.
 package federate
 
 import (
+	"context"
+
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -34,12 +36,12 @@ type Federator interface {
 	//
 	// If the resource was previously distributed and the given resource differs, each previous cluster will receive the
 	// updated resource.
-	Distribute(resource runtime.Object) error
+	Distribute(ctx context.Context, resource runtime.Object) error
 
 	// Delete stops distributing the given resource and deletes it from all clusters to which it was distributed.
 	// The actual deletion may occur asynchronously in which any returned error only indicates that the request
 	// failed.
-	Delete(resource runtime.Object) error
+	Delete(ctx context.Context, resource runtime.Object) error
 }
 
 type FederatorExt interface {
@@ -54,10 +56,10 @@ func NewNoopFederator() Federator {
 	return &noopFederator{}
 }
 
-func (n noopFederator) Distribute(_ runtime.Object) error {
+func (n noopFederator) Distribute(_ context.Context, _ runtime.Object) error {
 	return nil
 }
 
-func (n noopFederator) Delete(_ runtime.Object) error {
+func (n noopFederator) Delete(_ context.Context, _ runtime.Object) error {
 	return nil
 }
