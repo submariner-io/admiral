@@ -44,7 +44,7 @@ func NewCreateOrUpdateFederator(dynClient dynamic.Interface, restMapper meta.RES
 	}
 }
 
-func (f *createOrUpdateFederator) Distribute(obj runtime.Object) error {
+func (f *createOrUpdateFederator) Distribute(ctx context.Context, obj runtime.Object) error {
 	logger.V(log.LIBTRACE).Infof("In Distribute for %#v", obj)
 
 	toDistribute, resourceClient, err := f.toUnstructured(obj)
@@ -58,7 +58,7 @@ func (f *createOrUpdateFederator) Distribute(obj runtime.Object) error {
 
 	f.prepareResourceForSync(toDistribute)
 
-	result, err := util.CreateOrUpdate[runtime.Object](context.TODO(), resource.ForDynamic(resourceClient), toDistribute,
+	result, err := util.CreateOrUpdate[runtime.Object](ctx, resource.ForDynamic(resourceClient), toDistribute,
 		func(obj runtime.Object) (runtime.Object, error) {
 			return util.CopyImmutableMetadata(obj.(*unstructured.Unstructured), toDistribute), nil
 		})
