@@ -496,7 +496,7 @@ var _ = Describe("Broker Syncer", func() {
 		Expect(f).ToNot(BeNil())
 
 		name := string(uuid.NewUUID())
-		Expect(f.Distribute(&corev1.Pod{
+		Expect(f.Distribute(context.Background(), &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
@@ -518,7 +518,7 @@ var _ = Describe("Broker Syncer", func() {
 		Expect(f).ToNot(BeNil())
 
 		name := string(uuid.NewUUID())
-		Expect(f.Distribute(&corev1.Pod{
+		Expect(f.Distribute(context.Background(), &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},

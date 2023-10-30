@@ -40,7 +40,7 @@ func NewCreateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper,
 }
 
 //nolint:wrapcheck // This function is effectively a wrapper so no need to wrap errors.
-func (f *createFederator) Distribute(obj runtime.Object) error {
+func (f *createFederator) Distribute(ctx context.Context, obj runtime.Object) error {
 	logger.V(log.LIBTRACE).Infof("In Distribute for %#v", obj)
 
 	toDistribute, resourceClient, err := f.toUnstructured(obj)
@@ -50,7 +50,7 @@ func (f *createFederator) Distribute(obj runtime.Object) error {
 
 	f.prepareResourceForSync(toDistribute)
 
-	_, err = resourceClient.Create(context.TODO(), toDistribute, metav1.CreateOptions{})
+	_, err = resourceClient.Create(ctx, toDistribute, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
 		return nil
 	}

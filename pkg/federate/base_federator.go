@@ -63,7 +63,7 @@ func newBaseFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, t
 	return b
 }
 
-func (f *baseFederator) Delete(obj runtime.Object) error {
+func (f *baseFederator) Delete(ctx context.Context, obj runtime.Object) error {
 	toDelete, resourceClient, err := f.toUnstructured(obj)
 	if err != nil {
 		return err
@@ -71,7 +71,7 @@ func (f *baseFederator) Delete(obj runtime.Object) error {
 
 	logger.V(log.LIBTRACE).Infof("Deleting resource: %#v", toDelete)
 
-	err = resourceClient.Delete(context.TODO(), toDelete.GetName(), metav1.DeleteOptions{})
+	err = resourceClient.Delete(ctx, toDelete.GetName(), metav1.DeleteOptions{})
 
 	if f.eventLogName != "" && err == nil {
 		logger.Infof("%s: Deleted %s \"%s/%s\" ", f.eventLogName, toDelete.GetKind(), toDelete.GetNamespace(), toDelete.GetName())

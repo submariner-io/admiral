@@ -18,6 +18,7 @@ limitations under the License.
 package federate_test
 
 import (
+	"context"
 	"errors"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -36,6 +37,8 @@ import (
 )
 
 var (
+	ctx = context.Background()
+
 	_ = Describe("CreateOrUpdate Federator", testCreateOrUpdateFederator)
 	_ = Describe("Create Federator", testCreateFederator)
 	_ = Describe("Update Federator", testUpdateFederator)
@@ -61,7 +64,7 @@ func testCreateOrUpdateFederator() {
 	When("the resource does not already exist in the datastore", func() {
 		Context("and a local cluster ID is specified", func() {
 			It("should create the resource with the cluster ID label", func() {
-				Expect(f.Distribute(t.resource)).To(Succeed())
+				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
 		})
@@ -72,7 +75,7 @@ func testCreateOrUpdateFederator() {
 			})
 
 			It("should create the resource without the cluster ID label", func() {
-				Expect(f.Distribute(t.resource)).To(Succeed())
+				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
 		})
@@ -86,7 +89,7 @@ func testCreateOrUpdateFederator() {
 			})
 
 			It("should create the resource with the Status data", func() {
-				Expect(f.Distribute(t.resource)).To(Succeed())
+				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
 		})
@@ -103,7 +106,7 @@ func testCreateOrUpdateFederator() {
 			})
 
 			It("should create the resource with the OwnerReferences", func() {
-				Expect(f.Distribute(t.resource)).To(Succeed())
+				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
 		})
@@ -114,7 +117,7 @@ func testCreateOrUpdateFederator() {
 			})
 
 			It("should return an error", func() {
-				Expect(f.Distribute(t.resource)).ToNot(Succeed())
+				Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 			})
 		})
 
@@ -129,7 +132,7 @@ func testCreateOrUpdateFederator() {
 			})
 
 			It("should update the resource", func() {
-				Expect(f.Distribute(t.resource)).To(Succeed())
+				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
 		})
@@ -143,7 +146,7 @@ func testCreateOrUpdateFederator() {
 		})
 
 		It("should update the resource", func() {
-			Expect(f.Distribute(t.resource)).To(Succeed())
+			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 			t.verifyResource()
 		})
 
@@ -153,7 +156,7 @@ func testCreateOrUpdateFederator() {
 			})
 
 			It("should retry until it succeeds", func() {
-				Expect(f.Distribute(t.resource)).To(Succeed())
+				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
 		})
@@ -164,7 +167,7 @@ func testCreateOrUpdateFederator() {
 			})
 
 			It("should return an error", func() {
-				Expect(f.Distribute(t.resource)).ToNot(Succeed())
+				Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 			})
 		})
 	})
@@ -175,7 +178,7 @@ func testCreateOrUpdateFederator() {
 		})
 
 		It("should return an error", func() {
-			Expect(f.Distribute(t.resource)).ToNot(Succeed())
+			Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 		})
 	})
 
@@ -186,7 +189,7 @@ func testCreateOrUpdateFederator() {
 		})
 
 		It("should create the resource in the source namespace", func() {
-			Expect(f.Distribute(t.resource)).To(Succeed())
+			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 			t.verifyResource()
 		})
 	})
@@ -210,7 +213,7 @@ func testCreateFederator() {
 
 	When("the resource does not already exist in the datastore", func() {
 		It("create the resource", func() {
-			Expect(f.Distribute(t.resource)).To(Succeed())
+			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 			t.verifyResource()
 		})
 
@@ -220,7 +223,7 @@ func testCreateFederator() {
 			})
 
 			It("should return an error", func() {
-				Expect(f.Distribute(t.resource)).ToNot(Succeed())
+				Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 			})
 		})
 	})
@@ -232,7 +235,7 @@ func testCreateFederator() {
 		})
 
 		It("should succeed and not update the resource", func() {
-			Expect(f.Distribute(test.NewPodWithImage(test.LocalNamespace, "apache"))).To(Succeed())
+			Expect(f.Distribute(ctx, test.NewPodWithImage(test.LocalNamespace, "apache"))).To(Succeed())
 			t.verifyResource()
 		})
 	})
@@ -263,7 +266,7 @@ func testUpdateFederator() {
 		})
 
 		It("should update the resource", func() {
-			Expect(f.Distribute(t.resource)).To(Succeed())
+			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 			t.verifyResource()
 		})
 
@@ -273,7 +276,7 @@ func testUpdateFederator() {
 			})
 
 			It("should retry until it succeeds", func() {
-				Expect(f.Distribute(t.resource)).To(Succeed())
+				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
 
@@ -283,7 +286,7 @@ func testUpdateFederator() {
 				})
 
 				It("should return an error", func() {
-					Expect(f.Distribute(t.resource)).ToNot(Succeed())
+					Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 				})
 			})
 		})
@@ -294,14 +297,14 @@ func testUpdateFederator() {
 			})
 
 			It("should return an error", func() {
-				Expect(f.Distribute(t.resource)).ToNot(Succeed())
+				Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 			})
 		})
 	})
 
 	When("the resource does not exist in the datastore", func() {
 		It("should succeed", func() {
-			Expect(f.Distribute(t.resource)).To(Succeed())
+			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 		})
 	})
 }
@@ -337,7 +340,7 @@ func testUpdateStatusFederator() {
 				},
 			}
 
-			Expect(f.Distribute(t.resource)).To(Succeed())
+			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 			t.verifyResource()
 		})
 	})
@@ -355,7 +358,7 @@ func testUpdateStatusFederator() {
 				PodIP: "1.2.3.4",
 			}
 
-			Expect(f.Distribute(t.resource)).To(Succeed())
+			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 			t.verifyResource()
 		})
 	})
@@ -376,7 +379,7 @@ func testUpdateStatusFederator() {
 			t.resource.Annotations = map[string]string{"key1": "abc"}
 			t.resource.Labels = map[string]string{"key2": "def"}
 
-			Expect(f.Distribute(t.resource)).To(Succeed())
+			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 
 			t.resource = prev
 
@@ -408,7 +411,7 @@ func testDelete() {
 		})
 
 		It("should delete the resource", func() {
-			Expect(f.Delete(t.resource)).To(Succeed())
+			Expect(f.Delete(ctx, t.resource)).To(Succeed())
 
 			_, err := test.GetResourceAndError(t.resourceClient, t.resource)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
@@ -420,7 +423,7 @@ func testDelete() {
 			})
 
 			It("should return an error", func() {
-				Expect(f.Delete(t.resource)).ToNot(Succeed())
+				Expect(f.Delete(ctx, t.resource)).ToNot(Succeed())
 			})
 		})
 
@@ -431,7 +434,7 @@ func testDelete() {
 			})
 
 			It("should delete the resource from the source namespace", func() {
-				Expect(f.Delete(t.resource)).To(Succeed())
+				Expect(f.Delete(ctx, t.resource)).To(Succeed())
 
 				_, err := test.GetResourceAndError(t.resourceClient, t.resource)
 				Expect(apierrors.IsNotFound(err)).To(BeTrue())
@@ -441,7 +444,7 @@ func testDelete() {
 
 	When("the resource does not exist in the datastore", func() {
 		It("should return NotFound error", func() {
-			Expect(apierrors.IsNotFound(f.Delete(t.resource))).To(BeTrue())
+			Expect(apierrors.IsNotFound(f.Delete(ctx, t.resource))).To(BeTrue())
 		})
 	})
 }

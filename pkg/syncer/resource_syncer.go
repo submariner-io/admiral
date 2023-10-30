@@ -458,7 +458,7 @@ func (r *resourceSyncer) processNextWorkItem(key, _, _ string) (bool, error) {
 
 		r.log.V(log.LIBDEBUG).Infof("Syncer %q syncing resource %q", r.config.Name, resource.GetName())
 
-		err = r.config.Federator.Distribute(resource)
+		err = r.config.Federator.Distribute(context.Background(), resource)
 		if err != nil || r.onSuccessfulSync(resource, transformed, op) {
 			return true, errors.Wrapf(err, "error distributing resource %q", key)
 		}
@@ -503,7 +503,7 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 
 		deleted := true
 
-		err := r.config.Federator.Delete(resource)
+		err := r.config.Federator.Delete(context.Background(), resource)
 		if apierrors.IsNotFound(err) {
 			r.log.V(log.LIBDEBUG).Infof("Syncer %q: resource %q not found", r.config.Name, resource.GetName())
 
