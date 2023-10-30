@@ -20,6 +20,7 @@ limitations under the License.
 package fake
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/gomega"
@@ -42,7 +43,7 @@ func New() *Federator {
 	}
 }
 
-func (f *Federator) Distribute(resource runtime.Object) error {
+func (f *Federator) Distribute(_ context.Context, resource runtime.Object) error {
 	err := f.FailOnDistribute
 	if err != nil {
 		if f.ResetOnFailure {
@@ -57,7 +58,7 @@ func (f *Federator) Distribute(resource runtime.Object) error {
 	return nil
 }
 
-func (f *Federator) Delete(resource runtime.Object) error {
+func (f *Federator) Delete(_ context.Context, resource runtime.Object) error {
 	err := f.FailOnDelete
 	if err != nil {
 		if f.ResetOnFailure {
