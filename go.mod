@@ -13,7 +13,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.16.0
 	github.com/rs/zerolog v1.30.0
-	github.com/submariner-io/shipyard v0.16.1
+	github.com/submariner-io/shipyard v0.16.2
 	golang.org/x/time v0.3.0
 	k8s.io/api v0.27.7
 	k8s.io/apimachinery v0.27.7
