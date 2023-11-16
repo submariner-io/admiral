@@ -20,6 +20,7 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -105,16 +106,27 @@ func AwaitStatusCondition(expCond *metav1.Condition, get func() ([]metav1.Condit
 }
 
 func AwaitResource[T runtime.Object](client resource.Interface[T], name string) T {
-	var obj T
+	return AwaitAndVerifyResource(client, name, nil)
+}
+
+func AwaitAndVerifyResource[T runtime.Object](client resource.Interface[T], name string, verify func(T) bool) T {
+	var found T
 
 	Eventually(func() error {
-		var err error
+		obj, err := client.Get(context.TODO(), name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
 
-		obj, err = client.Get(context.TODO(), name, metav1.GetOptions{})
-		return err
-	}, 3).Should(Succeed())
+		if verify == nil || verify(obj) {
+			found = obj
+			return nil
+		}
 
-	return obj
+		return fmt.Errorf("resource %q was found but not verified", name)
+	}, 3*time.Second, 50*time.Millisecond).Should(Succeed())
+
+	return found
 }
 
 func AwaitNoResource[T runtime.Object](client resource.Interface[T], name string) {

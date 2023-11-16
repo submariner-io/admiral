@@ -27,7 +27,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/fake"
 	"github.com/submariner-io/admiral/pkg/resource"
-	"github.com/submariner-io/admiral/pkg/syncer/test"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,6 +36,8 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 )
+
+const testNamespace = "test-ns"
 
 var _ = Describe("Create", func() {
 	t := newBasicReactorsTestDriver()
@@ -180,7 +181,7 @@ var _ = Describe("List", func() {
 
 	When("a field selector is specified", func() {
 		It("should return the correct resources", func() {
-			list, err := t.client.CoreV1().Pods(test.LocalNamespace).List(context.Background(), metav1.ListOptions{
+			list, err := t.client.CoreV1().Pods(testNamespace).List(context.Background(), metav1.ListOptions{
 				FieldSelector: fields.OneTermEqualSelector("metadata.name", t.pod.Name).String(),
 			})
 
@@ -199,7 +200,7 @@ var _ = Describe("Watch", func() {
 	JustBeforeEach(func() {
 		var err error
 
-		watcher, err = t.client.CoreV1().Pods(test.LocalNamespace).Watch(context.Background(), metav1.ListOptions{
+		watcher, err = t.client.CoreV1().Pods(testNamespace).Watch(context.Background(), metav1.ListOptions{
 			LabelSelector: k8slabels.SelectorFromSet(t.pod.Labels).String(),
 		})
 		Expect(err).To(Succeed())
@@ -257,7 +258,7 @@ var _ = Describe("DeleteCollection", func() {
 			},
 		})
 
-		err := t.client.CoreV1().Pods(test.LocalNamespace).DeleteCollection(context.Background(), metav1.DeleteOptions{},
+		err := t.client.CoreV1().Pods(testNamespace).DeleteCollection(context.Background(), metav1.DeleteOptions{},
 			metav1.ListOptions{
 				LabelSelector: k8slabels.SelectorFromSet(t.pod.Labels).String(),
 			})
@@ -304,7 +305,7 @@ func newBasicReactorsTestDriver() *basicReactorsTestDriver {
 }
 
 func (t *basicReactorsTestDriver) doGet(name string) (*corev1.Pod, error) {
-	return t.client.CoreV1().Pods(test.LocalNamespace).Get(context.Background(), name, metav1.GetOptions{})
+	return t.client.CoreV1().Pods(testNamespace).Get(context.Background(), name, metav1.GetOptions{})
 }
 
 func (t *basicReactorsTestDriver) assertGetSuccess(p *corev1.Pod) *corev1.Pod {
@@ -316,7 +317,7 @@ func (t *basicReactorsTestDriver) assertGetSuccess(p *corev1.Pod) *corev1.Pod {
 }
 
 func (t *basicReactorsTestDriver) doCreate(pod *corev1.Pod) (*corev1.Pod, error) {
-	return t.client.CoreV1().Pods(test.LocalNamespace).Create(context.Background(), pod, metav1.CreateOptions{})
+	return t.client.CoreV1().Pods(testNamespace).Create(context.Background(), pod, metav1.CreateOptions{})
 }
 
 func (t *basicReactorsTestDriver) assertCreateSuccess(pod *corev1.Pod) *corev1.Pod {
@@ -327,7 +328,7 @@ func (t *basicReactorsTestDriver) assertCreateSuccess(pod *corev1.Pod) *corev1.P
 }
 
 func (t *basicReactorsTestDriver) doUpdate() (*corev1.Pod, error) {
-	return t.client.CoreV1().Pods(test.LocalNamespace).Update(context.Background(), t.pod, metav1.UpdateOptions{})
+	return t.client.CoreV1().Pods(testNamespace).Update(context.Background(), t.pod, metav1.UpdateOptions{})
 }
 
 func (t *basicReactorsTestDriver) doUpdateSuccess() *corev1.Pod {
@@ -339,5 +340,5 @@ func (t *basicReactorsTestDriver) doUpdateSuccess() *corev1.Pod {
 
 //nolint:gocritic // Ignore hugeParam
 func (t *basicReactorsTestDriver) doDelete(opts metav1.DeleteOptions) error {
-	return t.client.CoreV1().Pods(test.LocalNamespace).Delete(context.Background(), t.pod.Name, opts)
+	return t.client.CoreV1().Pods(testNamespace).Delete(context.Background(), t.pod.Name, opts)
 }
