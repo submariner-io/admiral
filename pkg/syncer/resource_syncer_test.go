@@ -29,7 +29,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate/fake"
 	. "github.com/submariner-io/admiral/pkg/gomega"
-	"github.com/submariner-io/admiral/pkg/resource"
+	resourceutils "github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -90,7 +90,7 @@ func testReconcileLocalToRemote() {
 	When("the resource to reconcile is local and does not exist", func() {
 		It("should invoke delete", func() {
 			d.resource.Namespace = test.LocalNamespace
-			d.federator.VerifyDelete(test.SetClusterIDLabel(resource.MustToUnstructured(d.resource), ""))
+			d.federator.VerifyDelete(test.SetClusterIDLabel(d.resource, ""))
 		})
 	})
 
@@ -133,7 +133,7 @@ func testReconcileRemoteToLocal() {
 
 	When("the resource to reconcile is remote and does not exist", func() {
 		It("should invoke delete", func() {
-			d.federator.VerifyDelete(resource.MustToUnstructured(d.resource))
+			d.federator.VerifyDelete(d.resource)
 		})
 	})
 
@@ -177,7 +177,7 @@ func testReconcileNoDirection() {
 
 	When("the resource to reconcile does not exist", func() {
 		It("should invoke delete", func() {
-			d.federator.VerifyDelete(resource.MustToUnstructured(d.resource))
+			d.federator.VerifyDelete(d.resource)
 		})
 	})
 
@@ -355,11 +355,11 @@ func testTransformFunction() {
 	})
 
 	verifyDistribute := func() {
-		d.federator.VerifyDistribute(test.SetClusterIDLabel(resource.MustToUnstructured(transformed), "remote"))
+		d.federator.VerifyDistribute(test.SetClusterIDLabel(transformed.DeepCopy(), "remote"))
 	}
 
 	verifyDelete := func() {
-		d.federator.VerifyDelete(test.SetClusterIDLabel(resource.MustToUnstructured(transformed), "remote"))
+		d.federator.VerifyDelete(test.SetClusterIDLabel(transformed.DeepCopy(), "remote"))
 	}
 
 	When("a resource is created in the datastore", func() {
@@ -399,7 +399,7 @@ func testTransformFunction() {
 
 			d.resource = test.NewPodWithImage(d.config.SourceNamespace, "updated")
 			test.UpdateResource(d.sourceClient, test.NewPodWithImage(d.config.SourceNamespace, "updated"))
-			d.federator.VerifyDistribute(resource.MustToUnstructured(transformed))
+			d.federator.VerifyDistribute(transformed)
 			Eventually(expOperation).Should(Receive(Equal(syncer.Update)))
 		})
 	})
@@ -630,7 +630,7 @@ func testOnSuccessfulSyncFunction() {
 
 			It("should invoke the OnSuccessfulSync function with the transformed resource", func() {
 				test.CreateResource(d.sourceClient, d.resource)
-				d.federator.VerifyDistribute(resource.MustToUnstructured(expResource))
+				d.federator.VerifyDistribute(expResource)
 				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 			})
 		})
@@ -883,7 +883,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
+				d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
 			})
 		})
 
@@ -894,7 +894,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
+				d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
 			})
 		})
 	})
@@ -931,7 +931,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
+				d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
 			})
 		})
 
@@ -941,7 +941,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
+				d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
 			})
 		})
 	})
@@ -960,7 +960,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
+				d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
 			})
 		})
 	})
@@ -976,7 +976,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
+				d.federator.VerifyDistribute(test.GetResource(d.sourceClient, d.resource))
 			})
 		})
 
@@ -1152,11 +1152,11 @@ func testRequeueResource() {
 		})
 
 		It("should requeue it", func() {
-			d.federator.VerifyDistribute(resource.MustToUnstructured(transformed))
+			d.federator.VerifyDistribute(transformed)
 
 			d.syncer.RequeueResource(d.resource.Name, d.resource.Namespace)
 
-			d.federator.VerifyDistribute(resource.MustToUnstructured(transformed))
+			d.federator.VerifyDistribute(transformed)
 		})
 	})
 
@@ -1257,7 +1257,7 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 }
 
 func (t *testDriver) addInitialResource(obj runtime.Object) {
-	t.initialResources = append(t.initialResources, resource.MustToUnstructured(obj))
+	t.initialResources = append(t.initialResources, resourceutils.MustToUnstructured(obj))
 }
 
 func (t *testDriver) verifyDistributeOnCreateTest(clusterID string) {

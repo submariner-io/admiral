@@ -24,12 +24,14 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
+	"github.com/submariner-io/admiral/pkg/resource"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type Federator struct {
-	distribute       chan runtime.Object
-	delete           chan runtime.Object
+	distribute       chan *unstructured.Unstructured
+	delete           chan *unstructured.Unstructured
 	FailOnDistribute error
 	FailOnDelete     error
 	ResetOnFailure   bool
@@ -37,13 +39,13 @@ type Federator struct {
 
 func New() *Federator {
 	return &Federator{
-		distribute:     make(chan runtime.Object, 100),
-		delete:         make(chan runtime.Object, 100),
+		distribute:     make(chan *unstructured.Unstructured, 100),
+		delete:         make(chan *unstructured.Unstructured, 100),
 		ResetOnFailure: true,
 	}
 }
 
-func (f *Federator) Distribute(_ context.Context, resource runtime.Object) error {
+func (f *Federator) Distribute(_ context.Context, obj runtime.Object) error {
 	err := f.FailOnDistribute
 	if err != nil {
 		if f.ResetOnFailure {
@@ -53,12 +55,12 @@ func (f *Federator) Distribute(_ context.Context, resource runtime.Object) error
 		return err
 	}
 
-	f.distribute <- resource
+	f.distribute <- resource.MustToUnstructured(obj)
 
 	return nil
 }
 
-func (f *Federator) Delete(_ context.Context, resource runtime.Object) error {
+func (f *Federator) Delete(_ context.Context, obj runtime.Object) error {
 	err := f.FailOnDelete
 	if err != nil {
 		if f.ResetOnFailure {
@@ -68,13 +70,13 @@ func (f *Federator) Delete(_ context.Context, resource runtime.Object) error {
 		return err
 	}
 
-	f.delete <- resource
+	f.delete <- resource.MustToUnstructured(obj)
 
 	return nil
 }
 
 func (f *Federator) VerifyDistribute(expected runtime.Object) {
-	Eventually(f.distribute, 5).Should(Receive(Equal(expected)), "Distribute was not called")
+	Eventually(f.distribute, 5).Should(Receive(Equal(resource.MustToUnstructured(expected))), "Distribute was not called")
 }
 
 func (f *Federator) VerifyNoDistribute() {
@@ -82,7 +84,7 @@ func (f *Federator) VerifyNoDistribute() {
 }
 
 func (f *Federator) VerifyDelete(expected runtime.Object) {
-	Eventually(f.delete, 5).Should(Receive(Equal(expected)), "Delete was not called")
+	Eventually(f.delete, 5).Should(Receive(Equal(resource.MustToUnstructured(expected))), "Delete was not called")
 }
 
 func (f *Federator) VerifyNoDelete() {
