@@ -25,7 +25,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/submariner-io/admiral/pkg/syncer/test"
+	"github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -73,7 +73,7 @@ func (r *DeleteCollectionReactor) react(action testing.Action) (bool, runtime.Ob
 			return true, nil, err
 		}
 
-		raw := test.ToUnstructured(obj)
+		raw := resource.MustToUnstructured(obj)
 		items, found, err := unstructured.NestedSlice(raw.Object, "items")
 		Expect(err).To(Succeed())
 		Expect(found).To(BeTrue())

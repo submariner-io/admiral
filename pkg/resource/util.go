@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
@@ -56,9 +57,7 @@ func MustToUnstructured(from runtime.Object) *unstructured.Unstructured {
 
 func MustToUnstructuredUsingScheme(from runtime.Object, usingScheme *runtime.Scheme) *unstructured.Unstructured {
 	u, err := ToUnstructuredUsingScheme(from, usingScheme)
-	if err != nil {
-		panic(err)
-	}
+	utilruntime.Must(err)
 
 	return u
 }

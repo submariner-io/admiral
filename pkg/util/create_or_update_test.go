@@ -144,7 +144,8 @@ var _ = Describe("CreateOrUpdate function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	createOrUpdate := func(expResult util.OperationResult) error {
-		result, err := util.CreateOrUpdate[runtime.Object](context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
+		result, err := util.CreateOrUpdate[runtime.Object](context.TODO(), resource.ForDynamic(t.client),
+			resource.MustToUnstructured(t.pod), t.mutateFn)
 		if err != nil && expResult != util.OperationResultNone {
 			return err
 		}
@@ -246,7 +247,7 @@ var _ = Describe("Update function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	update := func() error {
-		return util.Update[runtime.Object](context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
+		return util.Update[runtime.Object](context.TODO(), resource.ForDynamic(t.client), resource.MustToUnstructured(t.pod), t.mutateFn)
 	}
 
 	When("the resource doesn't exist", func() {
@@ -268,7 +269,7 @@ var _ = Describe("MustUpdate function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	mustUpdate := func() error {
-		return util.MustUpdate[runtime.Object](context.TODO(), resource.ForDynamic(t.client), test.ToUnstructured(t.pod), t.mutateFn)
+		return util.MustUpdate[runtime.Object](context.TODO(), resource.ForDynamic(t.client), resource.MustToUnstructured(t.pod), t.mutateFn)
 	}
 
 	When("the resource doesn't exist", func() {
@@ -318,7 +319,7 @@ func newCreateOrUpdateTestDiver() *createOrUpdateTestDriver {
 		})
 
 		t.mutateFn = func(existing runtime.Object) (runtime.Object, error) {
-			obj := test.ToUnstructured(t.pod)
+			obj := resource.MustToUnstructured(t.pod)
 			obj.SetUID(resource.MustToMeta(existing).GetUID())
 			return util.Replace(obj)(nil)
 		}

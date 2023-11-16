@@ -24,7 +24,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/submariner-io/admiral/pkg/syncer/test"
+	"github.com/submariner-io/admiral/pkg/resource"
 	testV1 "github.com/submariner-io/admiral/test/apis/admiral.submariner.io/v1"
 	"github.com/submariner-io/shipyard/test/e2e/framework"
 	metaapi "k8s.io/apimachinery/pkg/api/meta"
@@ -48,16 +48,16 @@ func DeleteAllToasters(client dynamic.Interface, namespace, clusterName string) 
 	DeleteAllOf(client, ToasterGVR(), namespace, clusterName)
 }
 
-func DeleteAllOf(client dynamic.Interface, gvr *schema.GroupVersionResource, namespace, clusterName string) {
+func DeleteAllOf(dynClient dynamic.Interface, gvr *schema.GroupVersionResource, namespace, clusterName string) {
 	By(fmt.Sprintf("Deleting all %s in namespace %q from %q", gvr.Resource, namespace, clusterName))
 
-	resource := client.Resource(*gvr).Namespace(namespace)
-	Expect(resource.DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{})).To(Succeed())
+	client := dynClient.Resource(*gvr).Namespace(namespace)
+	Expect(client.DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{})).To(Succeed())
 
 	framework.AwaitUntil(fmt.Sprintf("list %s in namespace %q from %q", gvr.Resource, namespace, clusterName), func() (i interface{},
 		e error,
 	) {
-		return resource.List(context.TODO(), metav1.ListOptions{})
+		return client.List(context.TODO(), metav1.ListOptions{})
 	}, func(result interface{}) (bool, string, error) {
 		list, ok := result.(*unstructured.UnstructuredList)
 		Expect(ok).To(BeTrue())
@@ -73,7 +73,7 @@ func DeleteAllOf(client dynamic.Interface, gvr *schema.GroupVersionResource, nam
 func CreateToaster(client dynamic.Interface, toaster *testV1.Toaster, clusterName string) *testV1.Toaster {
 	By(fmt.Sprintf("Creating Toaster %q in namespace %q in %q", toaster.Name, toaster.Namespace, clusterName))
 
-	obj, err := client.Resource(*ToasterGVR()).Namespace(toaster.Namespace).Create(context.TODO(), test.ToUnstructured(toaster),
+	obj, err := client.Resource(*ToasterGVR()).Namespace(toaster.Namespace).Create(context.TODO(), resource.MustToUnstructured(toaster),
 		metav1.CreateOptions{})
 	Expect(err).To(Succeed())
 

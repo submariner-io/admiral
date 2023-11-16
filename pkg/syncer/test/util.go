@@ -60,7 +60,7 @@ func GetResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object
 }
 
 func CreateResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
-	u := ToUnstructured(obj)
+	u := resource.MustToUnstructured(obj)
 	u.SetResourceVersion("")
 
 	created, err := resourceInterface.Create(context.TODO(), u, metav1.CreateOptions{})
@@ -181,7 +181,7 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 	newObjs := make([]runtime.Object, 0, len(initObjs))
 
 	for _, obj := range initObjs {
-		raw := ToUnstructured(obj)
+		raw := resource.MustToUnstructured(obj)
 		raw.SetUID(uuid.NewUUID())
 		raw.SetResourceVersion("1")
 
@@ -203,13 +203,6 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 	}
 
 	return newObjs
-}
-
-func ToUnstructured(obj runtime.Object) *unstructured.Unstructured {
-	raw, err := resource.ToUnstructured(obj)
-	Expect(err).To(Succeed())
-
-	return raw
 }
 
 func SetClusterIDLabel(obj runtime.Object, clusterID string) runtime.Object {

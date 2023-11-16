@@ -355,11 +355,11 @@ func testTransformFunction() {
 	})
 
 	verifyDistribute := func() {
-		d.federator.VerifyDistribute(test.SetClusterIDLabel(test.ToUnstructured(transformed), "remote"))
+		d.federator.VerifyDistribute(test.SetClusterIDLabel(resource.MustToUnstructured(transformed), "remote"))
 	}
 
 	verifyDelete := func() {
-		d.federator.VerifyDelete(test.SetClusterIDLabel(test.ToUnstructured(transformed), "remote"))
+		d.federator.VerifyDelete(test.SetClusterIDLabel(resource.MustToUnstructured(transformed), "remote"))
 	}
 
 	When("a resource is created in the datastore", func() {
@@ -399,7 +399,7 @@ func testTransformFunction() {
 
 			d.resource = test.NewPodWithImage(d.config.SourceNamespace, "updated")
 			test.UpdateResource(d.sourceClient, test.NewPodWithImage(d.config.SourceNamespace, "updated"))
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			d.federator.VerifyDistribute(resource.MustToUnstructured(transformed))
 			Eventually(expOperation).Should(Receive(Equal(syncer.Update)))
 		})
 	})
@@ -630,7 +630,7 @@ func testOnSuccessfulSyncFunction() {
 
 			It("should invoke the OnSuccessfulSync function with the transformed resource", func() {
 				test.CreateResource(d.sourceClient, d.resource)
-				d.federator.VerifyDistribute(test.ToUnstructured(expResource))
+				d.federator.VerifyDistribute(resource.MustToUnstructured(expResource))
 				Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 			})
 		})
@@ -883,7 +883,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
 			})
 		})
 
@@ -894,7 +894,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
 			})
 		})
 	})
@@ -931,7 +931,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
 			})
 		})
 
@@ -941,7 +941,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
 			})
 		})
 	})
@@ -960,7 +960,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
 			})
 		})
 	})
@@ -976,7 +976,7 @@ func testUpdateSuppression() {
 			})
 
 			It("should distribute it", func() {
-				d.federator.VerifyDistribute(test.ToUnstructured(d.resource))
+				d.federator.VerifyDistribute(resource.MustToUnstructured(d.resource))
 			})
 		})
 
@@ -1152,11 +1152,11 @@ func testRequeueResource() {
 		})
 
 		It("should requeue it", func() {
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			d.federator.VerifyDistribute(resource.MustToUnstructured(transformed))
 
 			d.syncer.RequeueResource(d.resource.Name, d.resource.Namespace)
 
-			d.federator.VerifyDistribute(test.ToUnstructured(transformed))
+			d.federator.VerifyDistribute(resource.MustToUnstructured(transformed))
 		})
 	})
 
@@ -1257,7 +1257,7 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 }
 
 func (t *testDriver) addInitialResource(obj runtime.Object) {
-	t.initialResources = append(t.initialResources, test.ToUnstructured(obj))
+	t.initialResources = append(t.initialResources, resource.MustToUnstructured(obj))
 }
 
 func (t *testDriver) verifyDistributeOnCreateTest(clusterID string) {
