@@ -58,9 +58,9 @@ func (f *createOrUpdateFederator) Distribute(ctx context.Context, obj runtime.Ob
 
 	f.prepareResourceForSync(toDistribute)
 
-	result, err := util.CreateOrUpdate[runtime.Object](ctx, resource.ForDynamic(resourceClient), toDistribute,
-		func(obj runtime.Object) (runtime.Object, error) {
-			return util.CopyImmutableMetadata(obj.(*unstructured.Unstructured), toDistribute), nil
+	result, err := util.CreateOrUpdate[*unstructured.Unstructured](ctx, resource.ForDynamic(resourceClient), toDistribute,
+		func(obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+			return util.CopyImmutableMetadata(obj, toDistribute), nil
 		})
 
 	if f.eventLogName != "" {

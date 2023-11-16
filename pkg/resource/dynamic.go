@@ -23,7 +23,7 @@ import (
 	"context"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -31,62 +31,38 @@ type dynamicType struct {
 	client dynamic.ResourceInterface
 }
 
-func (d *dynamicType) Get(ctx context.Context, name string, options metav1.GetOptions) (runtime.Object, error) {
+func (d *dynamicType) Get(ctx context.Context, name string, options metav1.GetOptions) (*unstructured.Unstructured, error) {
 	return d.client.Get(ctx, name, options)
 }
 
 //nolint:gocritic // hugeParam - we're matching K8s API
-func (d *dynamicType) Create(ctx context.Context, obj runtime.Object, options metav1.CreateOptions) (runtime.Object, error) {
-	raw, err := ToUnstructured(obj)
-	if err != nil {
-		return nil, err
-	}
-
-	return d.client.Create(ctx, raw, options)
+func (d *dynamicType) Create(ctx context.Context, obj *unstructured.Unstructured, options metav1.CreateOptions,
+) (*unstructured.Unstructured, error) {
+	return d.client.Create(ctx, obj, options)
 }
 
 //nolint:gocritic // hugeParam - we're matching K8s API
-func (d *dynamicType) Update(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-	raw, err := ToUnstructured(obj)
-	if err != nil {
-		return nil, err
-	}
-
-	return d.client.Update(ctx, raw, options)
+func (d *dynamicType) Update(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions,
+) (*unstructured.Unstructured, error) {
+	return d.client.Update(ctx, obj, options)
 }
 
 //nolint:gocritic // hugeParam - we're matching K8s API
-func (d *dynamicType) UpdateStatus(ctx context.Context, obj runtime.Object, options metav1.UpdateOptions) (runtime.Object, error) {
-	raw, err := ToUnstructured(obj)
-	if err != nil {
-		return nil, err
-	}
-
-	return d.client.UpdateStatus(ctx, raw, options)
+func (d *dynamicType) UpdateStatus(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions,
+) (*unstructured.Unstructured, error) {
+	return d.client.UpdateStatus(ctx, obj, options)
 }
 
-func (d *dynamicType) Delete(ctx context.Context, name string,
-	options metav1.DeleteOptions, //nolint:gocritic // hugeParam - we're matching K8s API
-) error {
+//nolint:gocritic // hugeParam - we're matching K8s API
+func (d *dynamicType) Delete(ctx context.Context, name string, options metav1.DeleteOptions) error {
 	return d.client.Delete(ctx, name, options)
 }
 
-func (d *dynamicType) List(ctx context.Context,
-	options metav1.ListOptions, //nolint:gocritic // hugeParam - we're matching K8s API
-) ([]runtime.Object, error) {
-	l, err := d.client.List(ctx, options)
-	return MustExtractList[runtime.Object](l), err
+//nolint:gocritic // hugeParam - we're matching K8s API
+func (d *dynamicType) List(ctx context.Context, options metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+	return d.client.List(ctx, options)
 }
 
-func ForDynamic(client dynamic.ResourceInterface) *InterfaceFuncs[runtime.Object] {
-	t := &dynamicType{client: client}
-
-	return &InterfaceFuncs[runtime.Object]{
-		GetFunc:          t.Get,
-		CreateFunc:       t.Create,
-		UpdateFunc:       t.Update,
-		UpdateStatusFunc: t.UpdateStatus,
-		DeleteFunc:       t.Delete,
-		ListFunc:         t.List,
-	}
+func ForDynamic(client dynamic.ResourceInterface) Interface[*unstructured.Unstructured] {
+	return kubernetesStatusInterfaceAdapter[*unstructured.Unstructured, *unstructured.UnstructuredList](&dynamicType{client: client})
 }

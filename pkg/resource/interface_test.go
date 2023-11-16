@@ -30,6 +30,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -191,14 +192,14 @@ var _ = Describe("Interface", func() {
 	})
 
 	Context("ForDynamic", func() {
-		testInterfaceFuncs(func() resource.Interface[runtime.Object] {
+		testInterfaceFuncs(func() resource.Interface[*unstructured.Unstructured] {
 			return resource.ForDynamic(dynamicfake.NewSimpleDynamicClient(scheme.Scheme).Resource(
 				schema.GroupVersionResource{
 					Group:    corev1.SchemeGroupVersion.Group,
 					Version:  corev1.SchemeGroupVersion.Version,
 					Resource: "pods",
 				}).Namespace(test.LocalNamespace))
-		}, runtime.Object(resource.MustToUnstructured(&corev1.Pod{
+		}, resource.MustToUnstructured(&corev1.Pod{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Pod",
 				APIVersion: "v1",
@@ -210,7 +211,7 @@ var _ = Describe("Interface", func() {
 			Spec: corev1.PodSpec{
 				Hostname: "my-host",
 			},
-		})))
+		}))
 	})
 })
 

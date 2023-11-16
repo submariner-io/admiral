@@ -33,6 +33,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -44,8 +45,8 @@ var _ = Describe("CreateAnew function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	createAnew := func() (runtime.Object, error) {
-		return util.CreateAnew[runtime.Object](context.TODO(), resource.ForDynamic(t.client), t.pod, metav1.CreateOptions{},
-			metav1.DeleteOptions{})
+		return util.CreateAnew[*unstructured.Unstructured](context.TODO(), resource.ForDynamic(t.client),
+			resource.MustToUnstructured(t.pod), metav1.CreateOptions{}, metav1.DeleteOptions{})
 	}
 
 	createAnewSuccess := func() *corev1.Pod {
@@ -144,7 +145,7 @@ var _ = Describe("CreateOrUpdate function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	createOrUpdate := func(expResult util.OperationResult) error {
-		result, err := util.CreateOrUpdate[runtime.Object](context.TODO(), resource.ForDynamic(t.client),
+		result, err := util.CreateOrUpdate[*unstructured.Unstructured](context.TODO(), resource.ForDynamic(t.client),
 			resource.MustToUnstructured(t.pod), t.mutateFn)
 		if err != nil && expResult != util.OperationResultNone {
 			return err
@@ -247,7 +248,8 @@ var _ = Describe("Update function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	update := func() error {
-		return util.Update[runtime.Object](context.TODO(), resource.ForDynamic(t.client), resource.MustToUnstructured(t.pod), t.mutateFn)
+		return util.Update[*unstructured.Unstructured](context.TODO(), resource.ForDynamic(t.client), resource.MustToUnstructured(t.pod),
+			t.mutateFn)
 	}
 
 	When("the resource doesn't exist", func() {
@@ -269,7 +271,8 @@ var _ = Describe("MustUpdate function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	mustUpdate := func() error {
-		return util.MustUpdate[runtime.Object](context.TODO(), resource.ForDynamic(t.client), resource.MustToUnstructured(t.pod), t.mutateFn)
+		return util.MustUpdate[*unstructured.Unstructured](context.TODO(), resource.ForDynamic(t.client),
+			resource.MustToUnstructured(t.pod), t.mutateFn)
 	}
 
 	When("the resource doesn't exist", func() {
@@ -293,7 +296,7 @@ type createOrUpdateTestDriver struct {
 	client      *fake.DynamicResourceClient
 	origBackoff wait.Backoff
 	expectedErr error
-	mutateFn    util.MutateFn[runtime.Object]
+	mutateFn    util.MutateFn[*unstructured.Unstructured]
 }
 
 func newCreateOrUpdateTestDiver() *createOrUpdateTestDriver {
@@ -318,7 +321,7 @@ func newCreateOrUpdateTestDiver() *createOrUpdateTestDriver {
 			Duration: 30 * time.Millisecond,
 		})
 
-		t.mutateFn = func(existing runtime.Object) (runtime.Object, error) {
+		t.mutateFn = func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 			obj := resource.MustToUnstructured(t.pod)
 			obj.SetUID(resource.MustToMeta(existing).GetUID())
 			return util.Replace(obj)(nil)
@@ -482,7 +485,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 
 		Context("and the resource to update is the same", func() {
 			BeforeEach(func() {
-				t.mutateFn = func(existing runtime.Object) (runtime.Object, error) {
+				t.mutateFn = func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 					return existing, nil
 				}
 			})
@@ -497,7 +500,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 		Context("and the mutate function returns an error", func() {
 			BeforeEach(func() {
 				t.expectedErr = errors.New("mutate failure")
-				t.mutateFn = func(existing runtime.Object) (runtime.Object, error) {
+				t.mutateFn = func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 					return nil, t.expectedErr
 				}
 			})

@@ -46,10 +46,7 @@ const (
 )
 
 func GetResourceAndError(resourceInterface dynamic.ResourceInterface, obj runtime.Object) (*unstructured.Unstructured, error) {
-	meta, err := metaapi.Accessor(obj)
-	Expect(err).To(Succeed())
-
-	return resourceInterface.Get(context.TODO(), meta.GetName(), metav1.GetOptions{})
+	return resourceInterface.Get(context.TODO(), resource.MustToMeta(obj).GetName(), metav1.GetOptions{})
 }
 
 func GetResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
@@ -70,8 +67,9 @@ func CreateResource(resourceInterface dynamic.ResourceInterface, obj runtime.Obj
 }
 
 func UpdateResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
-	err := util.Update[runtime.Object](context.Background(), resource.ForDynamic(resourceInterface), obj,
-		util.Replace(obj))
+	u := resource.MustToUnstructured(obj)
+	err := util.Update[*unstructured.Unstructured](context.Background(), resource.ForDynamic(resourceInterface), u,
+		util.Replace(u))
 	Expect(err).To(Succeed())
 
 	return GetResource(resourceInterface, obj)

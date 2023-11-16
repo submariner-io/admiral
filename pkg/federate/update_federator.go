@@ -62,8 +62,8 @@ func (f *updateFederator) Distribute(ctx context.Context, obj runtime.Object) er
 
 	f.prepareResourceForSync(toUpdate)
 
-	return util.Update[runtime.Object](ctx, resource.ForDynamic(resourceClient), toUpdate,
-		func(obj runtime.Object) (runtime.Object, error) {
-			return f.update(obj.(*unstructured.Unstructured), toUpdate), nil
+	return util.Update[*unstructured.Unstructured](ctx, resource.ForDynamic(resourceClient), toUpdate,
+		func(obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+			return f.update(obj, toUpdate), nil
 		})
 }
