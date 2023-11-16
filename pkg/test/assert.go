@@ -104,8 +104,8 @@ func AwaitStatusCondition(expCond *metav1.Condition, get func() ([]metav1.Condit
 	Expect(found.LastTransitionTime).To(Not(BeNil()))
 }
 
-func AwaitResource[T runtime.Object](client resource.Interface[T], name string) runtime.Object {
-	var obj runtime.Object
+func AwaitResource[T runtime.Object](client resource.Interface[T], name string) T {
+	var obj T
 
 	Eventually(func() error {
 		var err error
