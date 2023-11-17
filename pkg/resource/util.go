@@ -87,6 +87,18 @@ func MustToUnstructuredUsingDefaultConverter(from runtime.Object) *unstructured.
 	return u
 }
 
+func MustFromUnstructured[T runtime.Object](u *unstructured.Unstructured, objType T) T {
+	return MustFromUnstructuredUsingScheme(u, objType, scheme.Scheme)
+}
+
+func MustFromUnstructuredUsingScheme[T runtime.Object](u *unstructured.Unstructured, objType T, usingScheme *runtime.Scheme) T {
+	actual := objType.DeepCopyObject().(T)
+	err := usingScheme.Convert(u, actual, nil)
+	utilruntime.Must(err)
+
+	return actual
+}
+
 func MustToMeta(obj interface{}) metav1.Object {
 	objMeta, err := meta.Accessor(obj)
 	if err != nil {

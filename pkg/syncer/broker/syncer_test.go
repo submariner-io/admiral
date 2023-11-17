@@ -256,7 +256,7 @@ var _ = Describe("Broker Syncer", func() {
 			It("should sync to the broker datastore", func() {
 				test.AwaitResource(brokerClient, resource.GetName())
 
-				actual := test.GetPod(brokerClient, resource)
+				actual := test.GetResource(brokerClient, resource)
 				Expect(actual.Labels).To(HaveKeyWithValue(sync.OrigNamespaceLabelKey, metav1.NamespaceDefault))
 			})
 		})

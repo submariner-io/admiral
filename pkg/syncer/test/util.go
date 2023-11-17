@@ -45,28 +45,33 @@ const (
 	LocalNamespace  = "local-ns"
 )
 
-func GetResourceAndError(resourceInterface dynamic.ResourceInterface, obj runtime.Object) (*unstructured.Unstructured, error) {
-	return resourceInterface.Get(context.TODO(), resource.MustToMeta(obj).GetName(), metav1.GetOptions{})
+func GetResourceAndError[T runtime.Object](resourceInterface dynamic.ResourceInterface, obj T) (T, error) {
+	u, err := resourceInterface.Get(context.TODO(), resource.MustToMeta(obj).GetName(), metav1.GetOptions{})
+	if err != nil {
+		return *new(T), err
+	}
+
+	return resource.MustFromUnstructured(u, obj), nil
 }
 
-func GetResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
+func GetResource[T runtime.Object](resourceInterface dynamic.ResourceInterface, obj T) T {
 	ret, err := GetResourceAndError(resourceInterface, obj)
 	Expect(err).To(Succeed())
 
 	return ret
 }
 
-func CreateResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
+func CreateResource[T runtime.Object](resourceInterface dynamic.ResourceInterface, obj T) T {
 	u := resource.MustToUnstructured(obj)
 	u.SetResourceVersion("")
 
 	created, err := resourceInterface.Create(context.TODO(), u, metav1.CreateOptions{})
 	Expect(err).To(Succeed())
 
-	return created
+	return resource.MustFromUnstructured(created, obj)
 }
 
-func UpdateResource(resourceInterface dynamic.ResourceInterface, obj runtime.Object) *unstructured.Unstructured {
+func UpdateResource[T runtime.Object](resourceInterface dynamic.ResourceInterface, obj T) T {
 	u := resource.MustToUnstructured(obj)
 	err := util.Update[*unstructured.Unstructured](context.Background(), resource.ForDynamic(resourceInterface), u,
 		util.Replace(u))
@@ -76,7 +81,7 @@ func UpdateResource(resourceInterface dynamic.ResourceInterface, obj runtime.Obj
 }
 
 func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev1.Pod, expNamespace, clusterID string) {
-	actual := GetPod(resourceInterface, expected)
+	actual := GetResource(resourceInterface, expected)
 
 	Expect(actual.GetName()).To(Equal(expected.GetName()))
 	Expect(actual.GetNamespace()).To(Equal(expNamespace))
@@ -95,16 +100,6 @@ func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev
 	}
 
 	Expect(actual.GetLabels()).To(Equal(duplicate))
-}
-
-func GetPod(resourceInterface dynamic.ResourceInterface, from *corev1.Pod) *corev1.Pod {
-	actual := &corev1.Pod{}
-
-	raw := GetResource(resourceInterface, from)
-	err := scheme.Scheme.Convert(raw, actual, nil)
-	Expect(err).To(Succeed())
-
-	return actual
 }
 
 func NewPod(namespace string) *corev1.Pod {
@@ -198,9 +193,8 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 	return newObjs
 }
 
-func SetClusterIDLabel(obj runtime.Object, clusterID string) runtime.Object {
-	meta, err := metaapi.Accessor(obj)
-	Expect(err).To(Succeed())
+func SetClusterIDLabel[T runtime.Object](obj T, clusterID string) T {
+	meta := resource.MustToMeta(obj)
 
 	labels := meta.GetLabels()
 	if labels == nil {
