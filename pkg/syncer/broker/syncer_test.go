@@ -34,6 +34,7 @@ import (
 	sync "github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/broker"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
+	assert "github.com/submariner-io/admiral/pkg/test"
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -45,6 +46,7 @@ import (
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/dynamic"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/rest"
 )
 
@@ -52,10 +54,10 @@ var _ = Describe("Broker Syncer", func() {
 	var (
 		syncer                 *broker.Syncer
 		config                 *broker.SyncerConfig
-		localDynClient         *fake.DynamicClient
-		localClient            *fake.DynamicResourceClient
-		brokerDynClient        *fake.DynamicClient
-		brokerClient           *fake.DynamicResourceClient
+		localDynClient         *dynamicfake.FakeDynamicClient
+		localClient            dynamic.ResourceInterface
+		brokerDynClient        *dynamicfake.FakeDynamicClient
+		brokerClient           dynamic.ResourceInterface
 		resource               *corev1.Pod
 		transformed            *corev1.Pod
 		initialLocalResources  []runtime.Object
@@ -99,8 +101,8 @@ var _ = Describe("Broker Syncer", func() {
 
 		Expect(corev1.AddToScheme(config.Scheme)).To(Succeed())
 
-		localDynClient = fake.NewDynamicClient(config.Scheme)
-		brokerDynClient = fake.NewDynamicClient(config.Scheme)
+		localDynClient = dynamicfake.NewSimpleDynamicClient(config.Scheme)
+		brokerDynClient = dynamicfake.NewSimpleDynamicClient(config.Scheme)
 	})
 
 	JustBeforeEach(func() {
@@ -134,8 +136,8 @@ var _ = Describe("Broker Syncer", func() {
 			}
 		}
 
-		localClient, _ = localDynClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace).(*fake.DynamicResourceClient)
-		brokerClient, _ = brokerDynClient.Resource(*gvr).Namespace(config.BrokerNamespace).(*fake.DynamicResourceClient)
+		localClient = localDynClient.Resource(*gvr).Namespace(config.ResourceConfigs[0].LocalSourceNamespace)
+		brokerClient = brokerDynClient.Resource(*gvr).Namespace(config.BrokerNamespace)
 
 		for i := range initialLocalResources {
 			test.CreateResource(localDynClient.Resource(*gvr).Namespace(resourceutils.MustToMeta(initialLocalResources[i]).GetNamespace()),
@@ -190,12 +192,13 @@ var _ = Describe("Broker Syncer", func() {
 
 		Context("and then deleted", func() {
 			It("should be deleted from the broker datastore", func() {
-				Expect(localClient.ResourceInterface.Delete(ctx, resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
+				Expect(localClient.Delete(ctx, resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				test.AwaitNoResource(brokerClient, resource.GetName())
 
 				// Ensure the broker syncer did not try to sync back to the local datastore
-				localClient.VerifyNoUpdate(resource.GetName())
-				localClient.VerifyNoDelete(resource.GetName())
+				Consistently(func() []string {
+					return assert.GetOccurredActionVerbs(&localDynClient.Fake, "pods", "update", "delete")
+				}).Should(HaveLen(1))
 			})
 		})
 	})
@@ -205,7 +208,7 @@ var _ = Describe("Broker Syncer", func() {
 			test.SetClusterIDLabel(resource, "remote")
 			test.CreateResource(localClient, resource)
 
-			brokerClient.VerifyNoCreate(resource.GetName())
+			assert.EnsureNoActionsForResource(&brokerDynClient.Fake, "pods", "create")
 		})
 	})
 
@@ -222,12 +225,13 @@ var _ = Describe("Broker Syncer", func() {
 
 		Context("and then deleted", func() {
 			It("should be deleted from the broker datastore", func() {
-				Expect(brokerClient.ResourceInterface.Delete(ctx, resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
+				Expect(brokerClient.Delete(ctx, resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				test.AwaitNoResource(localClient, resource.GetName())
 
 				// Ensure the local syncer did not try to sync back to the broker datastore
-				brokerClient.VerifyNoUpdate(resource.GetName())
-				brokerClient.VerifyNoDelete(resource.GetName())
+				Consistently(func() []string {
+					return assert.GetOccurredActionVerbs(&brokerDynClient.Fake, "pods", "update", "delete")
+				}).Should(HaveLen(1))
 			})
 		})
 	})
@@ -237,7 +241,7 @@ var _ = Describe("Broker Syncer", func() {
 			test.SetClusterIDLabel(resource, config.LocalClusterID)
 			test.CreateResource(brokerClient, resource)
 
-			localClient.VerifyNoCreate(resource.GetName())
+			assert.EnsureNoActionsForResource(&localDynClient.Fake, "pods", "create")
 		})
 	})
 
@@ -350,7 +354,7 @@ var _ = Describe("Broker Syncer", func() {
 			})
 
 			It("should not sync to the broker datastore", func() {
-				brokerClient.VerifyNoUpdate(resource.GetName())
+				assert.EnsureNoActionsForResource(&brokerDynClient.Fake, "pods", "update")
 			})
 		})
 
@@ -387,7 +391,7 @@ var _ = Describe("Broker Syncer", func() {
 			})
 
 			It("should not sync to the local datastore", func() {
-				localClient.VerifyNoUpdate(resource.GetName())
+				assert.EnsureNoActionsForResource(&localDynClient.Fake, "pods", "update")
 			})
 		})
 

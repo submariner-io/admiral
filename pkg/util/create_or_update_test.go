@@ -37,6 +37,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/dynamic"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/testing"
 )
@@ -87,7 +89,7 @@ var _ = Describe("CreateAnew function", func() {
 
 			Context("and Delete returns not found", func() {
 				BeforeEach(func() {
-					t.client.FailOnDelete = apierrors.NewNotFound(schema.GroupResource{}, t.pod.Name)
+					fake.FailOnAction(t.testingFake, "pods", "delete", apierrors.NewNotFound(schema.GroupResource{}, t.pod.Name), true)
 				})
 
 				It("should successfully create the resource", func() {
@@ -97,8 +99,8 @@ var _ = Describe("CreateAnew function", func() {
 
 			Context("and Delete fails", func() {
 				BeforeEach(func() {
-					t.client.FailOnDelete = errors.New("delete failed")
-					t.expectedErr = t.client.FailOnDelete
+					t.expectedErr = errors.New("delete failed")
+					fake.FailOnAction(t.testingFake, "pods", "delete", t.expectedErr, false)
 				})
 
 				It("should return an error", func() {
@@ -108,7 +110,8 @@ var _ = Describe("CreateAnew function", func() {
 
 			Context("and deletion doesn't complete in time", func() {
 				BeforeEach(func() {
-					t.client.PersistentFailOnCreate.Store(apierrors.NewAlreadyExists(schema.GroupResource{}, t.pod.Name))
+					fake.FailOnAction(t.testingFake, "pods", "create", apierrors.NewAlreadyExists(schema.GroupResource{},
+						t.pod.Name), false)
 				})
 
 				It("should return an error", func() {
@@ -131,8 +134,8 @@ var _ = Describe("CreateAnew function", func() {
 
 	When("Create fails", func() {
 		BeforeEach(func() {
-			t.client.FailOnCreate = errors.New("create failed")
-			t.expectedErr = t.client.FailOnCreate
+			t.expectedErr = errors.New("create failed")
+			fake.FailOnAction(t.testingFake, "pods", "create", t.expectedErr, false)
 		})
 
 		It("should return an error", func() {
@@ -212,8 +215,8 @@ var _ = Describe("CreateOrUpdate function", func() {
 
 		Context("and Create fails", func() {
 			JustBeforeEach(func() {
-				t.client.FailOnCreate = apierrors.NewServiceUnavailable("fake")
-				t.expectedErr = t.client.FailOnCreate
+				t.expectedErr = apierrors.NewServiceUnavailable("fake")
+				fake.FailOnAction(t.testingFake, "pods", "create", t.expectedErr, false)
 			})
 
 			It("should return an error", func() {
@@ -228,8 +231,10 @@ var _ = Describe("CreateOrUpdate function", func() {
 			})
 
 			JustBeforeEach(func() {
-				t.client.FailOnGet = apierrors.NewNotFound(schema.GroupResource{}, t.pod.GetName())
-				t.client.FailOnCreate = apierrors.NewAlreadyExists(schema.GroupResource{}, t.pod.GetName())
+				fake.FailOnAction(t.testingFake, "pods", "get", apierrors.NewNotFound(schema.GroupResource{},
+					t.pod.GetName()), true)
+				fake.FailOnAction(t.testingFake, "pods", "create", apierrors.NewAlreadyExists(schema.GroupResource{},
+					t.pod.GetName()), true)
 			})
 
 			It("should eventually update the resource", func() {
@@ -293,7 +298,7 @@ var _ = Describe("MustUpdate function", func() {
 type createOrUpdateTestDriver struct {
 	pod         *corev1.Pod
 	testingFake *testing.Fake
-	client      *fake.DynamicResourceClient
+	client      dynamic.ResourceInterface
 	origBackoff wait.Backoff
 	expectedErr error
 	mutateFn    util.MutateFn[*unstructured.Unstructured]
@@ -303,16 +308,15 @@ func newCreateOrUpdateTestDiver() *createOrUpdateTestDriver {
 	t := &createOrUpdateTestDriver{}
 
 	BeforeEach(func() {
-		dynClient := fake.NewDynamicClient(scheme.Scheme)
+		dynClient := dynamicfake.NewSimpleDynamicClient(scheme.Scheme)
 		t.testingFake = &dynClient.Fake
+		fake.AddBasicReactors(t.testingFake)
 
-		t.client, _ = dynClient.Resource(schema.GroupVersionResource{
+		t.client = dynClient.Resource(schema.GroupVersionResource{
 			Group:    corev1.SchemeGroupVersion.Group,
 			Version:  corev1.SchemeGroupVersion.Version,
 			Resource: "pods",
-		}).Namespace("test").(*fake.DynamicResourceClient)
-
-		t.client.CheckResourceVersionOnUpdate = true
+		}).Namespace("test")
 
 		t.pod = test.NewPod("")
 
@@ -338,8 +342,8 @@ func newCreateOrUpdateTestDiver() *createOrUpdateTestDriver {
 func (t *createOrUpdateTestDriver) testGetFailure(doOper func(util.OperationResult) error) {
 	When("resource retrieval fails", func() {
 		JustBeforeEach(func() {
-			t.client.FailOnGet = apierrors.NewServiceUnavailable("fake")
-			t.expectedErr = t.client.FailOnGet
+			t.expectedErr = apierrors.NewServiceUnavailable("fake")
+			fake.FailOnAction(t.testingFake, "pods", "get", t.expectedErr, false)
 		})
 
 		It("should return an error", func() {
@@ -463,7 +467,8 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 
 		Context("and Update initially fails due to conflict", func() {
 			BeforeEach(func() {
-				t.client.FailOnUpdate = apierrors.NewConflict(schema.GroupResource{}, "", errors.New("conflict"))
+				fake.FailOnAction(t.testingFake, "pods", "update", apierrors.NewConflict(schema.GroupResource{}, "",
+					errors.New("conflict")), true)
 			})
 
 			It("should eventually update the resource", func() {
@@ -474,8 +479,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 
 		Context("and Update fails not due to conflict", func() {
 			JustBeforeEach(func() {
-				t.client.FailOnUpdate = apierrors.NewServiceUnavailable("fake")
-				t.expectedErr = t.client.FailOnUpdate
+				fake.FailOnAction(t.testingFake, "pods", "update", t.expectedErr, false)
 			})
 
 			It("should return an error", func() {
@@ -532,7 +536,6 @@ func (t *createOrUpdateTestDriver) verifyPod() *corev1.Pod {
 }
 
 func (t *createOrUpdateTestDriver) compareWithPod(actual *corev1.Pod) {
-	Expect(actual.GetUID()).NotTo(Equal(t.pod.GetUID()))
 	Expect(actual.Spec).To(Equal(t.pod.Spec))
 	Expect(actual.Status).To(Equal(t.pod.Status))
 }

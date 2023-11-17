@@ -26,6 +26,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/fake"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
+	assert "github.com/submariner-io/admiral/pkg/test"
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,6 +34,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 )
 
@@ -113,7 +116,7 @@ func testCreateOrUpdateFederator() {
 
 		Context("and create fails", func() {
 			BeforeEach(func() {
-				t.resourceClient.FailOnCreate = apierrors.NewServiceUnavailable("fake")
+				fake.FailOnAction(&t.dynClient.Fake, "pods", "create", apierrors.NewServiceUnavailable("fake"), false)
 			})
 
 			It("should return an error", func() {
@@ -127,8 +130,10 @@ func testCreateOrUpdateFederator() {
 				test.CreateResource(t.resourceClient, t.resource)
 				t.resource = test.NewPodWithImage(test.LocalNamespace, "apache")
 
-				t.resourceClient.FailOnGet = apierrors.NewNotFound(schema.GroupResource{}, t.resource.GetName())
-				t.resourceClient.FailOnCreate = apierrors.NewAlreadyExists(schema.GroupResource{}, t.resource.GetName())
+				fake.FailOnAction(&t.dynClient.Fake, "pods", "get",
+					apierrors.NewNotFound(schema.GroupResource{}, t.resource.GetName()), true)
+				fake.FailOnAction(&t.dynClient.Fake, "pods", "create", apierrors.NewAlreadyExists(schema.GroupResource{},
+					t.resource.GetName()), true)
 			})
 
 			It("should update the resource", func() {
@@ -152,7 +157,8 @@ func testCreateOrUpdateFederator() {
 
 		Context("and update initially fails due to conflict", func() {
 			BeforeEach(func() {
-				t.resourceClient.FailOnUpdate = apierrors.NewConflict(schema.GroupResource{}, "", errors.New("fake"))
+				fake.FailOnAction(&t.dynClient.Fake, "pods", "update",
+					apierrors.NewConflict(schema.GroupResource{}, "", errors.New("fake")), true)
 			})
 
 			It("should retry until it succeeds", func() {
@@ -163,7 +169,7 @@ func testCreateOrUpdateFederator() {
 
 		Context("and update fails not due to conflict", func() {
 			BeforeEach(func() {
-				t.resourceClient.FailOnUpdate = apierrors.NewServiceUnavailable("fake")
+				fake.FailOnAction(&t.dynClient.Fake, "pods", "update", apierrors.NewServiceUnavailable("fake"), false)
 			})
 
 			It("should return an error", func() {
@@ -174,7 +180,7 @@ func testCreateOrUpdateFederator() {
 
 	When("retrieval to find an existing resource in the datastore fails", func() {
 		BeforeEach(func() {
-			t.resourceClient.FailOnGet = apierrors.NewServiceUnavailable("fake")
+			fake.FailOnAction(&t.dynClient.Fake, "pods", "get", apierrors.NewServiceUnavailable("fake"), false)
 		})
 
 		It("should return an error", func() {
@@ -219,7 +225,7 @@ func testCreateFederator() {
 
 		Context("and create fails", func() {
 			BeforeEach(func() {
-				t.resourceClient.FailOnCreate = apierrors.NewServiceUnavailable("fake")
+				fake.FailOnAction(&t.dynClient.Fake, "pods", "create", apierrors.NewServiceUnavailable("fake"), false)
 			})
 
 			It("should return an error", func() {
@@ -236,7 +242,7 @@ func testCreateFederator() {
 
 		It("should succeed and not update the resource", func() {
 			Expect(f.Distribute(ctx, test.NewPodWithImage(test.LocalNamespace, "apache"))).To(Succeed())
-			t.verifyResource()
+			assert.EnsureNoActionsForResource(&t.dynClient.Fake, "pods", "update")
 		})
 	})
 }
@@ -272,7 +278,8 @@ func testUpdateFederator() {
 
 		Context("and update initially fails due to conflict", func() {
 			BeforeEach(func() {
-				t.resourceClient.FailOnUpdate = apierrors.NewConflict(schema.GroupResource{}, "", errors.New("fake"))
+				fake.FailOnAction(&t.dynClient.Fake, "pods", "update", apierrors.NewConflict(schema.GroupResource{}, "",
+					errors.New("fake")), true)
 			})
 
 			It("should retry until it succeeds", func() {
@@ -282,7 +289,7 @@ func testUpdateFederator() {
 
 			Context("and retrieval to find the existing resource fails", func() {
 				BeforeEach(func() {
-					t.resourceClient.FailOnGet = apierrors.NewServiceUnavailable("fake")
+					fake.FailOnAction(&t.dynClient.Fake, "pods", "get", apierrors.NewServiceUnavailable("fake"), false)
 				})
 
 				It("should return an error", func() {
@@ -293,7 +300,7 @@ func testUpdateFederator() {
 
 		Context("and update fails not due to conflict", func() {
 			BeforeEach(func() {
-				t.resourceClient.FailOnUpdate = apierrors.NewServiceUnavailable("fake")
+				fake.FailOnAction(&t.dynClient.Fake, "pods", "update", apierrors.NewServiceUnavailable("fake"), false)
 			})
 
 			It("should return an error", func() {
@@ -419,7 +426,7 @@ func testDelete() {
 
 		Context("and delete fails", func() {
 			BeforeEach(func() {
-				t.resourceClient.FailOnDelete = apierrors.NewServiceUnavailable("fake")
+				fake.FailOnAction(&t.dynClient.Fake, "pods", "delete", apierrors.NewServiceUnavailable("fake"), false)
 			})
 
 			It("should return an error", func() {
@@ -455,8 +462,8 @@ type testDriver struct {
 	federatorNamespace string
 	targetNamespace    string
 	keepMetadataFields []string
-	dynClient          *fake.DynamicClient
-	resourceClient     *fake.DynamicResourceClient
+	dynClient          *dynamicfake.FakeDynamicClient
+	resourceClient     dynamic.ResourceInterface
 	restMapper         meta.RESTMapper
 	initObjs           []runtime.Object
 }
@@ -471,9 +478,11 @@ func newTestDriver() *testDriver {
 
 	var gvr *schema.GroupVersionResource
 
-	t.dynClient = fake.NewDynamicClient(scheme.Scheme, test.PrepInitialClientObjs("", t.localClusterID, t.initObjs...)...)
+	t.dynClient = dynamicfake.NewSimpleDynamicClient(scheme.Scheme, test.PrepInitialClientObjs("", t.localClusterID, t.initObjs...)...)
+	fake.AddBasicReactors(&t.dynClient.Fake)
+
 	t.restMapper, gvr = test.GetRESTMapperAndGroupVersionResourceFor(t.resource)
-	t.resourceClient, _ = t.dynClient.Resource(*gvr).Namespace(t.targetNamespace).(*fake.DynamicResourceClient)
+	t.resourceClient = t.dynClient.Resource(*gvr).Namespace(t.targetNamespace)
 
 	return t
 }
