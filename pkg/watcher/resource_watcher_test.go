@@ -23,7 +23,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/submariner-io/admiral/pkg/fake"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -35,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/utils/set"
 )
 
@@ -103,7 +103,7 @@ var _ = Describe("Resource Watcher", func() {
 
 		config.RestMapper = test.GetRESTMapperFor(&corev1.Pod{}, &corev1.Service{})
 
-		config.Client = fake.NewDynamicClient(config.Scheme)
+		config.Client = dynamicfake.NewSimpleDynamicClient(config.Scheme)
 
 		pods = config.Client.Resource(*test.GetGroupVersionResourceFor(config.RestMapper, &corev1.Pod{})).Namespace(
 			config.ResourceConfigs[0].SourceNamespace)
