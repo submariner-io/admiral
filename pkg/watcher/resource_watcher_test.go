@@ -124,10 +124,7 @@ var _ = Describe("Resource Watcher", func() {
 
 	When("a Pod is created, updated and deleted", func() {
 		It("should notify the appropriate handler of each event", func() {
-			obj := test.CreateResource(pods, pod)
-			pod.Namespace = obj.GetNamespace()
-			pod.ResourceVersion = obj.GetResourceVersion()
-			pod.UID = obj.GetUID()
+			pod := test.CreateResource(pods, pod)
 
 			Eventually(createdPods).Should(Receive(Equal(pod)))
 			Consistently(createdPods).ShouldNot(Receive())
@@ -153,11 +150,7 @@ var _ = Describe("Resource Watcher", func() {
 				},
 			}
 
-			obj := test.CreateResource(services, service)
-			service.Namespace = obj.GetNamespace()
-			service.ResourceVersion = obj.GetResourceVersion()
-			service.UID = obj.GetUID()
-
+			service = test.CreateResource(services, service)
 			Eventually(createdServices).Should(Receive(Equal(service)))
 		})
 	})

@@ -426,13 +426,13 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 			})
 
 			JustBeforeEach(func() {
-				t.pod = test.GetPod(t.client, t.pod)
+				t.pod = test.GetResource(t.client, t.pod)
 				t.pod.Status = corev1.PodStatus{Phase: corev1.PodRunning}
 			})
 
 			It("should only update the status", func() {
 				Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
-				Expect(test.GetPod(t.client, t.pod).Status).To(Equal(t.pod.Status))
+				Expect(test.GetResource(t.client, t.pod).Status).To(Equal(t.pod.Status))
 				tests.EnsureNoActionsForResource(t.testingFake, "pods", "update")
 			})
 
@@ -443,7 +443,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 
 				It("should update the status", func() {
 					Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
-					Expect(test.GetPod(t.client, t.pod).Status).To(Equal(t.pod.Status))
+					Expect(test.GetResource(t.client, t.pod).Status).To(Equal(t.pod.Status))
 				})
 			})
 		})
@@ -454,7 +454,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 			})
 
 			JustBeforeEach(func() {
-				t.pod = test.GetPod(t.client, t.pod)
+				t.pod = test.GetResource(t.client, t.pod)
 				t.pod.Status = corev1.PodStatus{}
 			})
 
@@ -529,7 +529,7 @@ func (t *createOrUpdateTestDriver) verifyPod() *corev1.Pod {
 		Expect(scheme.Scheme.Convert(&list.Items[0], pod, nil)).To(Succeed())
 	}
 
-	actual := test.GetPod(t.client, pod)
+	actual := test.GetResource(t.client, pod)
 	t.compareWithPod(actual)
 
 	return actual
