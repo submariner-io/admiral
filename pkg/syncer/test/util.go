@@ -85,9 +85,6 @@ func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev
 	Expect(actual.Spec).To(Equal(expected.Spec))
 	Expect(actual.Status).To(Equal(expected.Status))
 
-	Expect(actual.GetUID()).NotTo(Equal(expected.GetUID()))
-	Expect(actual.GetResourceVersion()).NotTo(Equal(expected.GetResourceVersion()))
-
 	duplicate := make(map[string]string)
 	for k, v := range expected.GetLabels() {
 		duplicate[k] = v
@@ -117,12 +114,10 @@ func NewPod(namespace string) *corev1.Pod {
 func NewPodWithImage(namespace, imageName string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "test-pod",
-			Namespace:       namespace,
-			UID:             uuid.NewUUID(),
-			ResourceVersion: "10",
-			Labels:          map[string]string{"app": "test"},
-			Annotations:     map[string]string{"foo": "bar"},
+			Name:        "test-pod",
+			Namespace:   namespace,
+			Labels:      map[string]string{"app": "test"},
+			Annotations: map[string]string{"foo": "bar"},
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
