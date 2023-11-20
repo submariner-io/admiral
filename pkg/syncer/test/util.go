@@ -21,15 +21,13 @@ package test
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/resource"
+	"github.com/submariner-io/admiral/pkg/test"
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metaapi "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -213,40 +211,15 @@ func SetClusterIDLabel[T runtime.Object](obj T, clusterID string) T {
 }
 
 func AwaitResource(client dynamic.ResourceInterface, name string) *unstructured.Unstructured {
-	return AwaitAndVerifyResource(client, name, nil)
+	return test.AwaitResource(resource.ForDynamic(client), name)
 }
 
 func AwaitAndVerifyResource(client dynamic.ResourceInterface, name string,
 	verify func(*unstructured.Unstructured) bool,
 ) *unstructured.Unstructured {
-	var found *unstructured.Unstructured
-
-	Eventually(func() error {
-		obj, err := client.Get(context.TODO(), name, metav1.GetOptions{})
-		if err != nil {
-			return err
-		}
-
-		if verify == nil || verify(obj) {
-			found = obj
-			return nil
-		}
-
-		return fmt.Errorf("resource %q was found but not verified", name)
-	}, 5*time.Second, 50*time.Millisecond).Should(Succeed())
-
-	return found
+	return test.AwaitAndVerifyResource(resource.ForDynamic(client), name, verify)
 }
 
 func AwaitNoResource(client dynamic.ResourceInterface, name string) {
-	Eventually(func() bool {
-		_, err := client.Get(context.TODO(), name, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			return true
-		}
-
-		Expect(err).To(Succeed())
-
-		return false
-	}, 5*time.Second, 50*time.Millisecond).Should(BeTrue(), "Resource %q still exists", name)
+	test.AwaitNoResource(resource.ForDynamic(client), name)
 }
