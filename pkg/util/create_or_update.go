@@ -133,7 +133,7 @@ func maybeCreateOrUpdate[T runtime.Object](ctx context.Context, client resource.
 		origStatus := GetNestedField(origObj, StatusField)
 		newStatus, ok := GetNestedField(newObj, StatusField).(map[string]interface{})
 
-		if !ok || len(newStatus) == 0 {
+		if !ok || DeeplyEmpty(newStatus) {
 			unstructured.RemoveNestedField(origObj.Object, StatusField)
 			unstructured.RemoveNestedField(newObj.Object, StatusField)
 		} else if !equality.Semantic.DeepEqual(origStatus, newStatus) {
@@ -213,7 +213,7 @@ func createResource[T runtime.Object](ctx context.Context, client resource.Inter
 	}
 
 	status, ok := GetNestedField(resource.MustToUnstructuredUsingDefaultConverter(obj), StatusField).(map[string]interface{})
-	if ok && len(status) > 0 {
+	if ok && !DeeplyEmpty(status) {
 		// If the resource CRD has the status subresource the Create won't set the status field so we need to
 		// do a separate UpdateStatus call.
 		objMeta.SetResourceVersion(resource.MustToMeta(created).GetResourceVersion())

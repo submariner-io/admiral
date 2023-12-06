@@ -137,6 +137,21 @@ func CopyImmutableMetadata(from, to *unstructured.Unstructured) *unstructured.Un
 	return to
 }
 
+func DeeplyEmpty(m map[string]interface{}) bool {
+	for _, v := range m {
+		switch t := v.(type) {
+		case map[string]interface{}:
+			if !DeeplyEmpty(t) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+
+	return true
+}
+
 func AddCertificateErrorHandler(fatal bool) {
 	logCertificateError := logger.Errorf
 	if fatal {
