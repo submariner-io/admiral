@@ -74,5 +74,9 @@ func (r *updateReactor) react(a testing.Action) (bool, runtime.Object, error) {
 
 	obj, err := invokeReactors(action, r.reactors)
 
+	if err == nil && !target.GetDeletionTimestamp().IsZero() && len(target.GetFinalizers()) == 0 {
+		_, err = invokeReactors(testing.NewDeleteAction(action.GetResource(), action.GetNamespace(), target.GetName()), r.reactors)
+	}
+
 	return true, obj, err
 }
