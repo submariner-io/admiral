@@ -113,6 +113,24 @@ var _ = Describe("Update", func() {
 			Expect(apierrors.IsConflict(err)).To(BeTrue())
 		})
 	})
+
+	When("the resource is deleting and the finalizers are empty", func() {
+		BeforeEach(func() {
+			t.pod.Finalizers = []string{"some-finalizer"}
+		})
+
+		It("should delete the resource", func() {
+			t.pod.SetDeletionTimestamp(ptr.To(metav1.Now()))
+			t.pod = t.doUpdateSuccess()
+
+			t.pod.Finalizers = nil
+			_, err := t.doUpdate()
+			Expect(err).To(Succeed())
+
+			_, err = t.doGet(t.pod.Name)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		})
+	})
 })
 
 var _ = Describe("Delete", func() {
@@ -163,6 +181,11 @@ var _ = Describe("Delete", func() {
 			actual, err := t.doGet(t.pod.Name)
 			Expect(err).To(Succeed())
 			Expect(actual.GetDeletionTimestamp()).ToNot(BeNil())
+
+			Expect(t.doDelete(metav1.DeleteOptions{})).To(Succeed())
+			unchanged, err := t.doGet(t.pod.Name)
+			Expect(err).To(Succeed())
+			Expect(unchanged.GetResourceVersion()).To(Equal(actual.GetResourceVersion()))
 		})
 	})
 })
