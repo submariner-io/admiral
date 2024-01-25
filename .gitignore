@@ -3,6 +3,7 @@
 /bin
 dist
 Makefile.dapper
+Makefile.shipyard
 output
 /vendor
 *.coverprofile
