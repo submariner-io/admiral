@@ -32,6 +32,8 @@ linters-settings:
     line-length: 140
   nlreturn:
     block-size: 2
+  wsl:
+    allow-trailing-comment: true
 linters:
   disable-all: true
   enable:

@@ -104,6 +104,7 @@ func testWithLabelSelector() {
 	BeforeEach(func() {
 		req, err := labels.NewRequirement("foo", selection.Equals, []string{"bar"})
 		Expect(err).To(Succeed())
+
 		t.labelSelector = labels.NewSelector().Add(*req).String()
 	})
 
@@ -111,11 +112,14 @@ func testWithLabelSelector() {
 		When("Toaster resources are created with and without the label selector criteria", func() {
 			It("should correctly sync or exclude the Toaster resource", func() {
 				By("Creating a Toaster with the label selector criteria")
+
 				toaster := t.createToasterResource(framework.ClusterA, util.AddLabel(t.newToaster("sync"), "foo", "bar"))
 				t.awaitToaster(framework.ClusterB, toaster)
 
 				By("Creating a Toaster without the label selector criteria")
+
 				toaster = t.createToasterResource(framework.ClusterA, t.newToaster("no-sync"))
+
 				time.Sleep(1000 * time.Millisecond)
 				t.awaitNoToaster(framework.ClusterB, toaster)
 			})
@@ -134,11 +138,14 @@ func testWithFieldSelector() {
 		When("Toaster resources are created with and without the field selector criteria", func() {
 			It("should correctly sync or exclude the Toaster resource", func() {
 				By("Creating a Toaster with the field selector criteria")
+
 				toaster := t.createToasterResource(framework.ClusterA, t.newToaster("sync"))
 				t.awaitToaster(framework.ClusterB, toaster)
 
 				By("Creating a Toaster without the field selector criteria")
+
 				toaster = t.createToasterResource(framework.ClusterA, t.newToaster("no-sync"))
+
 				time.Sleep(1000 * time.Millisecond)
 				t.awaitNoToaster(framework.ClusterB, toaster)
 			})
@@ -175,10 +182,12 @@ func newTestDriver() *testDriver {
 
 		c, err := dynamic.NewForConfig(framework.RestConfigs[framework.ClusterA])
 		Expect(err).To(Succeed())
+
 		t.clusterClients = append(t.clusterClients, c)
 
 		c, err = dynamic.NewForConfig(framework.RestConfigs[framework.ClusterB])
 		Expect(err).To(Succeed())
+
 		t.clusterClients = append(t.clusterClients, c)
 
 		Expect(clusterASyncer.Start(t.stopCh)).To(Succeed())
@@ -340,6 +349,7 @@ func (t *testDriver) awaitNoResource(cluster framework.ClusterIndex, gvr *schema
 		if apierrors.IsNotFound(err) {
 			return nil, nil //nolint:nilnil // Returning nil value is intentional
 		}
+
 		return obj, err
 	}, func(result interface{}) (bool, string, error) {
 		if result != nil {

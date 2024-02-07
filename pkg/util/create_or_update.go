@@ -109,6 +109,7 @@ func maybeCreateOrUpdate[T runtime.Object](ctx context.Context, client resource.
 			logger.V(log.LIBTRACE).Infof("Creating resource: %#v", obj)
 
 			result = OperationResultCreated
+
 			return createResource(ctx, client, obj)
 		}
 

@@ -56,8 +56,8 @@ func Remove[T runtime.Object](ctx context.Context, client resource.Interface[T],
 
 	err := util.Update(ctx, client, obj, func(existing T) (T, error) {
 		objMeta := resource.MustToMeta(existing)
-
 		newFinalizers := []string{}
+
 		for _, f := range objMeta.GetFinalizers() {
 			if f == finalizerName {
 				continue
