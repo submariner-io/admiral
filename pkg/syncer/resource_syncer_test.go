@@ -170,6 +170,7 @@ func testReconcileNoDirection() {
 
 	JustBeforeEach(func() {
 		obj := toReconcile.DeepCopyObject()
+
 		d.syncer.Reconcile(func() []runtime.Object {
 			return []runtime.Object{obj}
 		})
@@ -338,6 +339,7 @@ func testTransformFunction() {
 	BeforeEach(func() {
 		test.SetClusterIDLabel(d.resource, "remote")
 		atomic.StoreInt32(&invocationCount, 0)
+
 		expOperation = make(chan syncer.Operation, 20)
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
 		requeue = false
@@ -345,11 +347,13 @@ func testTransformFunction() {
 		d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 			defer GinkgoRecover()
 			atomic.AddInt32(&invocationCount, 1)
+
 			pod, ok := from.(*corev1.Pod)
 			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", from)
 			Expect(equality.Semantic.DeepDerivative(d.resource.Spec, pod.Spec)).To(BeTrue(),
 				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, d.resource.Spec)
 			expOperation <- op
+
 			return transformed, requeue
 		}
 	})
@@ -473,6 +477,7 @@ func testTransformFunction() {
 			d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 				atomic.AddInt32(&invocationCount, 1)
 				expOperation <- op
+
 				return nil, false
 			}
 		})
@@ -511,8 +516,10 @@ func testTransformFunction() {
 		BeforeEach(func() {
 			transformFuncRet = &atomic.Value{}
 			transformFuncRet.Store(nilResource)
+
 			d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 				var ret runtime.Object
+
 				v := transformFuncRet.Load()
 				if v != nilResource {
 					ret, _ = v.(runtime.Object)
@@ -520,6 +527,7 @@ func testTransformFunction() {
 
 				transformFuncRet.Store(transformed)
 				expOperation <- op
+
 				return ret, true
 			}
 		})
@@ -563,10 +571,14 @@ func testOnSuccessfulSyncFunction() {
 	BeforeEach(func() {
 		expOperation = make(chan syncer.Operation, 20)
 		expResource = d.resource
+
 		onSuccessfulSyncReturn.Store(false)
+
 		d.config.OnSuccessfulSync = func(synced runtime.Object, op syncer.Operation) bool {
 			defer GinkgoRecover()
+
 			pod, ok := synced.(*corev1.Pod)
+
 			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", synced)
 			Expect(equality.Semantic.DeepDerivative(expResource.Spec, pod.Spec)).To(BeTrue(),
 				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, expResource.Spec)
@@ -714,11 +726,14 @@ func testShouldProcessFunction() {
 		shouldProcess = true
 		d.config.ShouldProcess = func(obj *unstructured.Unstructured, op syncer.Operation) bool {
 			defer GinkgoRecover()
+
 			pod := &corev1.Pod{}
+
 			Expect(d.config.Scheme.Convert(obj, pod, nil)).To(Succeed())
 			Expect(equality.Semantic.DeepDerivative(expResource.Spec, pod.Spec)).To(BeTrue(),
 				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, expResource.Spec)
 			expOperation <- op
+
 			return shouldProcess
 		}
 	})

@@ -246,6 +246,7 @@ func testInterfaceFuncs[T runtime.Object](newInterface func() resource.Interface
 
 		// Update
 		objMeta.SetLabels(map[string]string{"foo": "bar"})
+
 		obj, err = i.Update(context.Background(), actual, metav1.UpdateOptions{})
 		Expect(err).To(Succeed())
 		Expect(sanitize(obj)).To(Equal(actual))

@@ -213,7 +213,7 @@ func (ctx *zeroLogContext) Enabled(level int) bool {
 
 func (ctx *zeroLogContext) WithName(name string) logr.LogSink {
 	subCtx := ctx.clone()
-	if len(ctx.prefix) > 0 {
+	if ctx.prefix != "" {
 		subCtx.prefix = ctx.prefix + "/"
 	}
 
