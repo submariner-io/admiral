@@ -46,7 +46,7 @@ func FailOnAction(f *testing.Fake, resource, verb string, customErr error, autoR
 	f.Lock()
 	defer f.Unlock()
 
-	f.PrependReactor(verb, resource, func(action testing.Action) (bool, runtime.Object, error) {
+	f.PrependReactor(verb, resource, func(_ testing.Action) (bool, runtime.Object, error) {
 		if r.fail.Load() {
 			if autoReset {
 				r.fail.Store(false)

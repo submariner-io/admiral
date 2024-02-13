@@ -132,27 +132,27 @@ func ForRoleBinding(client kubernetes.Interface, namespace string) Interface[*rb
 
 func ForControllerClient[T controllerClient.Object](client controllerClient.Client, namespace string, objType T) *InterfaceFuncs[T] {
 	return &InterfaceFuncs[T]{
-		GetFunc: func(ctx context.Context, name string, options metav1.GetOptions) (T, error) {
+		GetFunc: func(ctx context.Context, name string, _ metav1.GetOptions) (T, error) {
 			obj := objType.DeepCopyObject().(T)
 			err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, obj)
 			return obj, err
 		},
-		CreateFunc: func(ctx context.Context, obj T, options metav1.CreateOptions) (T, error) {
+		CreateFunc: func(ctx context.Context, obj T, _ metav1.CreateOptions) (T, error) {
 			obj = obj.DeepCopyObject().(T)
 			err := client.Create(ctx, obj)
 			return obj, err
 		},
-		UpdateFunc: func(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error) {
+		UpdateFunc: func(ctx context.Context, obj T, _ metav1.UpdateOptions) (T, error) {
 			obj = obj.DeepCopyObject().(T)
 			err := client.Update(ctx, obj)
 			return obj, err
 		},
-		UpdateStatusFunc: func(ctx context.Context, obj T, options metav1.UpdateOptions) (T, error) {
+		UpdateStatusFunc: func(ctx context.Context, obj T, _ metav1.UpdateOptions) (T, error) {
 			obj = obj.DeepCopyObject().(T)
 			err := client.Status().Update(ctx, obj)
 			return obj, err
 		},
-		DeleteFunc: func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+		DeleteFunc: func(ctx context.Context, name string, _ metav1.DeleteOptions) error {
 			obj := objType.DeepCopyObject().(controllerClient.Object)
 			obj.SetName(name)
 			obj.SetNamespace(namespace)

@@ -344,7 +344,7 @@ func testTransformFunction() {
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
 		requeue = false
 
-		d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+		d.config.Transform = func(from runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 			defer GinkgoRecover()
 			atomic.AddInt32(&invocationCount, 1)
 
@@ -474,7 +474,7 @@ func testTransformFunction() {
 
 	When("the transform function returns nil with no re-queue", func() {
 		BeforeEach(func() {
-			d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+			d.config.Transform = func(_ runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 				atomic.AddInt32(&invocationCount, 1)
 				expOperation <- op
 
@@ -517,7 +517,7 @@ func testTransformFunction() {
 			transformFuncRet = &atomic.Value{}
 			transformFuncRet.Store(nilResource)
 
-			d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+			d.config.Transform = func(_ runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 				var ret runtime.Object
 
 				v := transformFuncRet.Load()
@@ -635,7 +635,7 @@ func testOnSuccessfulSyncFunction() {
 		When("a resource is successfully created in the datastore", func() {
 			BeforeEach(func() {
 				expResource = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
-				d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+				d.config.Transform = func(_ runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 					return expResource, false
 				}
 			})
@@ -1156,7 +1156,7 @@ func testRequeueResource() {
 	BeforeEach(func() {
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
 
-		d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+		d.config.Transform = func(_ runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 			return transformed, false
 		}
 	})

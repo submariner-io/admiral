@@ -72,7 +72,7 @@ func testWithTransformLocalToBroker() {
 
 	BeforeEach(func() {
 		t.brokerResourceType = &testV1.ExportedToaster{}
-		t.transformLocalToBroker = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+		t.transformLocalToBroker = func(from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 			toaster, ok := from.(*testV1.Toaster)
 			Expect(ok).To(BeTrue())
 
