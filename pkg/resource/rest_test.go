@@ -106,7 +106,7 @@ var _ = Describe("GetAuthorizedRestConfigFromData", func() {
 	})
 
 	It("should fail when client creation fails", func() {
-		resource.NewDynamicClient = func(config *rest.Config) (dynamic.Interface, error) {
+		resource.NewDynamicClient = func(_ *rest.Config) (dynamic.Interface, error) {
 			return nil, errors.New("error creating client")
 		}
 

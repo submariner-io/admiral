@@ -91,11 +91,11 @@ func (t *testDriver) newWatcher(cluster framework.ClusterIndex) watcher.Interfac
 				Name:         "Toaster watcher",
 				ResourceType: &testV1.Toaster{},
 				Handler: watcher.EventHandlerFuncs{
-					OnCreateFunc: func(obj runtime.Object, numRequeues int) bool {
+					OnCreateFunc: func(obj runtime.Object, _ int) bool {
 						t.created <- obj.(*testV1.Toaster)
 						return false
 					},
-					OnDeleteFunc: func(obj runtime.Object, numRequeues int) bool {
+					OnDeleteFunc: func(obj runtime.Object, _ int) bool {
 						t.deleted <- obj.(*testV1.Toaster).Name
 						return false
 					},

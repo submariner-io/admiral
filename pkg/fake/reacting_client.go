@@ -114,7 +114,7 @@ func FailingReaction(err error) func(obj interface{}) (bool, error) {
 		err = errors.New("mock error")
 	}
 
-	return func(obj interface{}) (bool, error) {
+	return func(_ interface{}) (bool, error) {
 		return true, err
 	}
 }

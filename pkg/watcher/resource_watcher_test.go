@@ -69,15 +69,15 @@ var _ = Describe("Resource Watcher", func() {
 					SourceNamespace: test.LocalNamespace,
 					ResourceType:    &corev1.Pod{},
 					Handler: watcher.EventHandlerFuncs{
-						OnCreateFunc: func(obj runtime.Object, numRequeues int) bool {
+						OnCreateFunc: func(obj runtime.Object, _ int) bool {
 							createdPods <- obj.(*corev1.Pod)
 							return false
 						},
-						OnUpdateFunc: func(obj runtime.Object, numRequeues int) bool {
+						OnUpdateFunc: func(obj runtime.Object, _ int) bool {
 							updatedPods <- obj.(*corev1.Pod)
 							return false
 						},
-						OnDeleteFunc: func(obj runtime.Object, numRequeues int) bool {
+						OnDeleteFunc: func(obj runtime.Object, _ int) bool {
 							deletedPods <- obj.(*corev1.Pod)
 							return false
 						},
@@ -88,7 +88,7 @@ var _ = Describe("Resource Watcher", func() {
 					SourceNamespace: test.LocalNamespace,
 					ResourceType:    &corev1.Service{},
 					Handler: watcher.EventHandlerFuncs{
-						OnCreateFunc: func(obj runtime.Object, numRequeues int) bool {
+						OnCreateFunc: func(obj runtime.Object, _ int) bool {
 							createdServices <- obj.(*corev1.Service)
 							return false
 						},
@@ -178,7 +178,7 @@ var _ = Describe("Resource Watcher", func() {
 
 	When("a ShouldProcess function is specified that returns false", func() {
 		BeforeEach(func() {
-			config.ResourceConfigs[0].ShouldProcess = func(obj *unstructured.Unstructured, op syncer.Operation) bool {
+			config.ResourceConfigs[0].ShouldProcess = func(_ *unstructured.Unstructured, _ syncer.Operation) bool {
 				return false
 			}
 		})

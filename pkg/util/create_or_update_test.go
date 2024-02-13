@@ -505,7 +505,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 		Context("and the mutate function returns an error", func() {
 			BeforeEach(func() {
 				t.expectedErr = errors.New("mutate failure")
-				t.mutateFn = func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+				t.mutateFn = func(_ *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 					return nil, t.expectedErr
 				}
 			})

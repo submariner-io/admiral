@@ -293,7 +293,7 @@ func SetBackoff(b wait.Backoff) wait.Backoff {
 }
 
 func Replace[T runtime.Object](with T) MutateFn[T] {
-	return func(existing T) (T, error) {
+	return func(_ T) (T, error) {
 		return with, nil
 	}
 }
