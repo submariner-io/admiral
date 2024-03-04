@@ -29,4 +29,5 @@ const (
 	OperatorComponent            = "submariner-operator"
 	MetricsProxyComponent        = "submariner-metrics-proxy"
 	NettestComponent             = "submariner-nettest"
+	SubctlComponent              = "submariner-subctl"
 )
