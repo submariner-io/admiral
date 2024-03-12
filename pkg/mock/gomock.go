@@ -21,8 +21,8 @@ package mock
 import (
 	"fmt"
 
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 	"sigs.k8s.io/yaml"
 )
 
