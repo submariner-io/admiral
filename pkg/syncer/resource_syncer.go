@@ -241,7 +241,6 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 
 	resourceClient := config.SourceClient.Resource(*gvr).Namespace(config.SourceNamespace)
 
-	//nolint:wrapcheck // These are wrapper functions.
 	syncer.store, syncer.informer = cache.NewInformer(&cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 			options.LabelSelector = config.SourceLabelSelector
