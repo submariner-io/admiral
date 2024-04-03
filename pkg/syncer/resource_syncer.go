@@ -241,7 +241,7 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 
 	resourceClient := config.SourceClient.Resource(*gvr).Namespace(config.SourceNamespace)
 
-	syncer.store, syncer.informer = cache.NewInformer(&cache.ListWatch{
+	syncer.store, syncer.informer = cache.NewTransformingInformer(&cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 			options.LabelSelector = config.SourceLabelSelector
 			options.FieldSelector = config.SourceFieldSelector
@@ -256,6 +256,9 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 		AddFunc:    syncer.onCreate,
 		UpdateFunc: syncer.onUpdate,
 		DeleteFunc: syncer.onDelete,
+	}, func(obj interface{}) (interface{}, error) {
+		resourceUtil.MustToMeta(obj).SetManagedFields(nil)
+		return obj, nil
 	})
 
 	return syncer, nil
