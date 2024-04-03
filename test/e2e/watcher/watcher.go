@@ -36,6 +36,7 @@ var _ = Describe("[watcher] Resource watcher tests", func() {
 		It("should notify the handler of each event", func() {
 			clusterName := framework.TestContext.ClusterIDs[framework.ClusterA]
 			toaster := util.CreateToaster(t.client, util.NewToaster("test-toaster", t.framework.Namespace), clusterName)
+			toaster.SetManagedFields(nil)
 			Eventually(t.created).Should(Receive(Equal(toaster)))
 
 			util.DeleteToaster(t.client, toaster, clusterName)
