@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"io"
 	"os/exec"
+	"slices"
 	"sync"
 
 	. "github.com/onsi/gomega"
@@ -48,6 +49,7 @@ type commandOutputInfo struct {
 	pathMatcher  interface{}
 	expectedArgs []string
 	output       string
+	err          error
 }
 
 func New() *Executor {
@@ -111,9 +113,14 @@ func (c *commandImpl) Output() ([]byte, error) {
 	c.exec.mutex.Lock()
 	defer c.exec.mutex.Unlock()
 
+	c.exec.commands = append(c.exec.commands, c.cmd)
+
 	for i := range c.exec.commandOutputs {
 		if cmdMatches(c.cmd, c.exec.commandOutputs[i].pathMatcher, c.exec.commandOutputs[i].expectedArgs) {
-			return []byte(c.exec.commandOutputs[i].output), nil
+			co := c.exec.commandOutputs[i]
+			c.exec.commandOutputs = slices.Delete(c.exec.commandOutputs, i, i+1)
+
+			return []byte(co.output), co.err
 		}
 	}
 
@@ -175,6 +182,10 @@ func (e *Executor) EnsureNoCommand(pathMatcher interface{}, args ...string) {
 }
 
 func (e *Executor) SetupCommandStdOut(output string, pathMatcher interface{}, expectedArgs ...string) {
+	e.SetupCommandOutputWithError(output, nil, pathMatcher, expectedArgs...)
+}
+
+func (e *Executor) SetupCommandOutputWithError(output string, err error, pathMatcher interface{}, expectedArgs ...string) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
@@ -182,5 +193,6 @@ func (e *Executor) SetupCommandStdOut(output string, pathMatcher interface{}, ex
 		pathMatcher:  pathMatcher,
 		expectedArgs: expectedArgs,
 		output:       output,
+		err:          err,
 	}}, e.commandOutputs...)
 }
