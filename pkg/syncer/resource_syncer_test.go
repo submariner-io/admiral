@@ -45,6 +45,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	fakeClient "k8s.io/client-go/dynamic/fake"
+	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("Resource Syncer", func() {
@@ -69,6 +70,7 @@ var _ = Describe("Resource Syncer", func() {
 		Context(fmt.Sprintf("Direction: %s", syncer.RemoteToLocal), testReconcileRemoteToLocal)
 		Context(fmt.Sprintf("Direction: %s", syncer.None), testReconcileNoDirection)
 	})
+	Describe("Trim Resource Fields", testTrimResourceFields)
 })
 
 func testReconcileLocalToRemote() {
@@ -1168,6 +1170,37 @@ func testRequeueResource() {
 	})
 }
 
+func testTrimResourceFields() {
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	BeforeEach(func() {
+		d.config.ResyncPeriod = time.Millisecond * 100
+
+		d.resource.SetManagedFields([]metav1.ManagedFieldsEntry{
+			{
+				Manager:    "kubectl",
+				Operation:  metav1.ManagedFieldsOperationApply,
+				APIVersion: "v1",
+				Time:       ptr.To(metav1.Now()),
+				FieldsType: "FieldsV1",
+				FieldsV1:   ptr.To(metav1.FieldsV1{}),
+			},
+		})
+
+		d.addInitialResource(d.resource)
+	})
+
+	It("should remove ManagedFields from created resources", func() {
+		obj, exists, err := d.syncer.GetResource(d.resource.Name, d.resource.Namespace)
+		Expect(err).To(Succeed())
+		Expect(exists).To(BeTrue())
+		Expect(resourceutils.MustToMeta(obj).GetManagedFields()).Should(BeNil())
+
+		// Sleep a little so a re-sync occurs and doesn't cause a data race.
+		time.Sleep(200)
+	})
+}
+
 func assertResourceList(actual []runtime.Object, expected ...*corev1.Pod) {
 	expSpecs := map[string]*corev1.PodSpec{}
 	for i := range expected {
@@ -1221,6 +1254,7 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 		d.config.Transform = nil
 		d.config.OnSuccessfulSync = nil
 		d.config.ResourcesEquivalent = nil
+		d.config.ResyncPeriod = 0
 
 		err := corev1.AddToScheme(d.config.Scheme)
 		Expect(err).To(Succeed())

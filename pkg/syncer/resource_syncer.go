@@ -257,7 +257,11 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 		UpdateFunc: syncer.onUpdate,
 		DeleteFunc: syncer.onDelete,
 	}, func(obj interface{}) (interface{}, error) {
-		resourceUtil.MustToMeta(obj).SetManagedFields(nil)
+		objMeta, err := meta.Accessor(obj)
+		if err == nil && len(objMeta.GetManagedFields()) > 0 {
+			objMeta.SetManagedFields(nil)
+		}
+
 		return obj, nil
 	})
 
