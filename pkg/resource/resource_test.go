@@ -22,6 +22,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/resource"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("EnsureValidName", func() {
@@ -41,6 +45,63 @@ var _ = Describe("EnsureValidName", func() {
 	When("the string has non-alphanumeric letters", func() {
 		It("should convert them approriately", func() {
 			Expect(resource.EnsureValidName("no-!@*()#$-chars")).To(Equal("no---------chars"))
+		})
+	})
+})
+
+var _ = Describe("TrimManagedFields", func() {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "pod",
+			Namespace:   "ns",
+			Labels:      map[string]string{"app": "test"},
+			Annotations: map[string]string{"foo": "bar"},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Image: "image",
+					Name:  "httpd",
+				},
+			},
+		},
+	}
+
+	When("the object has metadata", func() {
+		It("should succeed and trim the ManagedFields", func() {
+			podWithMF := pod.DeepCopy()
+			podWithMF.ManagedFields = []metav1.ManagedFieldsEntry{
+				{
+					Manager:    "kubectl",
+					Operation:  metav1.ManagedFieldsOperationApply,
+					APIVersion: "v1",
+					Time:       ptr.To(metav1.Now()),
+					FieldsType: "FieldsV1",
+					FieldsV1:   ptr.To(metav1.FieldsV1{}),
+				},
+			}
+
+			retObj, err := resource.TrimManagedFields(podWithMF)
+			Expect(err).To(Succeed())
+			Expect(podWithMF).To(Equal(pod))
+			Expect(retObj).To(BeIdenticalTo(podWithMF))
+
+			_, err = resource.TrimManagedFields(podWithMF)
+			Expect(err).To(Succeed())
+			Expect(podWithMF).To(Equal(pod))
+		})
+	})
+
+	When("the object does not have metadata", func() {
+		It("should succeed and return the object", func() {
+			obj := &cache.DeletedFinalStateUnknown{
+				Key: "key",
+				Obj: pod,
+			}
+
+			retObj, err := resource.TrimManagedFields(obj)
+			Expect(err).To(Succeed())
+			Expect(retObj).To(Equal(obj))
 		})
 	})
 })
