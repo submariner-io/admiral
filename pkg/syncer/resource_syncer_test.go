@@ -45,6 +45,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	fakeClient "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/ptr"
 )
 
@@ -71,6 +72,7 @@ var _ = Describe("Resource Syncer", func() {
 		Context(fmt.Sprintf("Direction: %s", syncer.None), testReconcileNoDirection)
 	})
 	Describe("Trim Resource Fields", testTrimResourceFields)
+	Describe("With SharedInformer", testWithSharedInformer)
 })
 
 func testReconcileLocalToRemote() {
@@ -1216,6 +1218,18 @@ func testTrimResourceFields() {
 	})
 }
 
+func testWithSharedInformer() {
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	BeforeEach(func() {
+		d.useSharedInformer = true
+	})
+
+	When("a resource is created in the local datastore", func() {
+		d.verifyDistributeOnCreateTest("")
+	})
+}
+
 func assertResourceList(actual []runtime.Object, expected ...*corev1.Pod) {
 	expSpecs := map[string]*corev1.PodSpec{}
 	for i := range expected {
@@ -1235,6 +1249,7 @@ func assertResourceList(actual []runtime.Object, expected ...*corev1.Pod) {
 
 type testDriver struct {
 	config             syncer.ResourceSyncerConfig
+	useSharedInformer  bool
 	syncer             syncer.Interface
 	sourceClient       dynamic.ResourceInterface
 	federator          *fake.Federator
@@ -1270,6 +1285,7 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 		d.config.OnSuccessfulSync = nil
 		d.config.ResourcesEquivalent = nil
 		d.config.ResyncPeriod = 0
+		d.useSharedInformer = false
 
 		err := corev1.AddToScheme(d.config.Scheme)
 		Expect(err).To(Succeed())
@@ -1286,7 +1302,22 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 		d.sourceClient = d.config.SourceClient.Resource(*gvr).Namespace(d.config.SourceNamespace)
 
 		var err error
-		d.syncer, err = syncer.NewResourceSyncer(&d.config)
+
+		if d.useSharedInformer {
+			var sharedInformer cache.SharedInformer
+
+			sharedInformer, err = syncer.NewSharedInformer(&d.config)
+			Expect(err).To(Succeed())
+
+			d.syncer, err = syncer.NewResourceSyncerWithSharedInformer(&d.config, sharedInformer)
+
+			go func() {
+				sharedInformer.Run(d.stopCh)
+			}()
+		} else {
+			d.syncer, err = syncer.NewResourceSyncer(&d.config)
+		}
+
 		Expect(err).To(Succeed())
 
 		utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers, func(err error) {
