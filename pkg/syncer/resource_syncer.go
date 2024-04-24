@@ -187,6 +187,7 @@ type ResourceSyncerConfig struct {
 
 type resourceSyncer struct {
 	workQueue   workqueue.Interface
+	hasSynced   func() bool
 	informer    cache.Controller
 	store       cache.Store
 	config      ResourceSyncerConfig
@@ -199,45 +200,12 @@ type resourceSyncer struct {
 }
 
 func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
-	syncer := &resourceSyncer{
-		config:  *config,
-		stopped: make(chan struct{}),
-		log:     log.Logger{Logger: logf.Log.WithName("ResourceSyncer")},
-	}
-
-	if syncer.config.Scheme == nil {
-		syncer.config.Scheme = scheme.Scheme
-	}
-
-	if syncer.config.ResourcesEquivalent == nil {
-		syncer.config.ResourcesEquivalent = ResourcesNotEquivalent
-	}
-
-	if syncer.config.WaitForCacheSync == nil {
-		wait := true
-		syncer.config.WaitForCacheSync = &wait
-	}
+	syncer := newResourceSyncer(config)
 
 	rawType, gvr, err := util.ToUnstructuredResource(config.ResourceType, config.RestMapper)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // OK to return the error as is.
 	}
-
-	if syncer.config.SyncCounter != nil {
-		syncer.syncCounter = syncer.config.SyncCounter
-	} else if syncer.config.SyncCounterOpts != nil {
-		syncer.syncCounter = prometheus.NewGaugeVec(
-			*syncer.config.SyncCounterOpts,
-			[]string{
-				DirectionLabel,
-				OperationLabel,
-				SyncerNameLabel,
-			},
-		)
-		prometheus.MustRegister(syncer.syncCounter)
-	}
-
-	syncer.workQueue = workqueue.New(config.Name)
 
 	resourceClient := config.SourceClient.Resource(*gvr).Namespace(config.SourceNamespace)
 
@@ -258,7 +226,89 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 		DeleteFunc: syncer.onDelete,
 	}, resourceUtil.TrimManagedFields)
 
+	syncer.hasSynced = syncer.informer.HasSynced
+
 	return syncer, nil
+}
+
+func NewResourceSyncerWithSharedInformer(config *ResourceSyncerConfig, informer cache.SharedInformer) (Interface, error) {
+	syncer := newResourceSyncer(config)
+	syncer.store = informer.GetStore()
+
+	reg, err := informer.AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{
+		AddFunc:    syncer.onCreate,
+		UpdateFunc: syncer.onUpdate,
+		DeleteFunc: syncer.onDelete,
+	}, config.ResyncPeriod)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error registering even handler")
+	}
+
+	syncer.hasSynced = reg.HasSynced
+
+	return syncer, nil
+}
+
+func newResourceSyncer(config *ResourceSyncerConfig) *resourceSyncer {
+	syncer := &resourceSyncer{
+		config:  *config,
+		stopped: make(chan struct{}),
+		log:     log.Logger{Logger: logf.Log.WithName("ResourceSyncer")},
+	}
+
+	if syncer.config.Scheme == nil {
+		syncer.config.Scheme = scheme.Scheme
+	}
+
+	if syncer.config.ResourcesEquivalent == nil {
+		syncer.config.ResourcesEquivalent = ResourcesNotEquivalent
+	}
+
+	if syncer.config.WaitForCacheSync == nil {
+		wait := true
+		syncer.config.WaitForCacheSync = &wait
+	}
+
+	if syncer.config.SyncCounter != nil {
+		syncer.syncCounter = syncer.config.SyncCounter
+	} else if syncer.config.SyncCounterOpts != nil {
+		syncer.syncCounter = prometheus.NewGaugeVec(
+			*syncer.config.SyncCounterOpts,
+			[]string{
+				DirectionLabel,
+				OperationLabel,
+				SyncerNameLabel,
+			},
+		)
+		prometheus.MustRegister(syncer.syncCounter)
+	}
+
+	syncer.workQueue = workqueue.New(config.Name)
+
+	return syncer
+}
+
+func NewSharedInformer(config *ResourceSyncerConfig) (cache.SharedInformer, error) {
+	rawType, gvr, err := util.ToUnstructuredResource(config.ResourceType, config.RestMapper)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // OK to return the error as is.
+	}
+
+	resourceClient := config.SourceClient.Resource(*gvr).Namespace(config.SourceNamespace)
+
+	informer := cache.NewSharedIndexInformerWithOptions(&cache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			return resourceClient.List(context.TODO(), options)
+		},
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			return resourceClient.Watch(context.TODO(), options)
+		},
+	}, rawType, cache.SharedIndexInformerOptions{
+		ResyncPeriod: config.ResyncPeriod,
+	})
+
+	//nolint:wrapcheck // OK to return the error as is.
+	return informer, informer.SetTransform(resourceUtil.TrimManagedFields)
 }
 
 func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
@@ -277,13 +327,17 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 		}()
 		defer r.workQueue.ShutDownWithDrain()
 
-		r.informer.Run(stopCh)
+		if r.informer != nil {
+			r.informer.Run(stopCh)
+		} else {
+			<-r.stopCh
+		}
 	}()
 
 	if *r.config.WaitForCacheSync {
 		r.log.V(log.LIBDEBUG).Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
 
-		_ = cache.WaitForCacheSync(stopCh, r.informer.HasSynced)
+		_ = cache.WaitForCacheSync(stopCh, r.hasSynced)
 	}
 
 	r.workQueue.Run(stopCh, r.processNextWorkItem)
@@ -412,7 +466,7 @@ func (r *resourceSyncer) doReconcile(resourceLister func() []runtime.Object) {
 }
 
 func (r *resourceSyncer) runIfCacheSynced(defaultReturn any, run func() any) any {
-	if ok := cache.WaitForCacheSync(r.stopCh, r.informer.HasSynced); !ok {
+	if ok := cache.WaitForCacheSync(r.stopCh, r.hasSynced); !ok {
 		// This means the cache was stopped.
 		r.log.Warningf("Syncer %q failed to wait for informer cache to sync", r.config.Name)
 

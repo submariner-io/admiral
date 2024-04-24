@@ -18,6 +18,7 @@ limitations under the License.
 package syncer_test
 
 import (
+	"flag"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -26,6 +27,10 @@ import (
 )
 
 func init() {
+	flags := flag.NewFlagSet("kzerolog", flag.ExitOnError)
+	kzerolog.AddFlags(flags)
+	_ = flags.Parse([]string{"-v=1"})
+
 	kzerolog.AddFlags(nil)
 }
 
