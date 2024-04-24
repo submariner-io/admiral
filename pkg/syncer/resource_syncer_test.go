@@ -45,6 +45,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	fakeClient "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/ptr"
 )
 
@@ -71,6 +72,7 @@ var _ = Describe("Resource Syncer", func() {
 		Context(fmt.Sprintf("Direction: %s", syncer.None), testReconcileNoDirection)
 	})
 	Describe("Trim Resource Fields", testTrimResourceFields)
+	Describe("With SharedInformer", testWithSharedInformer)
 })
 
 func testReconcileLocalToRemote() {
@@ -172,6 +174,7 @@ func testReconcileNoDirection() {
 
 	JustBeforeEach(func() {
 		obj := toReconcile.DeepCopyObject()
+
 		d.syncer.Reconcile(func() []runtime.Object {
 			return []runtime.Object{obj}
 		})
@@ -340,18 +343,21 @@ func testTransformFunction() {
 	BeforeEach(func() {
 		test.SetClusterIDLabel(d.resource, "remote")
 		atomic.StoreInt32(&invocationCount, 0)
+
 		expOperation = make(chan syncer.Operation, 20)
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
 		requeue = false
 
-		d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+		d.config.Transform = func(from runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 			defer GinkgoRecover()
 			atomic.AddInt32(&invocationCount, 1)
+
 			pod, ok := from.(*corev1.Pod)
 			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", from)
 			Expect(equality.Semantic.DeepDerivative(d.resource.Spec, pod.Spec)).To(BeTrue(),
 				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, d.resource.Spec)
 			expOperation <- op
+
 			return transformed, requeue
 		}
 	})
@@ -472,9 +478,10 @@ func testTransformFunction() {
 
 	When("the transform function returns nil with no re-queue", func() {
 		BeforeEach(func() {
-			d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+			d.config.Transform = func(_ runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 				atomic.AddInt32(&invocationCount, 1)
 				expOperation <- op
+
 				return nil, false
 			}
 		})
@@ -513,8 +520,10 @@ func testTransformFunction() {
 		BeforeEach(func() {
 			transformFuncRet = &atomic.Value{}
 			transformFuncRet.Store(nilResource)
-			d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+
+			d.config.Transform = func(_ runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 				var ret runtime.Object
+
 				v := transformFuncRet.Load()
 				if v != nilResource {
 					ret, _ = v.(runtime.Object)
@@ -522,6 +531,7 @@ func testTransformFunction() {
 
 				transformFuncRet.Store(transformed)
 				expOperation <- op
+
 				return ret, true
 			}
 		})
@@ -565,10 +575,14 @@ func testOnSuccessfulSyncFunction() {
 	BeforeEach(func() {
 		expOperation = make(chan syncer.Operation, 20)
 		expResource = d.resource
+
 		onSuccessfulSyncReturn.Store(false)
+
 		d.config.OnSuccessfulSync = func(synced runtime.Object, op syncer.Operation) bool {
 			defer GinkgoRecover()
+
 			pod, ok := synced.(*corev1.Pod)
+
 			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", synced)
 			Expect(equality.Semantic.DeepDerivative(expResource.Spec, pod.Spec)).To(BeTrue(),
 				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, expResource.Spec)
@@ -625,7 +639,7 @@ func testOnSuccessfulSyncFunction() {
 		When("a resource is successfully created in the datastore", func() {
 			BeforeEach(func() {
 				expResource = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
-				d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+				d.config.Transform = func(_ runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 					return expResource, false
 				}
 			})
@@ -716,11 +730,14 @@ func testShouldProcessFunction() {
 		shouldProcess = true
 		d.config.ShouldProcess = func(obj *unstructured.Unstructured, op syncer.Operation) bool {
 			defer GinkgoRecover()
+
 			pod := &corev1.Pod{}
+
 			Expect(d.config.Scheme.Convert(obj, pod, nil)).To(Succeed())
 			Expect(equality.Semantic.DeepDerivative(expResource.Spec, pod.Spec)).To(BeTrue(),
 				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, expResource.Spec)
 			expOperation <- op
+
 			return shouldProcess
 		}
 	})
@@ -1143,7 +1160,7 @@ func testRequeueResource() {
 	BeforeEach(func() {
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
 
-		d.config.Transform = func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+		d.config.Transform = func(_ runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 			return transformed, false
 		}
 	})
@@ -1201,6 +1218,18 @@ func testTrimResourceFields() {
 	})
 }
 
+func testWithSharedInformer() {
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	BeforeEach(func() {
+		d.useSharedInformer = true
+	})
+
+	When("a resource is created in the local datastore", func() {
+		d.verifyDistributeOnCreateTest("")
+	})
+}
+
 func assertResourceList(actual []runtime.Object, expected ...*corev1.Pod) {
 	expSpecs := map[string]*corev1.PodSpec{}
 	for i := range expected {
@@ -1220,6 +1249,7 @@ func assertResourceList(actual []runtime.Object, expected ...*corev1.Pod) {
 
 type testDriver struct {
 	config             syncer.ResourceSyncerConfig
+	useSharedInformer  bool
 	syncer             syncer.Interface
 	sourceClient       dynamic.ResourceInterface
 	federator          *fake.Federator
@@ -1255,6 +1285,7 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 		d.config.OnSuccessfulSync = nil
 		d.config.ResourcesEquivalent = nil
 		d.config.ResyncPeriod = 0
+		d.useSharedInformer = false
 
 		err := corev1.AddToScheme(d.config.Scheme)
 		Expect(err).To(Succeed())
@@ -1271,7 +1302,22 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 		d.sourceClient = d.config.SourceClient.Resource(*gvr).Namespace(d.config.SourceNamespace)
 
 		var err error
-		d.syncer, err = syncer.NewResourceSyncer(&d.config)
+
+		if d.useSharedInformer {
+			var sharedInformer cache.SharedInformer
+
+			sharedInformer, err = syncer.NewSharedInformer(&d.config)
+			Expect(err).To(Succeed())
+
+			d.syncer, err = syncer.NewResourceSyncerWithSharedInformer(&d.config, sharedInformer)
+
+			go func() {
+				sharedInformer.Run(d.stopCh)
+			}()
+		} else {
+			d.syncer, err = syncer.NewResourceSyncer(&d.config)
+		}
+
 		Expect(err).To(Succeed())
 
 		utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers, func(err error) {
