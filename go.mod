@@ -8,11 +8,11 @@ require (
 	github.com/go-logr/logr v1.4.1
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo/v2 v2.17.1
-	github.com/onsi/gomega v1.32.0
+	github.com/onsi/gomega v1.33.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.19.0
 	github.com/rs/zerolog v1.32.0
-	github.com/submariner-io/shipyard v0.18.0-m2
+	github.com/submariner-io/shipyard v0.18.0-m3
 	go.uber.org/mock v0.4.0
 	golang.org/x/time v0.5.0
 	k8s.io/api v0.30.0
