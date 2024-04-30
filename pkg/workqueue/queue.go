@@ -52,12 +52,18 @@ var logger = log.Logger{Logger: logf.Log.WithName("WorkQueue")}
 
 func New(name string) Interface {
 	return &queueType{
-		RateLimitingInterface: workqueue.NewNamedRateLimitingQueue(workqueue.NewMaxOfRateLimiter(
-			// exponential per-item rate limiter
-			workqueue.NewItemExponentialFailureRateLimiter(5*time.Millisecond, 30*time.Second),
-			// overall rate limiter (not per item)
-			&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(10), 100)},
-		), name),
+		RateLimitingInterface: workqueue.NewRateLimitingQueueWithConfig(
+			// caps the maximum wait
+			workqueue.NewWithMaxWaitRateLimiter(
+				workqueue.NewMaxOfRateLimiter(
+					// exponential per-item rate limiter
+					workqueue.NewItemExponentialFailureRateLimiter(50*time.Millisecond, 30*time.Second),
+					// overall rate limiter (not per item)
+					&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(10), 500)},
+				), 5*time.Minute),
+			workqueue.RateLimitingQueueConfig{
+				Name: name,
+			}),
 		name: name,
 	}
 }
