@@ -67,3 +67,31 @@ var _ = Describe("IsNotFoundErr", func() {
 		})
 	})
 })
+
+var _ = Describe("IsMissingNamespaceErr", func() {
+	When("the error isn't NotFound", func() {
+		It("should return false", func() {
+			ok, _ := resource.IsMissingNamespaceErr(apierrors.NewBadRequest(""))
+			Expect(ok).To(BeFalse())
+		})
+	})
+
+	When("the error details specify a namespace", func() {
+		It("should return true and the name", func() {
+			ok, name := resource.IsMissingNamespaceErr(apierrors.NewNotFound(schema.GroupResource{
+				Resource: "namespaces",
+			}, "missing-ns"))
+			Expect(ok).To(BeTrue())
+			Expect(name).To(Equal("missing-ns"))
+		})
+	})
+
+	When("the error details does not specify a namespace", func() {
+		It("should return false", func() {
+			ok, _ := resource.IsMissingNamespaceErr(apierrors.NewNotFound(schema.GroupResource{
+				Resource: "pods",
+			}, "missing"))
+			Expect(ok).To(BeFalse())
+		})
+	})
+})
