@@ -6,6 +6,9 @@ linters-settings:
       - opinionated
       - performance
       - style
+    disabled-checks:
+      - ifElseChain
+      - unnamedResult
   gocyclo:
     min-complexity: 15
   goheader:
