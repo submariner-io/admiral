@@ -42,3 +42,16 @@ func IsNotFoundErr(err error) bool {
 
 	return false
 }
+
+func IsMissingNamespaceErr(err error) (bool, string) {
+	if !apierrors.IsNotFound(err) {
+		return false, ""
+	}
+
+	var status apierrors.APIStatus
+	_ = errors.As(err, &status)
+
+	d := status.Status().Details
+
+	return d != nil && d.Kind == "namespaces" && d.Group == "", d.Name
+}
