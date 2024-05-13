@@ -74,6 +74,31 @@ var _ = Describe("Create", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
+
+	Context("with namespace verification", func() {
+		BeforeEach(func() {
+			fake.AddVerifyNamespaceReactor(&t.client.Fake, "pods")
+		})
+
+		When("the namespace does not exist", func() {
+			It("should return an error", func() {
+				_, err := t.doCreate(t.pod)
+				Expect(resource.IsMissingNamespaceErr(err)).To(BeTrue())
+				Expect(resource.ExtractMissingNamespaceFromErr(err)).To(Equal(testNamespace))
+			})
+		})
+
+		When("the namespace does exist", func() {
+			It("should succeed", func() {
+				_, err := t.client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{Name: testNamespace},
+				}, metav1.CreateOptions{})
+				Expect(err).To(Succeed())
+
+				t.assertCreateSuccess(t.pod)
+			})
+		})
+	})
 })
 
 var _ = Describe("Update", func() {
