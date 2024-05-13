@@ -21,6 +21,8 @@ package fake
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/gomega"
@@ -30,26 +32,46 @@ import (
 )
 
 type Federator struct {
+	lock             sync.Mutex
 	distribute       chan *unstructured.Unstructured
 	delete           chan *unstructured.Unstructured
-	FailOnDistribute error
-	FailOnDelete     error
-	ResetOnFailure   bool
+	failOnDistribute error
+	failOnDelete     error
+	ResetOnFailure   atomic.Bool
 }
 
 func New() *Federator {
-	return &Federator{
-		distribute:     make(chan *unstructured.Unstructured, 100),
-		delete:         make(chan *unstructured.Unstructured, 100),
-		ResetOnFailure: true,
+	f := &Federator{
+		distribute: make(chan *unstructured.Unstructured, 100),
+		delete:     make(chan *unstructured.Unstructured, 100),
 	}
+	f.ResetOnFailure.Store(true)
+
+	return f
+}
+
+func (f *Federator) FailOnDistribute(err error) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	f.failOnDistribute = err
+}
+
+func (f *Federator) FailOnDelete(err error) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	f.failOnDelete = err
 }
 
 func (f *Federator) Distribute(_ context.Context, obj runtime.Object) error {
-	err := f.FailOnDistribute
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	err := f.failOnDistribute
 	if err != nil {
-		if f.ResetOnFailure {
-			f.FailOnDistribute = nil
+		if f.ResetOnFailure.Load() {
+			f.failOnDistribute = nil
 		}
 
 		return err
@@ -61,10 +83,13 @@ func (f *Federator) Distribute(_ context.Context, obj runtime.Object) error {
 }
 
 func (f *Federator) Delete(_ context.Context, obj runtime.Object) error {
-	err := f.FailOnDelete
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	err := f.failOnDelete
 	if err != nil {
-		if f.ResetOnFailure {
-			f.FailOnDelete = nil
+		if f.ResetOnFailure.Load() {
+			f.failOnDelete = nil
 		}
 
 		return err

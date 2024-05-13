@@ -45,6 +45,9 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	fakeClient "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
+	fakeK8s "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/ptr"
 )
@@ -73,6 +76,7 @@ var _ = Describe("Resource Syncer", func() {
 	})
 	Describe("Trim Resource Fields", testTrimResourceFields)
 	Describe("With SharedInformer", testWithSharedInformer)
+	Describe("With missing namespace", testWithMissingNamespace)
 })
 
 func testReconcileLocalToRemote() {
@@ -448,7 +452,7 @@ func testTransformFunction() {
 
 	When("deletion of the transformed resource initially fails", func() {
 		BeforeEach(func() {
-			d.federator.FailOnDelete = errors.New("fake error")
+			d.federator.FailOnDelete(errors.New("fake error"))
 			d.addInitialResource(d.resource)
 		})
 
@@ -465,7 +469,7 @@ func testTransformFunction() {
 
 	When("distribute for the transformed resource initially fails", func() {
 		JustBeforeEach(func() {
-			d.federator.FailOnDistribute = errors.New("fake error")
+			d.federator.FailOnDistribute(errors.New("fake error"))
 		})
 
 		It("retry until it succeeds", func() {
@@ -654,8 +658,8 @@ func testOnSuccessfulSyncFunction() {
 
 	When("distribute fails", func() {
 		BeforeEach(func() {
-			d.federator.FailOnDistribute = errors.New("fake error")
-			d.federator.ResetOnFailure = false
+			d.federator.FailOnDistribute(errors.New("fake error"))
+			d.federator.ResetOnFailure.Store(false)
 		})
 
 		It("should not invoke the OnSuccessfulSync function", func() {
@@ -672,8 +676,8 @@ func testOnSuccessfulSyncFunction() {
 
 		Context("with a general error", func() {
 			BeforeEach(func() {
-				d.federator.FailOnDelete = errors.New("fake error")
-				d.federator.ResetOnFailure = false
+				d.federator.FailOnDelete(errors.New("fake error"))
+				d.federator.ResetOnFailure.Store(false)
 			})
 
 			It("should not invoke the OnSuccessfulSync function", func() {
@@ -684,7 +688,7 @@ func testOnSuccessfulSyncFunction() {
 
 		Context("with a NotFound error", func() {
 			BeforeEach(func() {
-				d.federator.FailOnDelete = apierrors.NewNotFound(schema.GroupResource{}, "")
+				d.federator.FailOnDelete(apierrors.NewNotFound(schema.GroupResource{}, ""))
 			})
 
 			It("should invoke the OnSuccessfulSync function", func() {
@@ -842,7 +846,7 @@ func testSyncErrors() {
 
 	When("distribute initially fails", func() {
 		BeforeEach(func() {
-			d.federator.FailOnDistribute = expectedErr
+			d.federator.FailOnDistribute(expectedErr)
 		})
 
 		It("should log the error and retry until it succeeds", func() {
@@ -853,7 +857,7 @@ func testSyncErrors() {
 
 	When("delete initially fails", func() {
 		BeforeEach(func() {
-			d.federator.FailOnDelete = expectedErr
+			d.federator.FailOnDelete(expectedErr)
 			d.addInitialResource(d.resource)
 		})
 
@@ -869,7 +873,7 @@ func testSyncErrors() {
 
 	When("delete fails with not found", func() {
 		BeforeEach(func() {
-			d.federator.FailOnDelete = apierrors.NewNotFound(schema.GroupResource{}, "not found")
+			d.federator.FailOnDelete(apierrors.NewNotFound(schema.GroupResource{}, "not found"))
 			d.addInitialResource(d.resource)
 		})
 
@@ -1227,6 +1231,68 @@ func testWithSharedInformer() {
 
 	When("a resource is created in the local datastore", func() {
 		d.verifyDistributeOnCreateTest("")
+	})
+}
+
+func testWithMissingNamespace() {
+	const transformedNamespace = "transformed-ns"
+
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	var (
+		k8sClient         kubernetes.Interface
+		nsInformerFactory informers.SharedInformerFactory
+	)
+
+	BeforeEach(func() {
+		d.config.Transform = func(obj runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+			obj = obj.DeepCopyObject()
+			resourceutils.MustToMeta(obj).SetNamespace(transformedNamespace)
+
+			return obj, false
+		}
+
+		d.federator.FailOnDistribute(apierrors.NewNotFound(schema.GroupResource{
+			Resource: "namespaces",
+		}, transformedNamespace))
+
+		k8sClient = fakeK8s.NewSimpleClientset()
+		nsInformerFactory = informers.NewSharedInformerFactory(k8sClient, 0)
+		d.config.NamespaceInformer = nsInformerFactory.Core().V1().Namespaces().Informer()
+	})
+
+	JustBeforeEach(func() {
+		nsInformerFactory.Start(d.stopCh)
+	})
+
+	Specify("distribute should eventually succeed when the namespace is created", func() {
+		resource := test.CreateResource(d.sourceClient, d.resource)
+		d.federator.VerifyNoDistribute()
+
+		d.federator.FailOnDistribute(nil)
+
+		By("Creating namespace")
+
+		_, err := k8sClient.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: transformedNamespace,
+			},
+		}, metav1.CreateOptions{})
+		Expect(err).To(Succeed())
+
+		resource.SetNamespace(transformedNamespace)
+		d.federator.VerifyDistribute(resource)
+	})
+
+	Context("and no namespace informer specified", func() {
+		BeforeEach(func() {
+			d.config.NamespaceInformer = nil
+		})
+
+		It("should not retry", func() {
+			test.CreateResource(d.sourceClient, d.resource)
+			d.federator.VerifyNoDistribute()
+		})
 	})
 }
 
