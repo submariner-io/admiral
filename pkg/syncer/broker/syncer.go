@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -134,6 +135,9 @@ type SyncerConfig struct {
 
 	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
 	Scheme *runtime.Scheme
+
+	// NamespaceInformer if specified, used to retry local resources that initially failed due to missing namespace.
+	NamespaceInformer cache.SharedInformer
 }
 
 type Syncer struct {
@@ -254,6 +258,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.BrokerResyncPeriod,
 			SyncCounter:         syncCounter,
+			NamespaceInformer:   config.NamespaceInformer,
 		})
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating remote resource syncer")

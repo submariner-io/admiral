@@ -43,10 +43,14 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/utils/set"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const OrigNamespaceLabelKey = "submariner-io/originatingNamespace"
+const (
+	OrigNamespaceLabelKey = "submariner-io/originatingNamespace"
+	namespaceKey          = "$namespace$"
+)
 
 type SyncDirection int
 
@@ -183,24 +187,31 @@ type ResourceSyncerConfig struct {
 
 	// SyncCounter if specified, used to record counter metrics.
 	SyncCounter *prometheus.GaugeVec
+
+	// NamespaceInformer if specified, used to retry resources that initially failed due to missing namespace.
+	NamespaceInformer cache.SharedInformer
 }
 
 type resourceSyncer struct {
-	workQueue   workqueue.Interface
-	hasSynced   func() bool
-	informer    cache.Controller
-	store       cache.Store
-	config      ResourceSyncerConfig
-	deleted     sync.Map
-	created     sync.Map
-	stopped     chan struct{}
-	syncCounter *prometheus.GaugeVec
-	stopCh      <-chan struct{}
-	log         log.Logger
+	workQueue         workqueue.Interface
+	hasSynced         func() bool
+	informer          cache.Controller
+	store             cache.Store
+	config            ResourceSyncerConfig
+	deleted           sync.Map
+	created           sync.Map
+	stopped           chan struct{}
+	syncCounter       *prometheus.GaugeVec
+	stopCh            <-chan struct{}
+	log               log.Logger
+	missingNamespaces map[string]set.Set[string]
 }
 
 func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
-	syncer := newResourceSyncer(config)
+	syncer, err := newResourceSyncer(config)
+	if err != nil {
+		return nil, err
+	}
 
 	rawType, gvr, err := util.ToUnstructuredResource(config.ResourceType, config.RestMapper)
 	if err != nil {
@@ -232,7 +243,11 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 }
 
 func NewResourceSyncerWithSharedInformer(config *ResourceSyncerConfig, informer cache.SharedInformer) (Interface, error) {
-	syncer := newResourceSyncer(config)
+	syncer, err := newResourceSyncer(config)
+	if err != nil {
+		return nil, err
+	}
+
 	syncer.store = informer.GetStore()
 
 	reg, err := informer.AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{
@@ -241,7 +256,7 @@ func NewResourceSyncerWithSharedInformer(config *ResourceSyncerConfig, informer 
 		DeleteFunc: syncer.onDelete,
 	}, config.ResyncPeriod)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error registering even handler")
+		return nil, errors.Wrapf(err, "error registering event handler")
 	}
 
 	syncer.hasSynced = reg.HasSynced
@@ -249,11 +264,12 @@ func NewResourceSyncerWithSharedInformer(config *ResourceSyncerConfig, informer 
 	return syncer, nil
 }
 
-func newResourceSyncer(config *ResourceSyncerConfig) *resourceSyncer {
+func newResourceSyncer(config *ResourceSyncerConfig) (*resourceSyncer, error) {
 	syncer := &resourceSyncer{
-		config:  *config,
-		stopped: make(chan struct{}),
-		log:     log.Logger{Logger: logf.Log.WithName("ResourceSyncer")},
+		config:            *config,
+		stopped:           make(chan struct{}),
+		log:               log.Logger{Logger: logf.Log.WithName("ResourceSyncer")},
+		missingNamespaces: map[string]set.Set[string]{},
 	}
 
 	if syncer.config.Scheme == nil {
@@ -285,7 +301,18 @@ func newResourceSyncer(config *ResourceSyncerConfig) *resourceSyncer {
 
 	syncer.workQueue = workqueue.New(config.Name)
 
-	return syncer
+	if config.NamespaceInformer != nil {
+		_, err := config.NamespaceInformer.AddEventHandler(cache.ResourceEventHandlerDetailedFuncs{
+			AddFunc: func(obj interface{}, _ bool) {
+				syncer.workQueue.Enqueue(cache.ExplicitKey(cache.NewObjectName(namespaceKey, resourceUtil.MustToMeta(obj).GetName()).String()))
+			},
+		})
+		if err != nil {
+			return nil, errors.Wrapf(err, "error registering namespace handler")
+		}
+	}
+
+	return syncer, nil
 }
 
 func NewSharedInformer(config *ResourceSyncerConfig) (cache.SharedInformer, error) {
@@ -476,7 +503,12 @@ func (r *resourceSyncer) runIfCacheSynced(defaultReturn any, run func() any) any
 	return run()
 }
 
-func (r *resourceSyncer) processNextWorkItem(key, _, _ string) (bool, error) {
+func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error) {
+	if ns == namespaceKey {
+		r.handleNamespaceAdded(name)
+		return false, nil
+	}
+
 	obj, exists, err := r.store.GetByKey(key)
 	if err != nil {
 		return true, errors.Wrapf(err, "error retrieving resource %q", key)
@@ -513,6 +545,13 @@ func (r *resourceSyncer) processNextWorkItem(key, _, _ string) (bool, error) {
 
 		err = r.config.Federator.Distribute(context.Background(), resource)
 		if err != nil || r.onSuccessfulSync(resource, transformed, op) {
+			namespace := resourceUtil.ExtractMissingNamespaceFromErr(err)
+			if namespace != "" {
+				r.handleMissingNamespace(key, namespace)
+
+				return false, nil
+			}
+
 			return true, errors.Wrapf(err, "error distributing resource %q", key)
 		}
 
@@ -726,6 +765,36 @@ func (r *resourceSyncer) assertUnstructured(obj interface{}) *unstructured.Unstr
 	}
 
 	return u
+}
+
+func (r *resourceSyncer) handleMissingNamespace(key, namespace string) {
+	r.log.Warningf("Syncer %q: Unable to distribute resource %q due to missing namespace %q", r.config.Name, key, namespace)
+
+	if r.config.NamespaceInformer == nil {
+		return
+	}
+
+	keys, ok := r.missingNamespaces[namespace]
+	if !ok {
+		keys = set.New[string]()
+		r.missingNamespaces[namespace] = keys
+	}
+
+	keys.Insert(key)
+}
+
+func (r *resourceSyncer) handleNamespaceAdded(namespace string) {
+	keys, ok := r.missingNamespaces[namespace]
+	if ok {
+		r.log.V(log.LIBDEBUG).Infof("Syncer %q: namespace %q created - re-queueing %d resources", r.config.Name, namespace, keys.Len())
+
+		for _, k := range keys.UnsortedList() {
+			ns, name, _ := cache.SplitMetaNamespaceKey(k)
+			r.RequeueResource(name, ns)
+		}
+
+		delete(r.missingNamespaces, namespace)
+	}
 }
 
 func getClusterIDLabel(resource runtime.Object) (string, bool) {
