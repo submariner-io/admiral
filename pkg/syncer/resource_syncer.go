@@ -195,6 +195,7 @@ type ResourceSyncerConfig struct {
 type resourceSyncer struct {
 	workQueue         workqueue.Interface
 	hasSynced         func() bool
+	unregHandler      func()
 	informer          cache.Controller
 	store             cache.Store
 	config            ResourceSyncerConfig
@@ -260,6 +261,10 @@ func NewResourceSyncerWithSharedInformer(config *ResourceSyncerConfig, informer 
 	}
 
 	syncer.hasSynced = reg.HasSynced
+
+	syncer.unregHandler = func() {
+		_ = informer.RemoveEventHandler(reg)
+	}
 
 	return syncer, nil
 }
@@ -347,6 +352,10 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 		defer func() {
 			if r.config.SyncCounterOpts != nil {
 				prometheus.Unregister(r.syncCounter)
+			}
+
+			if r.unregHandler != nil {
+				r.unregHandler()
 			}
 
 			r.stopped <- struct{}{}
