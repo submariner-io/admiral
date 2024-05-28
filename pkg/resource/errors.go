@@ -20,6 +20,7 @@ package resource
 
 import (
 	"errors"
+	"net"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -67,4 +68,11 @@ func ExtractMissingNamespaceFromErr(err error) string {
 	d := status.Status().Details
 
 	return d.Name
+}
+
+func IsTransientErr(err error) bool {
+	// Check for errors indicating the server is temporarily busy (ServerTimeout and TooManyRequests). Also check for
+	// a net.OpError indicating a network connectivity issue. This is typically wrapped by a url.Error.
+	var netError *net.OpError
+	return apierrors.IsServerTimeout(err) || apierrors.IsTooManyRequests(err) || errors.As(err, &netError)
 }
