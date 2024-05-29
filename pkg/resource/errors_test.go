@@ -19,10 +19,12 @@ limitations under the License.
 package resource_test
 
 import (
-	"errors"
+	"net"
+	"net/url"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/resource"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -90,6 +92,50 @@ var _ = Describe("IsMissingNamespaceErr and ExtractMissingNamespaceFromErr", fun
 			Expect(resource.IsMissingNamespaceErr(apierrors.NewNotFound(schema.GroupResource{
 				Resource: "pods",
 			}, "missing"))).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("IsTransientErr", func() {
+	When("the error is ServerTimeout", func() {
+		It("should return true", func() {
+			Expect(resource.IsTransientErr(apierrors.NewServerTimeout(schema.GroupResource{}, "get", 5))).To(BeTrue())
+		})
+	})
+
+	When("the error is TooManyRequests", func() {
+		It("should return true", func() {
+			Expect(resource.IsTransientErr(apierrors.NewTooManyRequests("", 5))).To(BeTrue())
+		})
+	})
+
+	When("the error is a wrapped network operation failure", func() {
+		It("should return true", func() {
+			Expect(resource.IsTransientErr(errors.Wrap(&url.Error{
+				Op:  "Get",
+				URL: "https://192.168.67.2:8443/api/v1/namespaces",
+				Err: &net.OpError{
+					Op:  "dial",
+					Net: "tcp",
+					Addr: &net.TCPAddr{
+						IP:   net.IP{192, 168, 67, 2},
+						Port: 8443,
+					},
+					Err: &net.DNSError{},
+				},
+			}, "wrapped"))).To(BeTrue())
+		})
+	})
+
+	When("the error is not transient", func() {
+		It("should return false", func() {
+			Expect(resource.IsTransientErr(apierrors.NewBadRequest(""))).To(BeFalse())
+		})
+	})
+
+	When("the error is nil", func() {
+		It("should return false", func() {
+			Expect(resource.IsTransientErr(nil)).To(BeFalse())
 		})
 	})
 })
