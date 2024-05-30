@@ -1,6 +1,6 @@
 module github.com/submariner-io/admiral
 
-go 1.22.0
+go 1.21
 
 retract v0.10.0 // Tag was moved
 
@@ -12,15 +12,15 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.19.1
 	github.com/rs/zerolog v1.33.0
-	github.com/submariner-io/shipyard v0.18.0-rc0
+	github.com/submariner-io/shipyard v0.18.0-m3.0.20240530154115-6bd980e3c553
 	go.uber.org/mock v0.4.0
 	golang.org/x/time v0.5.0
-	k8s.io/api v0.30.1
-	k8s.io/apimachinery v0.30.1
-	k8s.io/client-go v0.30.1
+	k8s.io/api v0.29.5
+	k8s.io/apimachinery v0.29.5
+	k8s.io/client-go v0.29.5
 	k8s.io/klog/v2 v2.120.1
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
-	sigs.k8s.io/controller-runtime v0.18.3
+	sigs.k8s.io/controller-runtime v0.17.5
 	sigs.k8s.io/yaml v1.4.0
 )
 
