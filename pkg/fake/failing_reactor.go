@@ -54,79 +54,26 @@ func (f *FailingReactor) react(action testing.Action) (bool, runtime.Object, err
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
+	var fail *error
+
 	switch action.GetVerb() {
 	case "get":
-		return f.get()
+		fail = &f.failOnGet
 	case "create":
-		return f.create()
+		fail = &f.failOnCreate
 	case "update":
-		return f.update()
+		fail = &f.failOnUpdate
 	case "delete":
-		return f.delete()
+		fail = &f.failOnDelete
 	case "list":
-		return f.list()
+		fail = &f.failOnList
 	}
 
-	return false, nil, nil
-}
+	if *fail != nil {
+		err := *fail
 
-func (f *FailingReactor) get() (bool, runtime.Object, error) {
-	err := f.failOnGet
-	if err != nil {
 		if f.resetOnFailure {
-			f.failOnGet = nil
-		}
-
-		return true, nil, err
-	}
-
-	return false, nil, nil
-}
-
-func (f *FailingReactor) create() (bool, runtime.Object, error) {
-	err := f.failOnCreate
-	if err != nil {
-		if f.resetOnFailure {
-			f.failOnCreate = nil
-		}
-
-		return true, nil, err
-	}
-
-	return false, nil, nil
-}
-
-func (f *FailingReactor) update() (bool, runtime.Object, error) {
-	err := f.failOnUpdate
-	if err != nil {
-		if f.resetOnFailure {
-			f.failOnUpdate = nil
-		}
-
-		return true, nil, err
-	}
-
-	return false, nil, nil
-}
-
-func (f *FailingReactor) delete() (bool, runtime.Object, error) {
-	err := f.failOnDelete
-	if err != nil {
-		if f.resetOnFailure {
-			f.failOnDelete = nil
-		}
-
-		return true, nil, err
-	}
-
-	return false, nil, nil
-}
-
-func (f *FailingReactor) list() (bool, runtime.Object, error) {
-	err := f.failOnList
-	if err != nil {
-		if f.resetOnFailure {
-			f.failOnList = nil
+			*fail = nil
 		}
 
 		return true, nil, err
