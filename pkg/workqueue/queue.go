@@ -43,7 +43,7 @@ type Interface interface {
 }
 
 type queueType struct {
-	workqueue.RateLimitingInterface
+	workqueue.TypedRateLimitingInterface[string]
 
 	name string
 }
@@ -52,16 +52,16 @@ var logger = log.Logger{Logger: logf.Log.WithName("WorkQueue")}
 
 func New(name string) Interface {
 	return &queueType{
-		RateLimitingInterface: workqueue.NewRateLimitingQueueWithConfig(
+		TypedRateLimitingInterface: workqueue.NewTypedRateLimitingQueueWithConfig(
 			// caps the maximum wait
-			workqueue.NewWithMaxWaitRateLimiter(
-				workqueue.NewMaxOfRateLimiter(
+			workqueue.NewTypedWithMaxWaitRateLimiter(
+				workqueue.NewTypedMaxOfRateLimiter(
 					// exponential per-item rate limiter
-					workqueue.NewItemExponentialFailureRateLimiter(50*time.Millisecond, 30*time.Second),
+					workqueue.NewTypedItemExponentialFailureRateLimiter[string](50*time.Millisecond, 30*time.Second),
 					// overall rate limiter (not per item)
-					&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(10), 500)},
+					&workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Limit(10), 500)},
 				), 5*time.Minute),
-			workqueue.RateLimitingQueueConfig{
+			workqueue.TypedRateLimitingQueueConfig[string]{
 				Name: name,
 			}),
 		name: name,
@@ -88,14 +88,9 @@ func (q *queueType) Run(stopCh <-chan struct{}, process ProcessFunc) {
 }
 
 func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
-	obj, shutdown := q.Get()
+	key, shutdown := q.Get()
 	if shutdown {
 		return false
-	}
-
-	key, ok := obj.(string)
-	if !ok {
-		panic(fmt.Sprintf("Work queue %q received type %T instead of string", q.name, obj))
 	}
 
 	defer q.Done(key)
@@ -123,7 +118,7 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 }
 
 func (q *queueType) NumRequeues(key string) int {
-	return q.RateLimitingInterface.NumRequeues(key)
+	return q.TypedRateLimitingInterface.NumRequeues(key)
 }
 
 func (q *queueType) ShutDownWithDrain() {
@@ -131,7 +126,7 @@ func (q *queueType) ShutDownWithDrain() {
 
 	// ShutDownWithDrain waits for all in-flight work to complete and thus could block indefinitely so put a deadline on it.
 	go func() {
-		q.RateLimitingInterface.ShutDownWithDrain()
+		q.TypedRateLimitingInterface.ShutDownWithDrain()
 		done <- struct{}{}
 	}()
 

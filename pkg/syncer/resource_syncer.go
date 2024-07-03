@@ -219,22 +219,28 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 
 	resourceClient := config.SourceClient.Resource(*gvr).Namespace(config.SourceNamespace)
 
-	syncer.store, syncer.informer = cache.NewTransformingInformer(&cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			options.LabelSelector = config.SourceLabelSelector
-			options.FieldSelector = config.SourceFieldSelector
-			return resourceClient.List(context.TODO(), options)
+	syncer.store, syncer.informer = cache.NewInformerWithOptions(cache.InformerOptions{
+		ListerWatcher: &cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				options.LabelSelector = config.SourceLabelSelector
+				options.FieldSelector = config.SourceFieldSelector
+				return resourceClient.List(context.TODO(), options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				options.LabelSelector = config.SourceLabelSelector
+				options.FieldSelector = config.SourceFieldSelector
+				return resourceClient.Watch(context.TODO(), options)
+			},
 		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			options.LabelSelector = config.SourceLabelSelector
-			options.FieldSelector = config.SourceFieldSelector
-			return resourceClient.Watch(context.TODO(), options)
+		ObjectType:   rawType,
+		ResyncPeriod: config.ResyncPeriod,
+		Handler: cache.ResourceEventHandlerFuncs{
+			AddFunc:    syncer.onCreate,
+			UpdateFunc: syncer.onUpdate,
+			DeleteFunc: syncer.onDelete,
 		},
-	}, rawType, config.ResyncPeriod, cache.ResourceEventHandlerFuncs{
-		AddFunc:    syncer.onCreate,
-		UpdateFunc: syncer.onUpdate,
-		DeleteFunc: syncer.onDelete,
-	}, resourceUtil.TrimManagedFields)
+		Transform: resourceUtil.TrimManagedFields,
+	})
 
 	syncer.hasSynced = syncer.informer.HasSynced
 
