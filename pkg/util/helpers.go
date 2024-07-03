@@ -19,6 +19,7 @@ limitations under the License.
 package util
 
 import (
+	"context"
 	"crypto/x509"
 	"fmt"
 	"sync/atomic"
@@ -159,15 +160,16 @@ func AddCertificateErrorHandler(fatal bool) {
 	}
 
 	//nolint:reassign // We need to reassign ErrorHandlers to register our handler
-	utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers, func(err error) {
-		var unknownAuthorityError x509.UnknownAuthorityError
-		if errors.As(err, &unknownAuthorityError) && lastBadCertificate.Swap(unknownAuthorityError.Cert) != unknownAuthorityError.Cert {
-			logCertificateError(err, "Certificate error: %s", resource.ToJSON(err))
-		}
-		var certificateInvalidError x509.CertificateInvalidError
-		if errors.As(err, &certificateInvalidError) && lastBadCertificate.Swap(certificateInvalidError.Cert) != certificateInvalidError.Cert {
-			logCertificateError(err, "Certificate error: %s", resource.ToJSON(err))
-		}
-		// The generic handler has already logged the error, no need to repeat if we don't want extra detail
-	})
+	utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers,
+		func(_ context.Context, err error, _ string, _ ...interface{}) {
+			var unknownAuthorityError x509.UnknownAuthorityError
+			if errors.As(err, &unknownAuthorityError) && lastBadCertificate.Swap(unknownAuthorityError.Cert) != unknownAuthorityError.Cert {
+				logCertificateError(err, "Certificate error: %s", resource.ToJSON(err))
+			}
+			var certificateInvalidError x509.CertificateInvalidError
+			if errors.As(err, &certificateInvalidError) && lastBadCertificate.Swap(certificateInvalidError.Cert) != certificateInvalidError.Cert {
+				logCertificateError(err, "Certificate error: %s", resource.ToJSON(err))
+			}
+			// The generic handler has already logged the error, no need to repeat if we don't want extra detail
+		})
 }

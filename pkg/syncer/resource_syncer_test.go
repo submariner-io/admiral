@@ -1386,7 +1386,7 @@ type testDriver struct {
 	initialResources   []runtime.Object
 	stopCh             chan struct{}
 	resource           *corev1.Pod
-	savedErrorHandlers []func(error)
+	savedErrorHandlers []utilruntime.ErrorHandler
 	handledError       chan error
 }
 
@@ -1450,9 +1450,10 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 
 		Expect(err).To(Succeed())
 
-		utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers, func(err error) {
-			d.handledError <- err
-		})
+		utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers,
+			func(_ context.Context, err error, _ string, _ ...interface{}) {
+				d.handledError <- err
+			})
 
 		Expect(d.syncer.Start(d.stopCh)).To(Succeed())
 	})
