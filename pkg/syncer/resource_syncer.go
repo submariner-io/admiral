@@ -22,7 +22,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -198,8 +197,7 @@ type resourceSyncer struct {
 	informer          cache.Controller
 	store             cache.Store
 	config            ResourceSyncerConfig
-	deleted           sync.Map
-	created           sync.Map
+	operationQueues   *operationQueueMap
 	stopped           chan struct{}
 	syncCounter       *prometheus.GaugeVec
 	stopCh            <-chan struct{}
@@ -267,7 +265,10 @@ func NewResourceSyncerWithSharedInformer(config *ResourceSyncerConfig, informer 
 
 func newResourceSyncer(config *ResourceSyncerConfig) (*resourceSyncer, error) {
 	syncer := &resourceSyncer{
-		config:            *config,
+		config: *config,
+		operationQueues: &operationQueueMap{
+			queues: map[string][]any{},
+		},
 		stopped:           make(chan struct{}),
 		log:               log.Logger{Logger: logf.Log.WithName("ResourceSyncer")},
 		missingNamespaces: map[string]set.Set[string]{},
@@ -489,7 +490,7 @@ func (r *resourceSyncer) doReconcile(resourceLister func() []runtime.Object) {
 		}
 
 		obj := resourceUtil.MustToUnstructuredUsingScheme(resource, r.config.Scheme)
-		r.deleted.Store(key, obj)
+		r.operationQueues.add(key, deleteOperation(obj))
 		r.workQueue.Enqueue(obj)
 	}
 }
@@ -511,27 +512,56 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 		return false, nil
 	}
 
+	var (
+		requeue bool
+		err     error
+	)
+
+	resourceOp := r.operationQueues.peek(key)
+
+	switch t := resourceOp.(type) {
+	case deleteOperation:
+		requeue, err = r.handleDeleted(key, t)
+	case createOperation:
+		requeue, err = r.handleCreatedOrUpdated(key, t)
+	default:
+		requeue, err = r.handleCreatedOrUpdated(key, nil)
+	}
+
+	// If not re-queueing the current operation then remove it from the operation queue. If there's another operation queued
+	// then add the key back to the work queue, so it's processed later. Note that we don't simply return true to re-queue
+	// b/c we're not retrying the current operation, and we don't want the re-queue limit to be reached.
+	if !requeue && r.operationQueues.remove(key, resourceOp) {
+		r.workQueue.Enqueue(cache.ExplicitKey(key))
+	}
+
+	return requeue, err
+}
+
+func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructured.Unstructured) (bool, error) {
+	resource := created
+
+	op := Update
+	if created != nil {
+		op = Create
+	}
+
 	obj, exists, err := r.store.GetByKey(key)
 	if err != nil {
 		return true, errors.Wrapf(err, "error retrieving resource %q", key)
 	}
 
-	if !exists {
-		return r.handleDeleted(key)
-	}
-
-	resource := r.assertUnstructured(obj)
-
-	op := Update
-	_, found := r.created.Load(key)
-	if found {
-		op = Create
+	// Use the latest resource from the cache regardless of the operation. If it doesn't exist, for a create operation, this means
+	// a deletion occurred afterward, in which case we'll process the 'created' resource.
+	if exists {
+		resource = r.assertUnstructured(obj)
+	} else if op == Update {
+		return false, nil
 	}
 
 	r.log.V(log.LIBTRACE).Infof("Syncer %q retrieved %sd resource %q: %#v", r.config.Name, op, resource.GetName(), resource)
 
 	if !r.shouldSync(resource) {
-		r.created.Delete(key)
 		return false, nil
 	}
 
@@ -568,25 +598,12 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 		r.log.V(log.LIBDEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, resource.GetName())
 	}
 
-	if !requeue {
-		r.created.Delete(key)
-	}
-
 	return requeue, nil
 }
 
-func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
+func (r *resourceSyncer) handleDeleted(key string, deletedResource *unstructured.Unstructured) (bool, error) {
 	r.log.V(log.LIBDEBUG).Infof("Syncer %q informed of deleted resource %q", r.config.Name, key)
 
-	obj, found := r.deleted.Load(key)
-	if !found {
-		r.log.V(log.LIBDEBUG).Infof("Syncer %q: resource %q not found in deleted object cache", r.config.Name, key)
-		return false, nil
-	}
-
-	r.deleted.Delete(key)
-
-	deletedResource := r.assertUnstructured(obj)
 	if !r.shouldSync(deletedResource) {
 		return false, nil
 	}
@@ -606,7 +623,6 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 		}
 
 		if err != nil || r.onSuccessfulSync(resource, transformed, Delete) {
-			r.deleted.Store(key, deletedResource)
 			return true, errors.Wrapf(err, "error deleting resource %q", key)
 		}
 
@@ -621,10 +637,6 @@ func (r *resourceSyncer) handleDeleted(key string) (bool, error) {
 
 			r.log.V(log.LIBDEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, resource.GetName())
 		}
-	}
-
-	if requeue {
-		r.deleted.Store(key, deletedResource)
 	}
 
 	return requeue, nil
@@ -680,14 +692,16 @@ func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op
 	return r.config.OnSuccessfulSync(converted, op)
 }
 
-func (r *resourceSyncer) onCreate(resource interface{}) {
-	if !r.shouldProcess(resource.(*unstructured.Unstructured), Create) {
+func (r *resourceSyncer) onCreate(obj interface{}) {
+	resource := r.assertUnstructured(obj)
+
+	if !r.shouldProcess(resource, Create) {
 		return
 	}
 
 	key, _ := cache.MetaNamespaceKeyFunc(resource)
-	v := true
-	r.created.Store(key, &v)
+
+	r.operationQueues.add(key, createOperation(resource))
 	r.workQueue.Enqueue(resource)
 }
 
@@ -722,8 +736,8 @@ func (r *resourceSyncer) onDelete(obj interface{}) {
 	}
 
 	key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
-	r.deleted.Store(key, resource)
 
+	r.operationQueues.add(key, deleteOperation(resource))
 	r.workQueue.Enqueue(obj)
 }
 
