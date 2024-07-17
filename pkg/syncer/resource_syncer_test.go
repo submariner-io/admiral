@@ -77,6 +77,7 @@ var _ = Describe("Resource Syncer", func() {
 	Describe("Trim Resource Fields", testTrimResourceFields)
 	Describe("With SharedInformer", testWithSharedInformer)
 	Describe("With missing namespace", testWithMissingNamespace)
+	Describe("Event Ordering", testEventOrdering)
 })
 
 func testReconcileLocalToRemote() {
@@ -536,7 +537,7 @@ func testTransformFunction() {
 				transformFuncRet.Store(transformed)
 				expOperation <- op
 
-				return ret, true
+				return ret, ret == nil
 			}
 		})
 
@@ -1292,6 +1293,69 @@ func testWithMissingNamespace() {
 		It("should not retry", func() {
 			test.CreateResource(d.sourceClient, d.resource)
 			d.federator.VerifyNoDistribute()
+		})
+	})
+}
+
+func testEventOrdering() {
+	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
+
+	var opChan chan syncer.Operation
+
+	BeforeEach(func() {
+		opChan = make(chan syncer.Operation, 20)
+
+		d.config.Transform = func(from runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
+			opChan <- op
+			return from, false
+		}
+	})
+
+	When("a create occurs immediately following a delete", func() {
+		It("should process both events in order", func() {
+			first := test.CreateResource(d.sourceClient, d.resource)
+			d.federator.VerifyDistribute(first)
+			Eventually(opChan).Should(Receive(Equal(syncer.Create)))
+
+			d.resource = test.NewPodWithImage(d.config.SourceNamespace, "apache")
+			Expect(d.sourceClient.Delete(context.TODO(), first.GetName(), metav1.DeleteOptions{})).To(Succeed())
+			second := test.CreateResource(d.sourceClient, d.resource)
+
+			Eventually(opChan).Should(Receive(Equal(syncer.Delete)))
+			Eventually(opChan).Should(Receive(Equal(syncer.Create)))
+			Consistently(opChan).ShouldNot(Receive())
+
+			d.federator.VerifyDelete(first)
+			d.federator.VerifyDistribute(second)
+		})
+	})
+
+	When("a delete occurs immediately following a create", func() {
+		It("should process both events in order", func() {
+			r := test.CreateResource(d.sourceClient, d.resource)
+			Expect(d.sourceClient.Delete(context.TODO(), r.GetName(), metav1.DeleteOptions{})).To(Succeed())
+
+			Eventually(opChan).Should(Receive(Equal(syncer.Create)))
+			Eventually(opChan).Should(Receive(Equal(syncer.Delete)))
+			Consistently(opChan).ShouldNot(Receive())
+
+			d.federator.VerifyDelete(r)
+			d.federator.VerifyDistribute(r)
+		})
+	})
+
+	When("a delete occurs immediately following an update", func() {
+		It("should process both events in order", func() {
+			d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, d.resource))
+			Eventually(opChan).Should(Receive(Equal(syncer.Create)))
+
+			d.federator.VerifyDistribute(test.UpdateResource(d.sourceClient,
+				test.NewPodWithImage(d.config.SourceNamespace, "apache")))
+			Expect(d.sourceClient.Delete(context.TODO(), d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
+
+			Eventually(opChan).Should(Receive(Equal(syncer.Update)))
+			Eventually(opChan).Should(Receive(Equal(syncer.Delete)))
+			Consistently(opChan).ShouldNot(Receive())
 		})
 	})
 }
