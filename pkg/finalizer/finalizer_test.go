@@ -209,7 +209,7 @@ func newTestDriver() *testDriver {
 				Finalizers: []string{},
 			},
 		},
-		kubeClient: kubeFake.NewSimpleClientset(),
+		kubeClient: kubeFake.NewClientset(),
 	}
 
 	return t

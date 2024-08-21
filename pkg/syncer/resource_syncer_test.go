@@ -1257,7 +1257,7 @@ func testWithMissingNamespace() {
 			Resource: "namespaces",
 		}, transformedNamespace))
 
-		k8sClient = fakeK8s.NewSimpleClientset()
+		k8sClient = fakeK8s.NewClientset()
 		nsInformerFactory = informers.NewSharedInformerFactory(k8sClient, 0)
 		d.config.NamespaceInformer = nsInformerFactory.Core().V1().Namespaces().Informer()
 	})
