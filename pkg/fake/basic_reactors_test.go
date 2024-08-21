@@ -329,7 +329,7 @@ func newBasicReactorsTestDriver() *basicReactorsTestDriver {
 	t := &basicReactorsTestDriver{}
 
 	BeforeEach(func() {
-		t.client = k8sfake.NewSimpleClientset()
+		t.client = k8sfake.NewClientset()
 		fake.AddBasicReactors(&t.client.Fake)
 
 		t.pod = &corev1.Pod{
