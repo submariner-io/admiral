@@ -23,6 +23,7 @@ import (
 
 	"github.com/submariner-io/admiral/pkg/resource"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/uuid"
@@ -63,6 +64,7 @@ func (r *createReactor) react(a testing.Action) (bool, runtime.Object, error) {
 	}
 
 	target.SetResourceVersion("1")
+	target.SetCreationTimestamp(metav1.Now())
 
 	if !target.GetDeletionTimestamp().IsZero() {
 		target.SetDeletionTimestamp(nil)
