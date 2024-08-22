@@ -219,6 +219,7 @@ func createResource[T runtime.Object](ctx context.Context, client resource.Inter
 		// do a separate UpdateStatus call.
 		objMeta.SetResourceVersion(resource.MustToMeta(created).GetResourceVersion())
 		objMeta.SetUID(resource.MustToMeta(created).GetUID())
+		objMeta.SetCreationTimestamp(resource.MustToMeta(created).GetCreationTimestamp())
 
 		_, err := client.UpdateStatus(ctx, obj, metav1.UpdateOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
