@@ -43,8 +43,17 @@ var _ = Describe("EnsureValidName", func() {
 	})
 
 	When("the string has non-alphanumeric letters", func() {
-		It("should convert them approriately", func() {
+		It("should convert them appropriately", func() {
 			Expect(resource.EnsureValidName("no-!@*()#$-chars")).To(Equal("no---------chars"))
+		})
+	})
+
+	When("the string starts or ends with an invalid char", func() {
+		It("should strip the char", func() {
+			Expect(resource.EnsureValidName("-abc")).To(Equal("abc"))
+			Expect(resource.EnsureValidName("abc-")).To(Equal("abc"))
+			Expect(resource.EnsureValidName("-abc-")).To(Equal("abc"))
+			Expect(resource.EnsureValidName("%abc*")).To(Equal("abc"))
 		})
 	})
 })
