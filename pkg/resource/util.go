@@ -111,7 +111,7 @@ func MustToMeta(obj interface{}) metav1.Object {
 func EnsureValidName(name string) string {
 	// K8s only allows lower case alphanumeric characters, '-' or '.'. Regex used for validation is
 	// '[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*'
-	return strings.Map(func(c rune) rune {
+	name = strings.Map(func(c rune) rune {
 		c = unicode.ToLower(c)
 		if !unicode.IsDigit(c) && !unicode.IsLower(c) && c != '-' && c != '.' {
 			return '-'
@@ -119,6 +119,8 @@ func EnsureValidName(name string) string {
 
 		return c
 	}, name)
+
+	return strings.Trim(name, "-")
 }
 
 func ToJSON(o any) string {
