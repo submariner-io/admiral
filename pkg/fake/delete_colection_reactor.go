@@ -43,20 +43,12 @@ type DeleteCollectionReactor struct {
 }
 
 func AddDeleteCollectionReactor(f *testing.Fake) {
+	r := newDeleteCollectionReactor(f.ReactionChain[0:])
+
 	f.Lock()
-	r := &DeleteCollectionReactor{gvrToGVK: map[schema.GroupVersionResource]schema.GroupVersionKind{}, reactors: f.ReactionChain[0:]}
+	defer f.Unlock()
+
 	f.PrependReactor("delete-collection", "*", r.react)
-	f.Unlock()
-
-	for gvk := range scheme.Scheme.AllKnownTypes() {
-		if !strings.HasSuffix(gvk.Kind, "List") {
-			continue
-		}
-
-		nonListGVK := gvk.GroupVersion().WithKind(gvk.Kind[:len(gvk.Kind)-4])
-		plural, _ := meta.UnsafeGuessKindToResource(nonListGVK)
-		r.gvrToGVK[plural] = nonListGVK
-	}
 }
 
 func (r *DeleteCollectionReactor) react(action testing.Action) (bool, runtime.Object, error) {
@@ -112,4 +104,24 @@ func invokeReactors(action testing.Action, reactors []testing.Reactor) (runtime.
 	}
 
 	return nil, errors.New("action not handled")
+}
+
+func newDeleteCollectionReactor(reactors []testing.Reactor) *DeleteCollectionReactor {
+	return &DeleteCollectionReactor{gvrToGVK: createGVRToGVKMapping(), reactors: reactors}
+}
+
+func createGVRToGVKMapping() map[schema.GroupVersionResource]schema.GroupVersionKind {
+	gvrToGVK := map[schema.GroupVersionResource]schema.GroupVersionKind{}
+
+	for gvk := range scheme.Scheme.AllKnownTypes() {
+		if !strings.HasSuffix(gvk.Kind, "List") {
+			continue
+		}
+
+		nonListGVK := gvk.GroupVersion().WithKind(gvk.Kind[:len(gvk.Kind)-4])
+		plural, _ := meta.UnsafeGuessKindToResource(nonListGVK)
+		gvrToGVK[plural] = nonListGVK
+	}
+
+	return gvrToGVK
 }

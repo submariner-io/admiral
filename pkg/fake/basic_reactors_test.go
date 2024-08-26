@@ -80,31 +80,6 @@ var _ = Describe("Create", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
-
-	Context("with namespace verification", func() {
-		BeforeEach(func() {
-			fake.AddVerifyNamespaceReactor(&t.client.Fake, "pods")
-		})
-
-		When("the namespace does not exist", func() {
-			It("should return an error", func() {
-				_, err := t.doCreate(t.pod)
-				Expect(resource.IsMissingNamespaceErr(err)).To(BeTrue())
-				Expect(resource.ExtractMissingNamespaceFromErr(err)).To(Equal(testNamespace))
-			})
-		})
-
-		When("the namespace does exist", func() {
-			It("should succeed", func() {
-				_, err := t.client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{Name: testNamespace},
-				}, metav1.CreateOptions{})
-				Expect(err).To(Succeed())
-
-				t.assertCreateSuccess(t.pod)
-			})
-		})
-	})
 })
 
 var _ = Describe("Update", func() {
@@ -323,6 +298,113 @@ var _ = Describe("DeleteCollection", func() {
 		Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
 		t.assertGetSuccess(otherPod)
+	})
+})
+
+var _ = Describe("Namespace verification", func() {
+	t := newBasicReactorsTestDriver()
+
+	BeforeEach(func() {
+		fake.AddVerifyNamespaceReactor(&t.client.Fake, "*")
+	})
+
+	assertMissingNamespaceErr := func(err error) {
+		Expect(resource.IsMissingNamespaceErr(err)).To(BeTrue())
+		Expect(resource.ExtractMissingNamespaceFromErr(err)).To(Equal(testNamespace))
+	}
+
+	createNamespace := func(name string) {
+		_, err := t.client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+		}, metav1.CreateOptions{})
+		Expect(err).To(Succeed())
+	}
+
+	When("a namespace does not exist", func() {
+		Specify("requests should return the appropriate error", func() {
+			_, err := t.doCreate(t.pod)
+			assertMissingNamespaceErr(err)
+
+			_, err = t.doGet(t.pod.Name)
+			assertMissingNamespaceErr(err)
+
+			_, err = t.doUpdate()
+			assertMissingNamespaceErr(err)
+
+			assertMissingNamespaceErr(t.doDelete(metav1.DeleteOptions{}))
+
+			_, err = t.client.CoreV1().Pods(testNamespace).List(context.Background(), metav1.ListOptions{})
+			assertMissingNamespaceErr(err)
+		})
+	})
+
+	When("a request has no namespace", func() {
+		It("should succeed", func() {
+			_, err := t.client.CoreV1().Pods("").Create(context.Background(), t.pod, metav1.CreateOptions{})
+			Expect(err).To(Succeed())
+		})
+	})
+
+	When("a namespace does exist", func() {
+		Specify("requests should succeed", func() {
+			createNamespace(testNamespace)
+
+			t.pod.Name = "test-pod"
+			t.assertCreateSuccess(t.pod)
+
+			_, err := t.client.CoreV1().Pods(testNamespace).List(context.Background(), metav1.ListOptions{})
+			Expect(err).To(Succeed())
+
+			Expect(t.doDelete(metav1.DeleteOptions{})).To(Succeed())
+		})
+	})
+
+	When("a namespace is deleted", func() {
+		const noDeleteNS = "no-delete"
+
+		It("should delete all contained resources", func() {
+			createNamespace(testNamespace)
+			createNamespace(noDeleteNS)
+
+			t.pod.Name = "test-pod"
+			t.assertCreateSuccess(t.pod)
+
+			_, err := t.client.CoreV1().Services(testNamespace).Create(context.TODO(), &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "should-delete",
+				},
+			}, metav1.CreateOptions{})
+			Expect(err).To(Succeed())
+
+			_, err = t.client.CoreV1().Services(noDeleteNS).Create(context.TODO(), &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "should-not-delete",
+				},
+			}, metav1.CreateOptions{})
+			Expect(err).To(Succeed())
+
+			// Delete the namespace
+
+			Expect(t.client.CoreV1().Namespaces().Delete(context.TODO(), testNamespace, metav1.DeleteOptions{})).To(Succeed())
+
+			_, err = t.doGet(t.pod.Name)
+			assertMissingNamespaceErr(err)
+
+			// Recreate the namespace
+
+			createNamespace(testNamespace)
+
+			_, err = t.doGet(t.pod.Name)
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+			_, err = t.client.CoreV1().Services(testNamespace).Get(context.TODO(), "should-delete", metav1.GetOptions{})
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+
+			_, err = t.client.CoreV1().Services(noDeleteNS).Get(context.TODO(), "should-not-delete", metav1.GetOptions{})
+			Expect(err).To(Succeed())
+		})
 	})
 })
 
