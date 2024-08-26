@@ -19,8 +19,13 @@ limitations under the License.
 package fake
 
 import (
+	"sync"
+
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/testing"
 )
 
@@ -30,21 +35,44 @@ func AddVerifyNamespaceReactor(f *testing.Fake, resources ...string) {
 
 	reactors := f.ReactionChain[0:]
 
+	seenGVRs := sync.Map{}
+
 	react := func(a testing.Action) (bool, runtime.Object, error) {
-		action := a.(testing.CreateAction)
+		seenGVRs.Store(a.GetResource(), true)
 
-		namespace := action.GetNamespace()
-
-		_, err := invokeReactors(testing.NewGetAction(corev1.SchemeGroupVersion.WithResource("namespaces"), "", namespace),
-			reactors)
-		if err != nil {
-			return true, nil, err
+		namespace := a.GetNamespace()
+		if namespace != metav1.NamespaceNone {
+			_, err := invokeReactors(testing.NewGetAction(corev1.SchemeGroupVersion.WithResource("namespaces"), "", namespace),
+				reactors)
+			if err != nil {
+				return true, nil, err
+			}
 		}
 
 		return false, nil, nil
 	}
 
 	for _, res := range resources {
-		f.PrependReactor("create", res, react)
+		f.PrependReactor("*", res, react)
 	}
+
+	deleteCollectionReactor := newDeleteCollectionReactor(reactors)
+
+	f.PrependReactor("delete", "namespaces", func(action testing.Action) (bool, runtime.Object, error) {
+		name := action.(testing.DeleteAction).GetName()
+
+		var err error
+
+		seenGVRs.Range(func(key, _ any) bool {
+			gvr := key.(schema.GroupVersionResource)
+
+			_, _, err = deleteCollectionReactor.react(testing.NewDeleteCollectionActionWithOptions(gvr, name,
+				metav1.DeleteOptions{}, metav1.ListOptions{}))
+			err = errors.Wrapf(err, "VerifyNamespaceReactor: error deleting %q resources in namespace %q", gvr, name)
+
+			return true
+		})
+
+		return err != nil, nil, err
+	})
 }
