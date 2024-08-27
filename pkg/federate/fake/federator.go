@@ -26,6 +26,7 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
+	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,6 +36,7 @@ type Federator struct {
 	lock             sync.Mutex
 	distribute       chan *unstructured.Unstructured
 	delete           chan *unstructured.Unstructured
+	delegator        federate.Federator
 	failOnDistribute error
 	failOnDelete     error
 	ResetOnFailure   atomic.Bool
@@ -48,6 +50,13 @@ func New() *Federator {
 	f.ResetOnFailure.Store(true)
 
 	return f
+}
+
+func (f *Federator) SetDelegator(d federate.Federator) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	f.delegator = d
 }
 
 func (f *Federator) FailOnDistribute(err error) {
@@ -64,7 +73,7 @@ func (f *Federator) FailOnDelete(err error) {
 	f.failOnDelete = err
 }
 
-func (f *Federator) Distribute(_ context.Context, obj runtime.Object) error {
+func (f *Federator) Distribute(ctx context.Context, obj runtime.Object) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
@@ -77,12 +86,18 @@ func (f *Federator) Distribute(_ context.Context, obj runtime.Object) error {
 		return err
 	}
 
-	f.distribute <- resource.MustToUnstructured(obj)
+	if f.delegator != nil {
+		err = f.delegator.Distribute(ctx, obj)
+	}
 
-	return nil
+	if err == nil {
+		f.distribute <- resource.MustToUnstructured(obj)
+	}
+
+	return err
 }
 
-func (f *Federator) Delete(_ context.Context, obj runtime.Object) error {
+func (f *Federator) Delete(ctx context.Context, obj runtime.Object) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
@@ -95,9 +110,15 @@ func (f *Federator) Delete(_ context.Context, obj runtime.Object) error {
 		return err
 	}
 
-	f.delete <- resource.MustToUnstructured(obj)
+	if f.delegator != nil {
+		err = f.delegator.Delete(ctx, obj)
+	}
 
-	return nil
+	if err == nil {
+		f.delete <- resource.MustToUnstructured(obj)
+	}
+
+	return err
 }
 
 func (f *Federator) VerifyDistribute(expected runtime.Object) {
