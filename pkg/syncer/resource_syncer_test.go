@@ -27,6 +27,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
+	fakereactor "github.com/submariner-io/admiral/pkg/fake"
+	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/federate/fake"
 	. "github.com/submariner-io/admiral/pkg/gomega"
 	resourceutils "github.com/submariner-io/admiral/pkg/resource"
@@ -43,11 +45,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	fakeClient "k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
-	fakeK8s "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/ptr"
 )
@@ -1236,50 +1236,66 @@ func testWithSharedInformer() {
 }
 
 func testWithMissingNamespace() {
-	const transformedNamespace = "transformed-ns"
+	const (
+		transformedNamespace = "transformed-ns"
+		noTransform          = "no-transform"
+	)
 
 	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 
-	var (
-		k8sClient         kubernetes.Interface
-		nsInformerFactory informers.SharedInformerFactory
-	)
+	namespaceClient := func() dynamic.ResourceInterface {
+		return d.config.SourceClient.Resource(corev1.SchemeGroupVersion.WithResource("namespaces")).Namespace(metav1.NamespaceNone)
+	}
+
+	createNamespace := func(name string) {
+		test.CreateResource(namespaceClient(), &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+		})
+	}
 
 	BeforeEach(func() {
 		d.config.Transform = func(obj runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
-			obj = obj.DeepCopyObject()
-			resourceutils.MustToMeta(obj).SetNamespace(transformedNamespace)
+			if resourceutils.MustToMeta(obj).GetName() == noTransform {
+				return nil, false
+			} else if resourceutils.MustToMeta(obj).GetNamespace() == test.LocalNamespace {
+				obj = obj.DeepCopyObject()
+				resourceutils.MustToMeta(obj).SetNamespace(transformedNamespace)
+			}
 
 			return obj, false
 		}
 
-		d.federator.FailOnDistribute(apierrors.NewNotFound(schema.GroupResource{
-			Resource: "namespaces",
-		}, transformedNamespace))
-
-		k8sClient = fakeK8s.NewClientset()
-		nsInformerFactory = informers.NewSharedInformerFactory(k8sClient, 0)
-		d.config.NamespaceInformer = nsInformerFactory.Core().V1().Namespaces().Informer()
+		d.config.NamespaceInformer = cache.NewSharedInformer(&cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				return namespaceClient().List(context.TODO(), options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				return namespaceClient().Watch(context.TODO(), options)
+			},
+		}, resourceutils.MustToUnstructured(&corev1.Namespace{}), 0)
 	})
 
 	JustBeforeEach(func() {
-		nsInformerFactory.Start(d.stopCh)
+		d.federator.SetDelegator(federate.NewCreateFederator(d.config.SourceClient, d.config.RestMapper, transformedNamespace))
+
+		createNamespace(test.LocalNamespace)
+
+		fakereactor.AddVerifyNamespaceReactor(&d.config.SourceClient.(*fakeClient.FakeDynamicClient).Fake, "pods")
+
+		if d.config.NamespaceInformer != nil {
+			go d.config.NamespaceInformer.Run(d.stopCh)
+		}
 	})
 
 	Specify("distribute should eventually succeed when the namespace is created", func() {
 		resource := test.CreateResource(d.sourceClient, d.resource)
 		d.federator.VerifyNoDistribute()
 
-		d.federator.FailOnDistribute(nil)
-
 		By("Creating namespace")
 
-		_, err := k8sClient.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: transformedNamespace,
-			},
-		}, metav1.CreateOptions{})
-		Expect(err).To(Succeed())
+		createNamespace(transformedNamespace)
 
 		resource.SetNamespace(transformedNamespace)
 		d.federator.VerifyDistribute(resource)
@@ -1293,6 +1309,40 @@ func testWithMissingNamespace() {
 		It("should not retry", func() {
 			test.CreateResource(d.sourceClient, d.resource)
 			d.federator.VerifyNoDistribute()
+		})
+	})
+
+	Context("after a namespace is created and distribute succeeds", func() {
+		const otherNS = "other-ns"
+
+		JustBeforeEach(func() {
+			createNamespace(transformedNamespace)
+			createNamespace(otherNS)
+		})
+
+		It("should eventually redistribute when the namespace is recreated", func() {
+			resource := test.CreateResource(d.sourceClient, d.resource)
+			resource.SetNamespace(transformedNamespace)
+			d.federator.VerifyDistribute(resource)
+
+			other := d.resource.DeepCopy()
+			other.Name = noTransform
+			test.CreateResource(d.sourceClient, other)
+
+			other = d.resource.DeepCopy()
+			other.Namespace = otherNS
+			test.CreateResource(d.config.SourceClient.Resource(
+				*test.GetGroupVersionResourceFor(d.config.RestMapper, other)).Namespace(otherNS), other)
+
+			By("Deleting namespace")
+
+			err := namespaceClient().Delete(context.TODO(), transformedNamespace, metav1.DeleteOptions{})
+			Expect(err).To(Succeed())
+
+			By("Recreating namespace")
+
+			createNamespace(transformedNamespace)
+			d.federator.VerifyDistribute(resource)
 		})
 	})
 }

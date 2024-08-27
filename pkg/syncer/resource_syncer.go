@@ -48,7 +48,8 @@ import (
 
 const (
 	OrigNamespaceLabelKey = "submariner-io/originatingNamespace"
-	namespaceKey          = "$namespace$"
+	namespaceAddedKey     = "$namespace-added$"
+	namespaceDeletedKey   = "$namespace-deleted$"
 )
 
 type SyncDirection int
@@ -316,7 +317,13 @@ func newResourceSyncer(config *ResourceSyncerConfig) (*resourceSyncer, error) {
 	if config.NamespaceInformer != nil {
 		_, err := config.NamespaceInformer.AddEventHandler(cache.ResourceEventHandlerDetailedFuncs{
 			AddFunc: func(obj interface{}, _ bool) {
-				syncer.workQueue.Enqueue(cache.ExplicitKey(cache.NewObjectName(namespaceKey, resourceUtil.MustToMeta(obj).GetName()).String()))
+				syncer.workQueue.Enqueue(cache.ExplicitKey(cache.NewObjectName(namespaceAddedKey, resourceUtil.MustToMeta(obj).GetName()).String()))
+			},
+			DeleteFunc: func(obj interface{}) {
+				objName, err := cache.DeletionHandlingObjectToName(obj)
+				utilruntime.Must(err)
+
+				syncer.workQueue.Enqueue(cache.ExplicitKey(cache.NewObjectName(namespaceDeletedKey, objName.Name).String()))
 			},
 		})
 		if err != nil {
@@ -520,8 +527,13 @@ func (r *resourceSyncer) runIfCacheSynced(defaultReturn any, run func() any) any
 }
 
 func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error) {
-	if ns == namespaceKey {
+	if ns == namespaceAddedKey {
 		r.handleNamespaceAdded(name)
+		return false, nil
+	}
+
+	if ns == namespaceDeletedKey {
+		r.handleNamespaceDeleted(name)
 		return false, nil
 	}
 
@@ -599,6 +611,8 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 
 			return true, errors.Wrapf(err, "error distributing resource %q", key)
 		}
+
+		r.recordNamespaceSeen(resource.GetNamespace())
 
 		if r.syncCounter != nil {
 			r.syncCounter.With(prometheus.Labels{
@@ -796,6 +810,13 @@ func (r *resourceSyncer) assertUnstructured(obj interface{}) *unstructured.Unstr
 	return u
 }
 
+func (r *resourceSyncer) recordNamespaceSeen(namespace string) {
+	_, ok := r.missingNamespaces[namespace]
+	if !ok {
+		r.missingNamespaces[namespace] = set.New[string]()
+	}
+}
+
 func (r *resourceSyncer) handleMissingNamespace(key, namespace string) {
 	r.log.Warningf("Syncer %q: Unable to distribute resource %q due to missing namespace %q", r.config.Name, key, namespace)
 
@@ -803,13 +824,8 @@ func (r *resourceSyncer) handleMissingNamespace(key, namespace string) {
 		return
 	}
 
-	keys, ok := r.missingNamespaces[namespace]
-	if !ok {
-		keys = set.New[string]()
-		r.missingNamespaces[namespace] = keys
-	}
-
-	keys.Insert(key)
+	r.recordNamespaceSeen(namespace)
+	r.missingNamespaces[namespace].Insert(key)
 }
 
 func (r *resourceSyncer) handleNamespaceAdded(namespace string) {
@@ -823,6 +839,33 @@ func (r *resourceSyncer) handleNamespaceAdded(namespace string) {
 		}
 
 		delete(r.missingNamespaces, namespace)
+	}
+}
+
+func (r *resourceSyncer) handleNamespaceDeleted(namespace string) {
+	keys, ok := r.missingNamespaces[namespace]
+	if !ok {
+		return
+	}
+
+	for _, key := range r.store.ListKeys() {
+		obj, exists, _ := r.store.GetByKey(key)
+		if !exists {
+			continue
+		}
+
+		resource, _, _ := r.transform(r.assertUnstructured(obj), key, Create)
+		if resource == nil {
+			continue
+		}
+
+		if resource.GetNamespace() == namespace {
+			keys.Insert(key)
+		}
+	}
+
+	if keys.Len() > 0 {
+		r.log.Infof("Syncer %q: namespace %q deleted - recorded %d missing resources", r.config.Name, namespace, keys.Len())
 	}
 }
 
