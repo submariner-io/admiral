@@ -166,6 +166,47 @@ var _ = Describe("CreateOrUpdate function", func() {
 			tests.EnsureNoActionsForResource(t.testingFake, "pods/status", "update")
 		})
 
+		Context("and a mutation function specified", func() {
+			BeforeEach(func() {
+				t.pod.Name = ""
+				t.pod.GenerateName = "name-prefix-"
+				t.pod.Labels = map[string]string{"label1": "value1", "label2": "value2"}
+			})
+
+			It("should invoke the function on create", func() {
+				result, created, err := util.CreateOrUpdateWithOptions[*unstructured.Unstructured](context.TODO(),
+					util.CreateOrUpdateOptions[*unstructured.Unstructured]{
+						Client: resource.ForDynamic(t.client),
+						Obj:    resource.MustToUnstructured(t.pod),
+						MutateOnCreate: func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+							existing.SetAnnotations(map[string]string{"on-create-invoked": "true"})
+							return existing, nil
+						},
+					})
+				Expect(err).To(Succeed())
+				Expect(result).To(Equal(util.OperationResultCreated))
+
+				actual := t.verifyPod()
+				Expect(actual.Annotations).To(HaveKeyWithValue("on-create-invoked", "true"))
+
+				Expect(resource.MustFromUnstructured(created, &corev1.Pod{})).To(Equal(actual))
+			})
+
+			Context("which returns an error", func() {
+				It("should return an error", func() {
+					_, _, err := util.CreateOrUpdateWithOptions[*unstructured.Unstructured](context.TODO(),
+						util.CreateOrUpdateOptions[*unstructured.Unstructured]{
+							Client: resource.ForDynamic(t.client),
+							Obj:    resource.MustToUnstructured(t.pod),
+							MutateOnCreate: func(_ *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+								return nil, errors.New("mutate failure")
+							},
+						})
+					Expect(err).To(HaveOccurred())
+				})
+			})
+		})
+
 		Context("and GenerateName is set", func() {
 			BeforeEach(func() {
 				t.pod.Name = ""
