@@ -5,6 +5,7 @@ go 1.22.0
 retract v0.10.0 // Tag was moved
 
 require (
+	github.com/emirpasic/gods v1.18.1
 	github.com/go-logr/logr v1.4.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo/v2 v2.19.1
