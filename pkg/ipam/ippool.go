@@ -26,13 +26,14 @@ import (
 	"sync"
 
 	"github.com/emirpasic/gods/maps/treemap"
+	"github.com/emirpasic/gods/utils"
 	"github.com/pkg/errors"
 )
 
 type IPPool struct {
 	cidr      string
 	network   *net.IPNet
-	size      int
+	size      uint32
 	available *treemap.Map // int IP is the key, string IP is the value
 	mutex     sync.RWMutex
 	metrics   MetricsReporter
@@ -75,10 +76,12 @@ func NewIPPool(cidr string, metrics MetricsReporter) (*IPPool, error) {
 
 	ones, totalbits := network.Mask.Size()
 
-	size := int(math.Exp2(float64(totalbits-ones))) - 2 // don't count net and broadcast
-	if size < 2 {
+	size := uint32(math.Exp2(float64(totalbits - ones)))
+	if size < 4 {
 		return nil, fmt.Errorf("invalid prefix for CIDR %q", cidr)
 	}
+
+	size -= 2 // don't count net and broadcast
 
 	if metrics == nil {
 		metrics = MetricsReporterFuncs{}
@@ -88,40 +91,40 @@ func NewIPPool(cidr string, metrics MetricsReporter) (*IPPool, error) {
 		cidr:      cidr,
 		network:   network,
 		size:      size,
-		available: treemap.NewWithIntComparator(),
+		available: treemap.NewWith(utils.UInt32Comparator),
 		metrics:   metrics,
 	}
 
 	startingIP := ipToInt(pool.network.IP) + 1
 
-	for i := 0; i < pool.size; i++ {
+	for i := uint32(0); i < pool.size; i++ {
 		intIP := startingIP + i
 		ip := intToIP(intIP).String()
 		pool.available.Put(intIP, ip)
 	}
 
-	metrics.RecordAvailability(cidr, size)
+	metrics.RecordAvailability(cidr, int(size))
 
 	return pool, nil
 }
 
-func ipToInt(ip net.IP) int {
+func ipToInt(ip net.IP) uint32 {
 	intIP := ip
 	if len(ip) == 16 {
 		intIP = ip[12:16]
 	}
 
-	return int(binary.BigEndian.Uint32(intIP))
+	return binary.BigEndian.Uint32(intIP)
 }
 
-func intToIP(ip int) net.IP {
+func intToIP(ip uint32) net.IP {
 	netIP := make(net.IP, 4)
-	binary.BigEndian.PutUint32(netIP, uint32(ip)) //nolint:gosec // int -> uint32 conversion won't overflow here
+	binary.BigEndian.PutUint32(netIP, ip)
 
 	return netIP
 }
 
-func StringIPToInt(stringIP string) int {
+func StringIPToInt(stringIP string) uint32 {
 	return ipToInt(net.ParseIP(stringIP))
 }
 
@@ -159,11 +162,11 @@ func (p *IPPool) Allocate(num int) ([]string, error) {
 
 	retIPs := make([]string, num)
 
-	var prevIntIP, firstIntIP, current int
+	var prevIntIP, firstIntIP, current uint32
 
 	iter := p.available.Iterator()
 	for iter.Next() {
-		intIP := iter.Key().(int)
+		intIP := iter.Key().(uint32)
 		retIPs[current] = iter.Value().(string)
 
 		if current == 0 || prevIntIP+1 != intIP {
@@ -178,7 +181,7 @@ func (p *IPPool) Allocate(num int) ([]string, error) {
 		prevIntIP = intIP
 		current++
 
-		if current == num {
+		if int(current) == num {
 			for i := 0; i < num; i++ {
 				p.available.Remove(firstIntIP)
 
@@ -217,7 +220,7 @@ func (p *IPPool) Reserve(ips ...string) error {
 		return nil
 	}
 
-	intIPs := make([]int, num)
+	intIPs := make([]uint32, num)
 
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
