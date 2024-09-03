@@ -1283,10 +1283,6 @@ func testWithMissingNamespace() {
 		createNamespace(test.LocalNamespace)
 
 		fakereactor.AddVerifyNamespaceReactor(&d.config.SourceClient.(*fakeClient.FakeDynamicClient).Fake, "pods")
-
-		if d.config.NamespaceInformer != nil {
-			go d.config.NamespaceInformer.Run(d.stopCh)
-		}
 	})
 
 	Specify("distribute should eventually succeed when the namespace is created", func() {
@@ -1499,6 +1495,12 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 		}
 
 		Expect(err).To(Succeed())
+
+		if d.config.NamespaceInformer != nil {
+			go func() {
+				d.config.NamespaceInformer.Run(d.stopCh)
+			}()
+		}
 
 		utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers,
 			func(_ context.Context, err error, _ string, _ ...interface{}) {
