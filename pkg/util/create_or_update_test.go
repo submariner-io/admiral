@@ -148,8 +148,23 @@ var _ = Describe("CreateOrUpdate function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	createOrUpdate := func(expResult util.OperationResult) error {
-		result, err := util.CreateOrUpdate[*unstructured.Unstructured](context.TODO(), resource.ForDynamic(t.client),
-			resource.MustToUnstructured(t.pod), t.mutateFn)
+		options := util.CreateOrUpdateOptions[*unstructured.Unstructured]{
+			Client:         resource.ForDynamic(t.client),
+			MutateOnUpdate: t.mutateFn,
+		}
+
+		if t.pod.GenerateName != "" {
+			options.IdentifyingLabels = map[string]string{}
+			for k, v := range t.pod.Labels {
+				options.IdentifyingLabels[k] = v
+			}
+
+			t.pod.Labels["new-label"] = "new-value"
+		}
+
+		options.Obj = resource.MustToUnstructured(t.pod)
+
+		result, _, err := util.CreateOrUpdateWithOptions[*unstructured.Unstructured](context.TODO(), options)
 		if err != nil && expResult != util.OperationResultNone {
 			return err
 		}
@@ -167,12 +182,6 @@ var _ = Describe("CreateOrUpdate function", func() {
 		})
 
 		Context("and a mutation function specified", func() {
-			BeforeEach(func() {
-				t.pod.Name = ""
-				t.pod.GenerateName = "name-prefix-"
-				t.pod.Labels = map[string]string{"label1": "value1", "label2": "value2"}
-			})
-
 			It("should invoke the function on create", func() {
 				result, created, err := util.CreateOrUpdateWithOptions[*unstructured.Unstructured](context.TODO(),
 					util.CreateOrUpdateOptions[*unstructured.Unstructured]{
