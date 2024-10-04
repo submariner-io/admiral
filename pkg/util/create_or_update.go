@@ -70,6 +70,8 @@ type CreateOrUpdateOptions[T runtime.Object] struct {
 	Obj            T
 	MutateOnUpdate MutateFn[T]
 	MutateOnCreate MutateFn[T]
+	// IdentifyingLabels is used to find an existing resource if GenerateName is set in the target resource.
+	IdentifyingLabels map[string]string
 }
 
 func CreateOrUpdateWithOptions[T runtime.Object](ctx context.Context, options CreateOrUpdateOptions[T]) (OperationResult, T, error) {
@@ -121,7 +123,7 @@ func maybeCreateOrUpdate[T runtime.Object](ctx context.Context, options CreateOr
 	objMeta := resource.MustToMeta(options.Obj)
 
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		existing, err := getResource(ctx, options.Client, options.Obj)
+		existing, err := getResource(ctx, &options)
 		if apierrors.IsNotFound(err) {
 			if op != opCreate {
 				logger.V(log.LIBTRACE).Infof("Resource %q does not exist - not updating", objMeta.GetName())
@@ -204,16 +206,23 @@ func maybeCreateOrUpdate[T runtime.Object](ctx context.Context, options CreateOr
 }
 
 //nolint:wrapcheck // No need to wrap errors
-func getResource[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T) (T, error) {
-	objMeta := resource.MustToMeta(obj)
+func getResource[T runtime.Object](ctx context.Context, options *CreateOrUpdateOptions[T]) (T, error) {
+	objMeta := resource.MustToMeta(options.Obj)
 
 	if objMeta.GetName() != "" || objMeta.GetGenerateName() == "" {
-		obj, err := client.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
+		obj, err := options.Client.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
 		return obj, err
 	}
 
-	list, err := client.List(ctx, metav1.ListOptions{
-		LabelSelector: labels.SelectorFromSet(objMeta.GetLabels()).String(),
+	var selectorLabels map[string]string
+	if len(options.IdentifyingLabels) > 0 {
+		selectorLabels = options.IdentifyingLabels
+	} else {
+		selectorLabels = objMeta.GetLabels()
+	}
+
+	list, err := options.Client.List(ctx, metav1.ListOptions{
+		LabelSelector: labels.SelectorFromSet(selectorLabels).String(),
 	})
 	if err != nil {
 		return *new(T), err
