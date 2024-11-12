@@ -97,7 +97,7 @@ func NewIPPool(cidr string, metrics MetricsReporter) (*IPPool, error) {
 
 	startingIP := ipToInt(pool.network.IP) + 1
 
-	for i := uint32(0); i < pool.size; i++ {
+	for i := range pool.size {
 		intIP := startingIP + i
 		ip := intToIP(intIP).String()
 		pool.available.Put(intIP, ip)
@@ -182,7 +182,7 @@ func (p *IPPool) Allocate(num int) ([]string, error) {
 		current++
 
 		if int(current) == num {
-			for i := 0; i < num; i++ {
+			for range num {
 				p.available.Remove(firstIntIP)
 
 				firstIntIP++
@@ -225,7 +225,7 @@ func (p *IPPool) Reserve(ips ...string) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	for i := 0; i < num; i++ {
+	for i := range num {
 		intIPs[i] = StringIPToInt(ips[i])
 
 		_, found := p.available.Get(intIPs[i])
@@ -238,7 +238,7 @@ func (p *IPPool) Reserve(ips ...string) error {
 		}
 	}
 
-	for i := 0; i < num; i++ {
+	for i := range num {
 		p.available.Remove(intIPs[i])
 	}
 
