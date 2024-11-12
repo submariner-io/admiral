@@ -159,7 +159,6 @@ func AddCertificateErrorHandler(fatal bool) {
 		logCertificateError = logger.FatalfOnError
 	}
 
-	//nolint:reassign // We need to reassign ErrorHandlers to register our handler
 	utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers,
 		func(_ context.Context, err error, _ string, _ ...interface{}) {
 			var unknownAuthorityError x509.UnknownAuthorityError
