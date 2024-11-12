@@ -22,7 +22,6 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/base64"
-	"fmt"
 
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -91,7 +90,7 @@ func BuildRestConfigFromData(apiServer, apiServerToken, caData string, tls *rest
 	}
 
 	return &rest.Config{
-		Host:            fmt.Sprintf("https://%s", apiServer),
+		Host:            "https://" + apiServer,
 		TLSClientConfig: *tls,
 		BearerToken:     apiServerToken,
 	}, nil
@@ -107,7 +106,7 @@ func BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile string, tls 
 	}
 
 	return &rest.Config{
-		Host:            fmt.Sprintf("https://%s", apiServer),
+		Host:            "https://" + apiServer,
 		TLSClientConfig: *tls,
 		BearerTokenFile: apiServerTokenFile,
 	}

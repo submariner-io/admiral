@@ -119,7 +119,7 @@ func New(config *Config) (Interface, error) {
 	var err error
 
 	if len(config.ResourceConfigs) == 0 {
-		return nil, fmt.Errorf("no resources to watch")
+		return nil, errors.New("no resources to watch")
 	}
 
 	restMapper := config.RestMapper
