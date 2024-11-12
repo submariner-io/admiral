@@ -54,7 +54,7 @@ func EnvironmentVariable(setting string) string {
 	s := reflect.ValueOf(&brokerSpecification{})
 	t := s.Elem().Type()
 
-	for i := 0; i < t.NumField(); i++ {
+	for i := range t.NumField() {
 		if strings.EqualFold(t.Field(i).Name, strings.ToLower(setting)) {
 			return strings.ToUpper(fmt.Sprintf("%s_%s", brokerConfigPrefix, setting))
 		}
