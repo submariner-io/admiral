@@ -57,7 +57,7 @@ func (r *filteringWatchReactor) react(action testing.Action) (bool, watch.Interf
 				continue
 			}
 
-			watcher = watch.Filter(watcher, func(in watch.Event) (out watch.Event, keep bool) {
+			watcher = watch.Filter(watcher, func(in watch.Event) (watch.Event, bool) {
 				return filterEvent(in, &w.WatchRestrictions)
 			})
 

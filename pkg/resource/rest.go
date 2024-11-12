@@ -39,33 +39,33 @@ var NewDynamicClient = func(config *rest.Config) (dynamic.Interface, error) {
 
 func GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig,
 	gvr schema.GroupVersionResource, namespace string,
-) (restConfig *rest.Config, authorized bool, err error) {
+) (*rest.Config, bool, error) {
 	// First try a REST config without the CA trust chain
-	restConfig, err = BuildRestConfigFromData(apiServer, apiServerToken, "", tls)
+	restConfig, err := BuildRestConfigFromData(apiServer, apiServerToken, "", tls)
 	if err != nil {
-		return
+		return nil, false, err
 	}
 
-	authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
+	authorized, err := IsAuthorizedFor(restConfig, gvr, namespace)
 	if !authorized {
 		// Now try with the trust chain
 		restConfig, err = BuildRestConfigFromData(apiServer, apiServerToken, caData, tls)
 		if err != nil {
-			return
+			return nil, false, err
 		}
 
 		authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
 	}
 
-	return
+	return restConfig, authorized, err
 }
 
 func GetAuthorizedRestConfigFromFiles(apiServer, apiServerTokenFile, caFile string, tls *rest.TLSClientConfig,
 	gvr schema.GroupVersionResource, namespace string,
-) (restConfig *rest.Config, authorized bool, err error) {
+) (*rest.Config, bool, error) {
 	// First try a REST config without the CA trust chain
-	restConfig = BuildRestConfigFromFiles(apiServer, apiServerTokenFile, "", tls)
-	authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
+	restConfig := BuildRestConfigFromFiles(apiServer, apiServerTokenFile, "", tls)
+	authorized, err := IsAuthorizedFor(restConfig, gvr, namespace)
 
 	if !authorized {
 		// Now try with the trust chain
@@ -73,7 +73,7 @@ func GetAuthorizedRestConfigFromFiles(apiServer, apiServerTokenFile, caFile stri
 		authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
 	}
 
-	return
+	return restConfig, authorized, err
 }
 
 func BuildRestConfigFromData(apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig) (*rest.Config, error) {

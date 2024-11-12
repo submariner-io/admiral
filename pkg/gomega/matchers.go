@@ -51,6 +51,6 @@ func (m *containErrorSubstring) FailureMessage(actual interface{}) string {
 	return format.Message(actual, "to contain substring", m.expected.Error())
 }
 
-func (m *containErrorSubstring) NegatedFailureMessage(actual interface{}) (message string) {
+func (m *containErrorSubstring) NegatedFailureMessage(actual interface{}) string {
 	return format.Message(actual, "not to contain substring", m.expected.Error())
 }
