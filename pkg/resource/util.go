@@ -124,7 +124,9 @@ func EnsureValidName(name string) string {
 }
 
 func ToJSON(o any) string {
-	out, _ := json.MarshalIndent(o, "", "  ")
+	out, err := json.MarshalIndent(o, "", "  ")
+	utilruntime.Must(err)
+
 	return string(out)
 }
 
