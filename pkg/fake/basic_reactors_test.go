@@ -20,7 +20,6 @@ package fake_test
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -252,7 +251,7 @@ var _ = Describe("Watch", func() {
 				case watch.Added:
 					Expect(resource.MustToMeta(event.Object).GetName()).To(Equal(t.pod.Name))
 				default:
-					Fail(fmt.Sprintf("Received unexpected watch event: %s", resource.ToJSON(event)))
+					Fail("Received unexpected watch event: " + resource.ToJSON(event))
 				}
 			case <-time.After(1 * time.Second):
 				Fail("Did not receive expected watch event")
@@ -266,7 +265,7 @@ var _ = Describe("Watch", func() {
 
 			select {
 			case event := <-watcher.ResultChan():
-				Fail(fmt.Sprintf("Received unexpected watch event: %s", resource.ToJSON(event)))
+				Fail("Received unexpected watch event: " + resource.ToJSON(event))
 			case <-time.After(300 * time.Millisecond):
 			}
 		})

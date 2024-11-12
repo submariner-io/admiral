@@ -60,9 +60,9 @@ func EnvironmentVariable(setting string) string {
 		}
 	}
 
-	panic(fmt.Sprintf("unknown Broker setting %s", setting))
+	panic("unknown Broker setting: " + setting)
 }
 
 func SecretPath(secretName string) string {
-	return fmt.Sprintf("/run/secrets/submariner.io/%s", secretName)
+	return "/run/secrets/submariner.io/" + secretName
 }
