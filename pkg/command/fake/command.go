@@ -131,7 +131,7 @@ func (c *commandImpl) CombinedOutput() ([]byte, error) {
 	return c.Output()
 }
 
-func (r *pipeReader) Read(p []byte) (n int, err error) {
+func (r *pipeReader) Read(p []byte) (int, error) {
 	return r.buffer.Read(p)
 }
 
