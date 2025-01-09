@@ -20,14 +20,13 @@ package names
 
 /* Component names. */
 const (
-	NetworkPluginSyncerComponent = "submariner-networkplugin-syncer"
-	RouteAgentComponent          = "submariner-routeagent"
-	GatewayComponent             = "submariner-gateway"
-	GlobalnetComponent           = "submariner-globalnet"
-	ServiceDiscoveryComponent    = "submariner-lighthouse-agent"
-	LighthouseCoreDNSComponent   = "submariner-lighthouse-coredns"
-	OperatorComponent            = "submariner-operator"
-	MetricsProxyComponent        = "submariner-metrics-proxy"
-	NettestComponent             = "submariner-nettest"
-	SubctlComponent              = "submariner-subctl"
+	RouteAgentComponent        = "submariner-routeagent"
+	GatewayComponent           = "submariner-gateway"
+	GlobalnetComponent         = "submariner-globalnet"
+	ServiceDiscoveryComponent  = "submariner-lighthouse-agent"
+	LighthouseCoreDNSComponent = "submariner-lighthouse-coredns"
+	OperatorComponent          = "submariner-operator"
+	MetricsProxyComponent      = "submariner-metrics-proxy"
+	NettestComponent           = "submariner-nettest"
+	SubctlComponent            = "submariner-subctl"
 )
