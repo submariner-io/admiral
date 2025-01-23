@@ -75,12 +75,8 @@ func NewWithConfig(name string, config Config) Interface {
 }
 
 func (q *queueType) Enqueue(obj interface{}) {
-	var key string
-	var err error
-	if key, err = cache.DeletionHandlingMetaNamespaceKeyFunc(obj); err != nil {
-		utilruntime.HandleError(err)
-		return
-	}
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	utilruntime.Must(err)
 
 	logger.V(log.LIBTRACE).Infof("%s: enqueueing key %q for %T object", q.name, key, obj)
 	q.AddRateLimited(key)
@@ -101,14 +97,10 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 
 	defer q.Done(key)
 
-	requeue, err := func() (bool, error) {
-		ns, name, err := cache.SplitMetaNamespaceKey(key)
-		if err != nil {
-			panic(err)
-		}
+	ns, name, err := cache.SplitMetaNamespaceKey(key)
+	utilruntime.Must(err)
 
-		return process(key, name, ns)
-	}()
+	requeue, err := process(key, name, ns)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("%s: Failed to process object with key %q using function %#v: %w", q.name, key, process, err))
 	}

@@ -1,0 +1,158 @@
+/*
+SPDX-License-Identifier: Apache-2.0
+
+Copyright Contributors to the Submariner project.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package workqueue_test
+
+import (
+	"context"
+	"errors"
+	"strconv"
+	"sync"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/submariner-io/admiral/pkg/workqueue"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/utils/set"
+)
+
+var _ = Describe("Work Queue", func() {
+	var (
+		wq        workqueue.Interface
+		processFn workqueue.ProcessFunc
+		itemCh    chan string
+	)
+
+	BeforeEach(func() {
+		config := workqueue.DefaultConfig()
+		config.ItemRateLimiterBaseDelay = 0
+
+		wq = workqueue.NewWithConfig("test", config)
+		itemCh = make(chan string, 100)
+
+		processFn = func(key, name, namespace string) (bool, error) {
+			defer GinkgoRecover()
+
+			actualNS, actualName, err := cache.SplitMetaNamespaceKey(key)
+			Expect(err).To(Succeed())
+			Expect(actualNS).To(Equal(namespace))
+			Expect(actualName).To(Equal(name))
+
+			itemCh <- key
+
+			return false, nil
+		}
+	})
+
+	JustBeforeEach(func() {
+		stopCh := make(chan struct{})
+		wq.Run(stopCh, processFn)
+
+		DeferCleanup(func() {
+			wq.ShutDownWithDrain()
+			close(stopCh)
+		})
+	})
+
+	It("should notify of enqueued items", func() {
+		expKeys := set.Set[string]{}
+
+		for i := 1; i <= 10; i++ {
+			k := cache.ObjectName{Namespace: "ns", Name: strconv.Itoa(i)}.String()
+			expKeys.Insert(k)
+			wq.Enqueue(cache.ExplicitKey(k))
+		}
+
+		count := expKeys.Len()
+		for i := 1; i <= count; i++ {
+			var received string
+
+			Eventually(itemCh).Should(Receive(&received))
+			Expect(expKeys.Has(received)).To(BeTrue(), "Received unexpected %q", received)
+			expKeys.Delete(received)
+		}
+
+		Expect(expKeys.Len()).To(BeZero(), "Did not receive %v", expKeys.UnsortedList())
+		Consistently(itemCh).ShouldNot(Receive())
+	})
+
+	When("a DeletedFinalStateUnknown object is enqueued", func() {
+		It("should notify of the key", func() {
+			key := cache.ObjectName{Namespace: "ns", Name: "deleted"}.String()
+			wq.Enqueue(cache.DeletedFinalStateUnknown{Key: key})
+			Eventually(itemCh).Should(Receive(Equal(key)))
+		})
+	})
+
+	When("the processing function returns an error", func() {
+		var handledError chan error
+
+		BeforeEach(func() {
+			savedErrorHandlers := utilruntime.ErrorHandlers
+			DeferCleanup(func() {
+				utilruntime.ErrorHandlers = savedErrorHandlers
+			})
+
+			handledError = make(chan error, 50)
+
+			utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers,
+				func(_ context.Context, err error, _ string, _ ...interface{}) {
+					handledError <- err
+				})
+
+			processFn = func(_, _, _ string) (bool, error) {
+				return false, errors.New("processing error")
+			}
+		})
+
+		It("should log the error", func() {
+			key := cache.ObjectName{Name: "foo"}.String()
+			wq.Enqueue(cache.ExplicitKey(key))
+
+			Eventually(handledError).Should(Receive())
+			Consistently(handledError).ShouldNot(Receive())
+		})
+	})
+
+	When("a requeue is requested from the processing function", func() {
+		BeforeEach(func() {
+			var once sync.Once
+			processFn = func(key, _, _ string) (bool, error) {
+				itemCh <- key
+
+				requeue := false
+				once.Do(func() {
+					requeue = true
+				})
+
+				return requeue, nil
+			}
+		})
+
+		It("should notify of the item again", func() {
+			key := cache.ObjectName{Namespace: "foo", Name: "bar"}.String()
+			wq.Enqueue(cache.ExplicitKey(key))
+
+			Eventually(itemCh).Should(Receive(Equal(key)))
+			Eventually(itemCh).Should(Receive(Equal(key)))
+
+			Consistently(itemCh).ShouldNot(Receive())
+		})
+	})
+})
