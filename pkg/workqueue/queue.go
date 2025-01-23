@@ -51,16 +51,22 @@ type queueType struct {
 var logger = log.Logger{Logger: logf.Log.WithName("WorkQueue")}
 
 func New(name string) Interface {
+	return NewWithConfig(name, DefaultConfig())
+}
+
+func NewWithConfig(name string, config Config) Interface {
 	return &queueType{
 		TypedRateLimitingInterface: workqueue.NewTypedRateLimitingQueueWithConfig(
 			// caps the maximum wait
 			workqueue.NewTypedWithMaxWaitRateLimiter(
 				workqueue.NewTypedMaxOfRateLimiter(
 					// exponential per-item rate limiter
-					workqueue.NewTypedItemExponentialFailureRateLimiter[string](50*time.Millisecond, 30*time.Second),
+					workqueue.NewTypedItemExponentialFailureRateLimiter[string](
+						config.ItemRateLimiterBaseDelay, config.ItemRateLimiterMaxDelay),
 					// overall rate limiter (not per item)
-					&workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Limit(10), 500)},
-				), 5*time.Minute),
+					&workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Limit(config.BucketRateLimiterItemsPerSec),
+						config.BucketRateLimiterMaxBurst)},
+				), config.OverallRateLimiterMaxDelay),
 			workqueue.TypedRateLimitingQueueConfig[string]{
 				Name: name,
 			}),
