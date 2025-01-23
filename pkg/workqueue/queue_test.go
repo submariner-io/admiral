@@ -155,4 +155,67 @@ var _ = Describe("Work Queue", func() {
 			Consistently(itemCh).ShouldNot(Receive())
 		})
 	})
+
+	Context("items enqueued with low priority", func() {
+		firstKey := cache.ObjectName{Name: "first"}.String()
+		lowKey1 := cache.ObjectName{Name: "lowKey1"}.String()
+		lowKey2 := cache.ObjectName{Name: "lowKey2"}.String()
+		normalKey1 := cache.ObjectName{Name: "normalKey1"}.String()
+		normalKey2 := cache.ObjectName{Name: "normalKey2"}.String()
+
+		BeforeEach(func() {
+			processFn = func(key, _, _ string) (bool, error) {
+				itemCh <- key
+
+				if key == firstKey {
+					wq.EnqueueWithOpts(cache.ExplicitKey(lowKey1), workqueue.EnqueueOpts{Priority: workqueue.LowPriority})
+					wq.Enqueue(cache.ExplicitKey(normalKey1))
+					wq.EnqueueWithOpts(cache.ExplicitKey(lowKey2), workqueue.EnqueueOpts{Priority: workqueue.LowPriority})
+					wq.Enqueue(cache.ExplicitKey(normalKey2))
+				}
+
+				return false, nil
+			}
+		})
+
+		Specify("should be processed after normal priority items", func() {
+			wq.Enqueue(cache.ExplicitKey(firstKey))
+			Eventually(itemCh).Should(Receive(Equal(firstKey)))
+
+			Eventually(itemCh).Should(Receive(HavePrefix("normal")))
+			Eventually(itemCh).Should(Receive(HavePrefix("normal")))
+			Eventually(itemCh).Should(Receive(HavePrefix("low")))
+			Eventually(itemCh).Should(Receive(HavePrefix("low")))
+		})
+	})
+
+	When("the priority for an item already in the queue is increased to normal", func() {
+		firstKey := cache.ObjectName{Name: "first"}.String()
+		adjustedKey := cache.ObjectName{Name: "adjusted"}.String()
+
+		BeforeEach(func() {
+			processFn = func(key, _, _ string) (bool, error) {
+				itemCh <- key
+
+				if key == firstKey {
+					for i := 1; i <= 50; i++ {
+						wq.EnqueueWithOpts(cache.ExplicitKey("low"+strconv.Itoa(i)), workqueue.EnqueueOpts{Priority: workqueue.LowPriority})
+					}
+
+					wq.EnqueueWithOpts(cache.ExplicitKey(adjustedKey), workqueue.EnqueueOpts{Priority: workqueue.LowPriority})
+					// Should cause it to be adjusted to the front of the queue
+					wq.Enqueue(cache.ExplicitKey(adjustedKey))
+				}
+
+				return false, nil
+			}
+		})
+
+		It("should adjust its position to the front of the queue", func() {
+			wq.Enqueue(cache.ExplicitKey(firstKey))
+			Eventually(itemCh).Should(Receive(Equal(firstKey)))
+
+			Eventually(itemCh).Should(Receive(Equal(adjustedKey)))
+		})
+	})
 })
