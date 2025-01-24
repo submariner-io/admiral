@@ -767,7 +767,13 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	r.workQueue.Enqueue(newObj)
+	// If the resource version didn't change, that indicates a re-sync by the informer so enqueue at low priority.
+	// We want to prioritize processing resources that did actually change.
+	if oldResource.GetResourceVersion() == newResource.GetResourceVersion() {
+		r.workQueue.EnqueueWithOpts(newObj, workqueue.EnqueueOpts{Priority: workqueue.LowPriority})
+	} else {
+		r.workQueue.Enqueue(newObj)
+	}
 }
 
 func (r *resourceSyncer) onDelete(obj interface{}) {

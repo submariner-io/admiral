@@ -914,8 +914,7 @@ func testUpdateSuppression() {
 
 		Context("and the resource's ObjectMeta is updated in the datastore", func() {
 			BeforeEach(func() {
-				t := metav1.Now()
-				d.resource.ObjectMeta.DeletionTimestamp = &t
+				d.resource.ObjectMeta.Finalizers = []string{"test"}
 			})
 
 			It("should distribute it", func() {
@@ -941,8 +940,7 @@ func testUpdateSuppression() {
 
 		Context("and the resource's ObjectMeta is updated in the datastore", func() {
 			BeforeEach(func() {
-				t := metav1.Now()
-				d.resource.ObjectMeta.DeletionTimestamp = &t
+				d.resource.ObjectMeta.Finalizers = []string{"test"}
 			})
 
 			It("should not distribute it", func() {
@@ -1474,7 +1472,11 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 		restMapper, gvr := test.GetRESTMapperAndGroupVersionResourceFor(d.config.ResourceType)
 
 		d.config.RestMapper = restMapper
-		d.config.SourceClient = fakeClient.NewSimpleDynamicClient(d.config.Scheme, initObjs...)
+
+		dynClient := fakeClient.NewSimpleDynamicClient(d.config.Scheme, initObjs...)
+		fakereactor.AddBasicReactors(&dynClient.Fake)
+
+		d.config.SourceClient = dynClient
 
 		d.sourceClient = d.config.SourceClient.Resource(*gvr).Namespace(d.config.SourceNamespace)
 
