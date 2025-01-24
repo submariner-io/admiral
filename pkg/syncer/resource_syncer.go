@@ -48,8 +48,7 @@ import (
 
 const (
 	OrigNamespaceLabelKey = "submariner-io/originatingNamespace"
-	namespaceAddedKey     = "$namespace-added$"
-	namespaceDeletedKey   = "$namespace-deleted$"
+	namespaceKey          = "$namespace-key$"
 )
 
 type SyncDirection int
@@ -190,6 +189,9 @@ type ResourceSyncerConfig struct {
 
 	// NamespaceInformer if specified, used to retry resources that initially failed due to missing namespace.
 	NamespaceInformer cache.SharedInformer
+
+	// WorkQueueConfig if specified, configures the underlying work queue
+	WorkQueueConfig *workqueue.Config
 }
 
 type resourceSyncer struct {
@@ -235,7 +237,7 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 		},
 		ObjectType:   rawType,
 		ResyncPeriod: config.ResyncPeriod,
-		Handler: cache.ResourceEventHandlerFuncs{
+		Handler: cache.ResourceEventHandlerDetailedFuncs{
 			AddFunc:    syncer.onCreate,
 			UpdateFunc: syncer.onUpdate,
 			DeleteFunc: syncer.onDelete,
@@ -256,7 +258,7 @@ func NewResourceSyncerWithSharedInformer(config *ResourceSyncerConfig, informer 
 
 	syncer.store = informer.GetStore()
 
-	reg, err := informer.AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{
+	reg, err := informer.AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerDetailedFuncs{
 		AddFunc:    syncer.onCreate,
 		UpdateFunc: syncer.onUpdate,
 		DeleteFunc: syncer.onDelete,
@@ -312,18 +314,22 @@ func newResourceSyncer(config *ResourceSyncerConfig) (*resourceSyncer, error) {
 		prometheus.MustRegister(syncer.syncCounter)
 	}
 
-	syncer.workQueue = workqueue.New(config.Name)
+	syncer.workQueue = workqueue.NewWithConfig(config.Name, workqueue.DefaultConfigIfNil(syncer.config.WorkQueueConfig))
 
 	if config.NamespaceInformer != nil {
 		reg, err := config.NamespaceInformer.AddEventHandler(cache.ResourceEventHandlerDetailedFuncs{
 			AddFunc: func(obj interface{}, _ bool) {
-				syncer.workQueue.Enqueue(cache.ExplicitKey(cache.NewObjectName(namespaceAddedKey, resourceUtil.MustToMeta(obj).GetName()).String()))
+				key := cache.NewObjectName(namespaceKey, resourceUtil.MustToMeta(obj).GetName()).String()
+				syncer.operationQueues.add(key, createOperation(&unstructured.Unstructured{}))
+				syncer.workQueue.Enqueue(cache.ExplicitKey(key))
 			},
 			DeleteFunc: func(obj interface{}) {
 				objName, err := cache.DeletionHandlingObjectToName(obj)
 				utilruntime.Must(err)
 
-				syncer.workQueue.Enqueue(cache.ExplicitKey(cache.NewObjectName(namespaceDeletedKey, objName.Name).String()))
+				key := cache.NewObjectName(namespaceKey, objName.Name).String()
+				syncer.operationQueues.add(key, deleteOperation(&unstructured.Unstructured{}))
+				syncer.workQueue.Enqueue(cache.ExplicitKey(key))
 			},
 		})
 		if err != nil {
@@ -424,7 +430,7 @@ func (r *resourceSyncer) RequeueResource(name, namespace string) {
 	}
 
 	if exists {
-		r.onCreate(obj)
+		r.onCreate(obj, false)
 	}
 }
 
@@ -529,13 +535,20 @@ func (r *resourceSyncer) runIfCacheSynced(defaultReturn any, run func() any) any
 }
 
 func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error) {
-	if ns == namespaceAddedKey {
-		r.handleNamespaceAdded(name)
-		return false, nil
-	}
+	resourceOp := r.operationQueues.peek(key)
 
-	if ns == namespaceDeletedKey {
-		r.handleNamespaceDeleted(name)
+	if ns == namespaceKey {
+		switch resourceOp.(type) {
+		case deleteOperation:
+			r.handleNamespaceDeleted(name)
+		case createOperation:
+			r.handleNamespaceAdded(name)
+		}
+
+		if r.operationQueues.remove(key, resourceOp) {
+			r.workQueue.Enqueue(cache.ExplicitKey(key))
+		}
+
 		return false, nil
 	}
 
@@ -543,8 +556,6 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 		requeue bool
 		err     error
 	)
-
-	resourceOp := r.operationQueues.peek(key)
 
 	switch t := resourceOp.(type) {
 	case deleteOperation:
@@ -721,7 +732,7 @@ func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op
 	return r.config.OnSuccessfulSync(converted, op)
 }
 
-func (r *resourceSyncer) onCreate(obj interface{}) {
+func (r *resourceSyncer) onCreate(obj interface{}, isInInitialList bool) {
 	resource := r.assertUnstructured(obj)
 
 	if !r.shouldProcess(resource, Create) {
@@ -731,7 +742,15 @@ func (r *resourceSyncer) onCreate(obj interface{}) {
 	key, _ := cache.MetaNamespaceKeyFunc(resource)
 
 	r.operationQueues.add(key, createOperation(resource))
-	r.workQueue.Enqueue(resource)
+
+	// If this is from the initial listing on startup then enqueue with low priority to prioritize newly
+	// created or updated resources. Also don't enqueue with rate limiting since we already know this is
+	// part of a one-time burst.
+	if isInInitialList {
+		r.workQueue.EnqueueWithOpts(resource, workqueue.EnqueueOpts{Priority: workqueue.LowPriority})
+	} else {
+		r.workQueue.Enqueue(resource)
+	}
 }
 
 func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {

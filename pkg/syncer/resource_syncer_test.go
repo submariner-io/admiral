@@ -78,6 +78,7 @@ var _ = Describe("Resource Syncer", func() {
 	Describe("With SharedInformer", testWithSharedInformer)
 	Describe("With missing namespace", testWithMissingNamespace)
 	Describe("Event Ordering", testEventOrdering)
+	Describe("Priority Ordering", testPriorityOrdering)
 })
 
 func testReconcileLocalToRemote() {

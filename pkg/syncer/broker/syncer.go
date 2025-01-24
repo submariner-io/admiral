@@ -31,6 +31,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
+	"github.com/submariner-io/admiral/pkg/workqueue"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -74,6 +75,9 @@ type ResourceConfig struct {
 	// Default is 0.
 	LocalResyncPeriod time.Duration
 
+	// LocalWorkQueueConfig if specified, configures the underlying work queue for processing local resources.
+	LocalWorkQueueConfig *workqueue.Config
+
 	// BrokerResourceType the type of the broker resources to sync to the local source.
 	BrokerResourceType runtime.Object
 
@@ -93,6 +97,9 @@ type ResourceConfig struct {
 	// BrokerResyncPeriod if non-zero, the period at which broker resources will be re-synced regardless if anything changed.
 	// Default is 0.
 	BrokerResyncPeriod time.Duration
+
+	// BrokerWorkQueueConfig if specified, configures the underlying work queue for processing broker resources.
+	BrokerWorkQueueConfig *workqueue.Config
 
 	// SyncCounterOpts used to pass name and help text to resource syncer Gauge
 	SyncCounterOpts *prometheus.GaugeOpts
@@ -227,6 +234,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			ResourcesEquivalent: rc.LocalResourcesEquivalent,
 			ShouldProcess:       rc.LocalShouldProcess,
 			WaitForCacheSync:    rc.LocalWaitForCacheSync,
+			WorkQueueConfig:     rc.LocalWorkQueueConfig,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.LocalResyncPeriod,
 			SyncCounter:         syncCounter,
@@ -255,6 +263,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			OnSuccessfulSync:    rc.OnSuccessfulSyncFromBroker,
 			ResourcesEquivalent: rc.BrokerResourcesEquivalent,
 			WaitForCacheSync:    &waitForCacheSync,
+			WorkQueueConfig:     rc.BrokerWorkQueueConfig,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.BrokerResyncPeriod,
 			SyncCounter:         syncCounter,

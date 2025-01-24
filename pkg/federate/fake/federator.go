@@ -44,8 +44,8 @@ type Federator struct {
 
 func New() *Federator {
 	f := &Federator{
-		distribute: make(chan *unstructured.Unstructured, 100),
-		delete:     make(chan *unstructured.Unstructured, 100),
+		distribute: make(chan *unstructured.Unstructured, 200),
+		delete:     make(chan *unstructured.Unstructured, 200),
 	}
 	f.ResetOnFailure.Store(true)
 
