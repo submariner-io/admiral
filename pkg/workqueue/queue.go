@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/controller/priorityqueue"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -55,7 +56,7 @@ type EnqueueOpts struct {
 
 type queueType struct {
 	workqueue.TypedRateLimitingInterface[string]
-	priorityQueue *PriorityQueue
+	priorityQueue priorityqueue.PriorityQueue[string]
 	name          string
 }
 
@@ -66,32 +67,25 @@ func New(name string) Interface {
 }
 
 func NewWithConfig(name string, config Config) Interface {
-	priorityQueue := NewPriorityQueue()
+	rateLimiter := workqueue.NewTypedWithMaxWaitRateLimiter(
+		workqueue.NewTypedMaxOfRateLimiter(
+			// exponential per-item rate limiter
+			workqueue.NewTypedItemExponentialFailureRateLimiter[string](
+				config.ItemRateLimiterBaseDelay, config.ItemRateLimiterMaxDelay),
+			// overall rate limiter (not per item)
+			&workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Limit(config.BucketRateLimiterItemsPerSec),
+				config.BucketRateLimiterMaxBurst)},
+		), config.OverallRateLimiterMaxDelay)
+
+	priorityQueue := priorityqueue.New(name, func(o *priorityqueue.Opts[string]) {
+		o.RateLimiter = rateLimiter
+		o.Log = logger.Logger
+	})
 
 	return &queueType{
-		priorityQueue: priorityQueue,
-		TypedRateLimitingInterface: workqueue.NewTypedRateLimitingQueueWithConfig(
-			// caps the maximum wait
-			workqueue.NewTypedWithMaxWaitRateLimiter(
-				workqueue.NewTypedMaxOfRateLimiter(
-					// exponential per-item rate limiter
-					workqueue.NewTypedItemExponentialFailureRateLimiter[string](
-						config.ItemRateLimiterBaseDelay, config.ItemRateLimiterMaxDelay),
-					// overall rate limiter (not per item)
-					&workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Limit(config.BucketRateLimiterItemsPerSec),
-						config.BucketRateLimiterMaxBurst)},
-				), config.OverallRateLimiterMaxDelay),
-			workqueue.TypedRateLimitingQueueConfig[string]{
-				Name: name,
-				DelayingQueue: workqueue.NewTypedDelayingQueueWithConfig(workqueue.TypedDelayingQueueConfig[string]{
-					Name: name,
-					Queue: workqueue.NewTypedWithConfig(workqueue.TypedQueueConfig[string]{
-						Name:  name,
-						Queue: &priorityWorkQueue[string]{priorityQueue: priorityQueue},
-					}),
-				}),
-			}),
-		name: name,
+		priorityQueue:              priorityQueue,
+		TypedRateLimitingInterface: priorityQueue,
+		name:                       name,
 	}
 }
 
@@ -106,13 +100,10 @@ func (q *queueType) EnqueueWithOpts(obj interface{}, opts EnqueueOpts) {
 	logger.V(log.LIBTRACE).Infof("%s: enqueueing key %q for %T object with priority %d",
 		q.name, key, obj, opts.Priority)
 
-	q.priorityQueue.SetPriority(key, opts.Priority)
-
-	if opts.RateLimited {
-		q.AddRateLimited(key)
-	} else {
-		q.Add(key)
-	}
+	q.priorityQueue.AddWithOpts(priorityqueue.AddOpts{
+		RateLimited: opts.RateLimited,
+		Priority:    opts.Priority,
+	}, key)
 }
 
 func (q *queueType) Run(stopCh <-chan struct{}, process ProcessFunc) {
