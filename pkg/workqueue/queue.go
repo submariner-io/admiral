@@ -32,52 +32,87 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	LowPriority    = -100
+	NormalPriority = 0
+)
+
 type ProcessFunc func(key, name, namespace string) (bool, error)
 
 type Interface interface {
 	Enqueue(obj interface{})
+	EnqueueWithOpts(obj interface{}, opts EnqueueOpts)
 	NumRequeues(key string) int
 	Run(stopCh <-chan struct{}, process ProcessFunc)
 	ShutDown()
 	ShutDownWithDrain()
 }
 
+type EnqueueOpts struct {
+	RateLimited bool
+	Priority    int
+}
+
 type queueType struct {
 	workqueue.TypedRateLimitingInterface[string]
-
-	name string
+	priorityQueue *PriorityQueue
+	name          string
 }
 
 var logger = log.Logger{Logger: logf.Log.WithName("WorkQueue")}
 
 func New(name string) Interface {
+	return NewWithConfig(name, DefaultConfig())
+}
+
+func NewWithConfig(name string, config Config) Interface {
+	priorityQueue := NewPriorityQueue()
+
 	return &queueType{
+		priorityQueue: priorityQueue,
 		TypedRateLimitingInterface: workqueue.NewTypedRateLimitingQueueWithConfig(
 			// caps the maximum wait
 			workqueue.NewTypedWithMaxWaitRateLimiter(
 				workqueue.NewTypedMaxOfRateLimiter(
 					// exponential per-item rate limiter
-					workqueue.NewTypedItemExponentialFailureRateLimiter[string](50*time.Millisecond, 30*time.Second),
+					workqueue.NewTypedItemExponentialFailureRateLimiter[string](
+						config.ItemRateLimiterBaseDelay, config.ItemRateLimiterMaxDelay),
 					// overall rate limiter (not per item)
-					&workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Limit(10), 500)},
-				), 5*time.Minute),
+					&workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Limit(config.BucketRateLimiterItemsPerSec),
+						config.BucketRateLimiterMaxBurst)},
+				), config.OverallRateLimiterMaxDelay),
 			workqueue.TypedRateLimitingQueueConfig[string]{
 				Name: name,
+				DelayingQueue: workqueue.NewTypedDelayingQueueWithConfig(workqueue.TypedDelayingQueueConfig[string]{
+					Name: name,
+					Queue: workqueue.NewTypedWithConfig(workqueue.TypedQueueConfig[string]{
+						Name:  name,
+						Queue: &priorityWorkQueue[string]{priorityQueue: priorityQueue},
+					}),
+				}),
 			}),
 		name: name,
 	}
 }
 
 func (q *queueType) Enqueue(obj interface{}) {
-	var key string
-	var err error
-	if key, err = cache.DeletionHandlingMetaNamespaceKeyFunc(obj); err != nil {
-		utilruntime.HandleError(err)
-		return
-	}
+	q.EnqueueWithOpts(obj, EnqueueOpts{Priority: NormalPriority, RateLimited: true})
+}
 
-	logger.V(log.LIBTRACE).Infof("%s: enqueueing key %q for %T object", q.name, key, obj)
-	q.AddRateLimited(key)
+func (q *queueType) EnqueueWithOpts(obj interface{}, opts EnqueueOpts) {
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	utilruntime.Must(err)
+
+	logger.V(log.LIBTRACE).Infof("%s: enqueueing key %q for %T object with priority %d",
+		q.name, key, obj, opts.Priority)
+
+	q.priorityQueue.SetPriority(key, opts.Priority)
+
+	if opts.RateLimited {
+		q.AddRateLimited(key)
+	} else {
+		q.Add(key)
+	}
 }
 
 func (q *queueType) Run(stopCh <-chan struct{}, process ProcessFunc) {
@@ -95,14 +130,10 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 
 	defer q.Done(key)
 
-	requeue, err := func() (bool, error) {
-		ns, name, err := cache.SplitMetaNamespaceKey(key)
-		if err != nil {
-			panic(err)
-		}
+	ns, name, err := cache.SplitMetaNamespaceKey(key)
+	utilruntime.Must(err)
 
-		return process(key, name, ns)
-	}()
+	requeue, err := process(key, name, ns)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("%s: Failed to process object with key %q using function %#v: %w", q.name, key, process, err))
 	}
