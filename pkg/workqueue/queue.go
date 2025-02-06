@@ -68,19 +68,27 @@ func New(name string) Interface {
 func NewWithConfig(name string, config Config) Interface {
 	priorityQueue := NewPriorityQueue()
 
+	var rateLimiters []workqueue.TypedRateLimiter[string]
+
+	if config.ItemRateLimiterBaseDelay > 0 && config.ItemRateLimiterMaxDelay > 0 {
+		// exponential per-item rate limiter
+		rateLimiters = append(rateLimiters, workqueue.NewTypedItemExponentialFailureRateLimiter[string](
+			config.ItemRateLimiterBaseDelay, config.ItemRateLimiterMaxDelay))
+	}
+
+	if config.BucketRateLimiterItemsPerSec > 0 && config.BucketRateLimiterMaxBurst > 0 {
+		// overall rate limiter (not per item)
+		rateLimiters = append(rateLimiters, &workqueue.TypedBucketRateLimiter[string]{
+			Limiter: rate.NewLimiter(rate.Limit(config.BucketRateLimiterItemsPerSec), config.BucketRateLimiterMaxBurst),
+		})
+	}
+
 	return &queueType{
 		priorityQueue: priorityQueue,
 		TypedRateLimitingInterface: workqueue.NewTypedRateLimitingQueueWithConfig(
 			// caps the maximum wait
 			workqueue.NewTypedWithMaxWaitRateLimiter(
-				workqueue.NewTypedMaxOfRateLimiter(
-					// exponential per-item rate limiter
-					workqueue.NewTypedItemExponentialFailureRateLimiter[string](
-						config.ItemRateLimiterBaseDelay, config.ItemRateLimiterMaxDelay),
-					// overall rate limiter (not per item)
-					&workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Limit(config.BucketRateLimiterItemsPerSec),
-						config.BucketRateLimiterMaxBurst)},
-				), config.OverallRateLimiterMaxDelay),
+				workqueue.NewTypedMaxOfRateLimiter(rateLimiters...), config.OverallRateLimiterMaxDelay),
 			workqueue.TypedRateLimitingQueueConfig[string]{
 				Name: name,
 				DelayingQueue: workqueue.NewTypedDelayingQueueWithConfig(workqueue.TypedDelayingQueueConfig[string]{
