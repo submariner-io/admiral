@@ -23,6 +23,7 @@ import (
 	"errors"
 	"strconv"
 	"sync"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -37,14 +38,13 @@ var _ = Describe("Work Queue", func() {
 		wq        workqueue.Interface
 		processFn workqueue.ProcessFunc
 		itemCh    chan string
+		itemCount int
+		config    *workqueue.Config
 	)
 
 	BeforeEach(func() {
-		config := workqueue.DefaultConfig()
-		config.ItemRateLimiterBaseDelay = 0
-
-		wq = workqueue.NewWithConfig("test", config)
-		itemCh = make(chan string, 100)
+		config = nil
+		itemCount = 100
 
 		processFn = func(key, name, namespace string) (bool, error) {
 			defer GinkgoRecover()
@@ -61,6 +61,13 @@ var _ = Describe("Work Queue", func() {
 	})
 
 	JustBeforeEach(func() {
+		if config != nil {
+			wq = workqueue.NewWithConfig("test", *config)
+		} else {
+			wq = workqueue.New("test")
+		}
+
+		itemCh = make(chan string, itemCount)
 		stopCh := make(chan struct{})
 		wq.Run(stopCh, processFn)
 
@@ -164,6 +171,10 @@ var _ = Describe("Work Queue", func() {
 		normalKey2 := cache.ObjectName{Name: "normalKey2"}.String()
 
 		BeforeEach(func() {
+			c := workqueue.DefaultConfig()
+			config = &c
+			config.ItemRateLimiterBaseDelay = 0
+
 			processFn = func(key, _, _ string) (bool, error) {
 				itemCh <- key
 
@@ -194,6 +205,10 @@ var _ = Describe("Work Queue", func() {
 		adjustedKey := cache.ObjectName{Name: "adjusted"}.String()
 
 		BeforeEach(func() {
+			c := workqueue.DefaultConfig()
+			config = &c
+			config.ItemRateLimiterBaseDelay = 0
+
 			processFn = func(key, _, _ string) (bool, error) {
 				itemCh <- key
 
@@ -216,6 +231,62 @@ var _ = Describe("Work Queue", func() {
 			Eventually(itemCh).Should(Receive(Equal(firstKey)))
 
 			Eventually(itemCh).Should(Receive(Equal(adjustedKey)))
+		})
+	})
+
+	Context("", func() {
+		BeforeEach(func() {
+			itemCount = 1000
+			c := workqueue.DefaultConfig()
+			config = &c
+		})
+
+		JustBeforeEach(func() {
+			for i := 1; i <= itemCount; i++ {
+				wq.Enqueue(cache.ExplicitKey("item" + strconv.Itoa(i)))
+			}
+
+			done := make(chan struct{})
+			go func() {
+				for i := 1; i <= itemCount; i++ {
+					Eventually(itemCh).Should(Receive())
+				}
+
+				done <- struct{}{}
+			}()
+
+			select {
+			case <-done:
+			case <-time.After(100 * time.Millisecond):
+				Fail("Did not receive all the items in time")
+			}
+		})
+
+		When("the BucketRateLimiterItemsPerSec config is set to 0", func() {
+			BeforeEach(func() {
+				config.BucketRateLimiterItemsPerSec = 0
+			})
+
+			It("should disable the bucket rate limiter", func() {
+			})
+		})
+
+		When("the BucketRateLimiterMaxBurst config is set to 0", func() {
+			BeforeEach(func() {
+				config.BucketRateLimiterMaxBurst = 0
+			})
+
+			It("should disable the bucket rate limiter", func() {
+			})
+		})
+
+		Context("with no rate limiter configured", func() {
+			BeforeEach(func() {
+				config = &workqueue.Config{}
+			})
+
+			It("should not affect functionality", func() {
+			})
 		})
 	})
 })
