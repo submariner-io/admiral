@@ -1,0 +1,56 @@
+/*
+SPDX-License-Identifier: Apache-2.0
+
+Copyright Contributors to the Submariner project.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package reporter_test
+
+import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/submariner-io/admiral/pkg/reporter"
+)
+
+var _ = Describe("Tracker", func() {
+	stdoutCapture := newStdoutCapture()
+
+	var tracker *reporter.Tracker
+
+	BeforeEach(func() {
+		tracker = reporter.NewTracker(reporter.Stdout())
+	})
+
+	It("report and track failures and warnings", func() {
+		stdoutCapture.start()
+		tracker.Start("Start message")
+		Expect(stdoutCapture.read()).To(ContainSubstring("Start message"))
+
+		stdoutCapture.start()
+		tracker.Warning("Warning message")
+		Expect(stdoutCapture.read()).To(ContainSubstring("Warning message"))
+
+		stdoutCapture.start()
+		tracker.Failure("Failure message")
+		Expect(stdoutCapture.read()).To(ContainSubstring("Failure message"))
+
+		Expect(tracker.HasWarnings()).To(BeTrue())
+		Expect(tracker.HasFailures()).To(BeTrue())
+
+		tracker.Start("Start again")
+		Expect(tracker.HasWarnings()).To(BeFalse())
+		Expect(tracker.HasFailures()).To(BeFalse())
+	})
+})
