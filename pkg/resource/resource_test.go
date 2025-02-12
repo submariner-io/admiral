@@ -24,6 +24,8 @@ import (
 	"github.com/submariner-io/admiral/pkg/resource"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/ptr"
 )
@@ -114,3 +116,177 @@ var _ = Describe("TrimManagedFields", func() {
 		})
 	})
 })
+
+var _ = Describe("ToUnstructured", func() {
+	Context("with an Unstructured instance", func() {
+		It("should return a copy", func() {
+			obj := newUnstructuredPod()
+
+			u, err := resource.ToUnstructured(obj)
+			Expect(err).To(Succeed())
+			Expect(u).To(Equal(obj))
+
+			_ = unstructured.SetNestedField(u.Object, "host", "spec", "hostName")
+			Expect(u).ToNot(Equal(obj))
+		})
+	})
+
+	Context("with a Pod instance", func() {
+		It("should return a correct Unstructured instance", func() {
+			pod := newPod()
+
+			u, err := resource.ToUnstructured(pod)
+			Expect(err).To(Succeed())
+			Expect(u.GetName()).To(Equal(pod.Name))
+			Expect(u.GetNamespace()).To(Equal(pod.Namespace))
+			Expect(u.GetLabels()).To(Equal(pod.Labels))
+
+			s, _, _ := unstructured.NestedString(u.Object, "spec", "nodeName")
+			Expect(s).To(Equal(pod.Spec.NodeName))
+		})
+	})
+})
+
+var _ = Describe("ToUnstructuredUsingScheme", func() {
+	When("the Pod kind is not in the scheme", func() {
+		It("should return an error", func() {
+			_, err := resource.ToUnstructuredUsingScheme(&corev1.Pod{}, runtime.NewScheme())
+			Expect(err).To(HaveOccurred())
+		})
+	})
+})
+
+var _ = Describe("MustToUnstructuredUsingScheme", func() {
+	When("the Pod kind is not in the scheme", func() {
+		It("should panic", func() {
+			Expect(func() {
+				_ = resource.MustToUnstructuredUsingScheme(&corev1.Pod{}, runtime.NewScheme())
+			}).To(Panic())
+		})
+	})
+})
+
+var _ = Describe("MustToUnstructuredUsingDefaultConverter", func() {
+	Context("with an Unstructured instance", func() {
+		It("should return a copy", func() {
+			obj := newUnstructuredPod()
+
+			u := resource.MustToUnstructuredUsingDefaultConverter(newUnstructuredPodWithKind())
+			Expect(u).To(Equal(obj))
+
+			_ = unstructured.SetNestedField(u.Object, "host", "spec", "hostName")
+			Expect(u).ToNot(Equal(obj))
+		})
+	})
+
+	Context("with a Pod instance", func() {
+		It("should return a correct Unstructured instance", func() {
+			pod := newPod()
+
+			u := resource.MustToUnstructuredUsingDefaultConverter(pod)
+			Expect(u.GetName()).To(Equal(pod.Name))
+			Expect(u.GetNamespace()).To(Equal(pod.Namespace))
+			Expect(u.GetLabels()).To(Equal(pod.Labels))
+
+			s, _, _ := unstructured.NestedString(u.Object, "spec", "nodeName")
+			Expect(s).To(Equal(pod.Spec.NodeName))
+		})
+	})
+})
+
+var _ = Describe("MustFromUnstructured", func() {
+	It("should return a correct Unstructured instance", func() {
+		u := newUnstructuredPodWithKind()
+		pod := resource.MustFromUnstructured(u, &corev1.Pod{})
+
+		Expect(pod.Name).To(Equal(u.GetName()))
+		Expect(pod.Namespace).To(Equal(u.GetNamespace()))
+		Expect(pod.Labels).To(Equal(u.GetLabels()))
+
+		s, _, _ := unstructured.NestedString(u.Object, "spec", "nodeName")
+		Expect(s).To(Equal(pod.Spec.NodeName))
+	})
+
+	When("the Kind field is missing", func() {
+		It("should panic", func() {
+			Expect(func() {
+				_ = resource.MustFromUnstructured(newUnstructuredPod(), &corev1.Pod{})
+			}).To(Panic())
+		})
+	})
+})
+
+var _ = Describe("MustFromUnstructuredUsingScheme", func() {
+	When("the Pod kind is not in the scheme", func() {
+		It("should panic", func() {
+			Expect(func() {
+				_ = resource.MustFromUnstructuredUsingScheme(newUnstructuredPodWithKind(), &corev1.Pod{}, runtime.NewScheme())
+			}).To(Panic())
+		})
+	})
+})
+
+var _ = Describe("MustToMeta", func() {
+	It("should return the meta Object", func() {
+		pod := newPod()
+		Expect(resource.MustToMeta(pod).GetName()).To(Equal(pod.Name))
+
+		u := newUnstructuredPod()
+		Expect(resource.MustToMeta(u).GetName()).To(Equal(u.GetName()))
+	})
+
+	When("the instance isn't a meta Object", func() {
+		It("should panic", func() {
+			Expect(func() {
+				_ = resource.MustToMeta(&corev1.PodSpec{})
+			}).To(Panic())
+		})
+	})
+})
+
+var _ = Describe("ToJSON", func() {
+	It("should return the JSON string", func() {
+		pod := newPod()
+		json := resource.ToJSON(pod)
+
+		Expect(json).To(ContainSubstring("%q: %q", "name", pod.Name))
+		Expect(json).To(ContainSubstring("%q: %q", "namespace", pod.Namespace))
+		Expect(json).To(ContainSubstring("%q: %q", "nodeName", pod.Spec.NodeName))
+	})
+})
+
+func newUnstructuredPod() *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"name":      "test-pod",
+				"namespace": "ns",
+				"labels":    map[string]interface{}{"app": "test"},
+			},
+			"spec": map[string]interface{}{
+				"nodeName": "node",
+			},
+		},
+	}
+}
+
+func newUnstructuredPodWithKind() *unstructured.Unstructured {
+	u := newUnstructuredPod()
+	u.SetKind("Pod")
+	u.SetAPIVersion("v1")
+
+	return u
+}
+
+func newPod() *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: "ns",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "node",
+		},
+	}
+}

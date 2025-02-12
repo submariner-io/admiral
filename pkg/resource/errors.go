@@ -38,7 +38,9 @@ func IsNotFoundErr(err error) bool {
 	}
 
 	for _, err := range errGDF.Groups {
-		return IsNotFoundErr(err)
+		if IsNotFoundErr(err) {
+			return true
+		}
 	}
 
 	return false
