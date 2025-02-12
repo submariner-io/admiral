@@ -21,7 +21,6 @@ package util
 import (
 	"context"
 	"crypto/x509"
-	"fmt"
 	"sync/atomic"
 
 	"github.com/pkg/errors"
@@ -99,9 +98,7 @@ func GetSpec(obj *unstructured.Unstructured) interface{} {
 
 func GetNestedField(obj *unstructured.Unstructured, fields ...string) interface{} {
 	nested, _, err := unstructured.NestedFieldNoCopy(obj.Object, fields...)
-	if err != nil {
-		panic(fmt.Sprintf("Error retrieving %v field for %#v: %v", fields, obj, err))
-	}
+	utilruntime.Must(errors.Wrapf(err, "error retrieving %v field for %#v", fields, obj))
 
 	return nested
 }
@@ -109,9 +106,7 @@ func GetNestedField(obj *unstructured.Unstructured, fields ...string) interface{
 func SetNestedField(to map[string]interface{}, value interface{}, fields ...string) {
 	if value != nil {
 		err := unstructured.SetNestedField(to, value, fields...)
-		if err != nil {
-			panic(fmt.Sprintf("Error setting value (%v) for nested field %v in object %v: %v", value, fields, to, err))
-		}
+		utilruntime.Must(errors.Wrapf(err, "error setting value (%v) for nested field %v in object %v", value, fields, to))
 	}
 }
 
@@ -124,14 +119,10 @@ func CopyImmutableMetadata(from, to *unstructured.Unstructured) *unstructured.Un
 
 	fromMetadata := value.(map[string]interface{})
 	err := unstructured.SetNestedStringMap(fromMetadata, to.GetLabels(), LabelsField)
-	if err != nil {
-		panic(err)
-	}
+	utilruntime.Must(err)
 
 	err = unstructured.SetNestedStringMap(fromMetadata, to.GetAnnotations(), AnnotationsField)
-	if err != nil {
-		panic(err)
-	}
+	utilruntime.Must(err)
 
 	SetNestedField(to.Object, fromMetadata, MetadataField)
 
@@ -153,10 +144,15 @@ func DeeplyEmpty(m map[string]interface{}) bool {
 	return true
 }
 
+var (
+	ErrorHook = logger.Errorf
+	FatalHook = logger.FatalfOnError
+)
+
 func AddCertificateErrorHandler(fatal bool) {
-	logCertificateError := logger.Errorf
+	logCertificateError := ErrorHook
 	if fatal {
-		logCertificateError = logger.FatalfOnError
+		logCertificateError = FatalHook
 	}
 
 	utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers,
