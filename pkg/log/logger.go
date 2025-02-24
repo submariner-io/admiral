@@ -30,6 +30,9 @@ const (
 	FatalKey   = "FATAL"
 )
 
+// Exit hook for unit tests.
+var Exit = os.Exit
+
 type Logger struct {
 	logr.Logger
 }
@@ -60,7 +63,7 @@ func (l Logger) Warningf(format string, args ...interface{}) {
 
 func (l Logger) Fatal(msg string, keysAndValues ...interface{}) {
 	l.Logger.Error(nil, msg, append(keysAndValues, FatalKey, "true")...)
-	os.Exit(255)
+	Exit(255)
 }
 
 func (l Logger) Fatalf(format string, args ...interface{}) {
@@ -73,7 +76,7 @@ func (l Logger) FatalOnError(err error, msg string, keysAndValues ...interface{}
 	}
 
 	l.Logger.Error(err, msg, append(keysAndValues, FatalKey, "true")...)
-	os.Exit(255)
+	Exit(255)
 }
 
 func (l Logger) FatalfOnError(err error, format string, args ...interface{}) {

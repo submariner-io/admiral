@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
+	"github.com/submariner-io/admiral/pkg/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -54,6 +55,9 @@ var _ = Describe("Interface", func() {
 			Spec: appsv1.DaemonSetSpec{
 				MinReadySeconds: 3,
 			},
+		}, func(ds *appsv1.DaemonSet) *appsv1.DaemonSet {
+			ds.Status.NumberReady = 2
+			return ds
 		})
 	})
 
@@ -68,6 +72,9 @@ var _ = Describe("Interface", func() {
 			Spec: appsv1.DeploymentSpec{
 				MinReadySeconds: 3,
 			},
+		}, func(d *appsv1.Deployment) *appsv1.Deployment {
+			d.Status.Replicas = 2
+			return d
 		})
 	})
 
@@ -78,6 +85,9 @@ var _ = Describe("Interface", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
+		}, func(ns *corev1.Namespace) *corev1.Namespace {
+			ns.Status.Phase = corev1.NamespaceActive
+			return ns
 		})
 	})
 
@@ -92,6 +102,9 @@ var _ = Describe("Interface", func() {
 			Spec: corev1.PodSpec{
 				Hostname: "my-host",
 			},
+		}, func(pod *corev1.Pod) *corev1.Pod {
+			pod.Status.Phase = corev1.PodPending
+			return pod
 		})
 	})
 
@@ -106,6 +119,12 @@ var _ = Describe("Interface", func() {
 			Spec: corev1.ServiceSpec{
 				Type: corev1.ServiceTypeClusterIP,
 			},
+		}, func(s *corev1.Service) *corev1.Service {
+			_ = meta.SetStatusCondition(&s.Status.Conditions, metav1.Condition{
+				Type:   "type",
+				Status: metav1.ConditionTrue,
+			})
+			return s
 		})
 	})
 
@@ -117,7 +136,7 @@ var _ = Describe("Interface", func() {
 				Name:      "test",
 				Namespace: test.LocalNamespace,
 			},
-		})
+		}, nil)
 	})
 
 	Context("ForClusterRole", func() {
@@ -127,7 +146,7 @@ var _ = Describe("Interface", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
-		})
+		}, nil)
 	})
 
 	Context("ForClusterRoleBinding", func() {
@@ -137,7 +156,7 @@ var _ = Describe("Interface", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
-		})
+		}, nil)
 	})
 
 	Context("ForRole", func() {
@@ -148,7 +167,7 @@ var _ = Describe("Interface", func() {
 				Name:      "test",
 				Namespace: test.LocalNamespace,
 			},
-		})
+		}, nil)
 	})
 
 	Context("ForRoleBinding", func() {
@@ -159,7 +178,7 @@ var _ = Describe("Interface", func() {
 				Name:      "test",
 				Namespace: test.LocalNamespace,
 			},
-		})
+		}, nil)
 	})
 
 	Context("ForConfigMap", func() {
@@ -171,7 +190,7 @@ var _ = Describe("Interface", func() {
 				Namespace: test.LocalNamespace,
 			},
 			Data: map[string]string{"one": "two"},
-		})
+		}, nil)
 	})
 
 	Context("ForListableControllerClient", func() {
@@ -190,6 +209,9 @@ var _ = Describe("Interface", func() {
 			Spec: corev1.PodSpec{
 				Hostname: "my-host",
 			},
+		}, func(pod *corev1.Pod) *corev1.Pod {
+			pod.Status.Phase = corev1.PodPending
+			return pod
 		})
 	})
 
@@ -213,11 +235,14 @@ var _ = Describe("Interface", func() {
 			Spec: corev1.PodSpec{
 				Hostname: "my-host",
 			},
-		}))
+		}), func(u *unstructured.Unstructured) *unstructured.Unstructured {
+			util.SetNestedField(u.Object, "node", util.StatusField, "nodeName")
+			return u
+		})
 	})
 })
 
-func testInterfaceFuncs[T runtime.Object](newInterface func() resource.Interface[T], initialObj T) {
+func testInterfaceFuncs[T runtime.Object](newInterface func() resource.Interface[T], initialObj T, updateStatus func(T) T) {
 	Specify("verify functions", func() {
 		sanitize := func(o T) T {
 			m := resource.MustToMeta(o)
@@ -258,6 +283,16 @@ func testInterfaceFuncs[T runtime.Object](newInterface func() resource.Interface
 		obj, err = i.Update(context.Background(), actual, metav1.UpdateOptions{})
 		Expect(err).To(Succeed())
 		Expect(sanitize(obj)).To(Equal(actual))
+
+		if updateStatus != nil {
+			actual = updateStatus(actual)
+			obj, err = i.UpdateStatus(context.Background(), actual, metav1.UpdateOptions{})
+			Expect(err).To(Succeed())
+			Expect(sanitize(obj)).To(Equal(actual))
+		} else {
+			_, err = i.UpdateStatus(context.Background(), actual, metav1.UpdateOptions{})
+			Expect(err).To(HaveOccurred())
+		}
 
 		// List
 		list, err := i.List(context.Background(), metav1.ListOptions{})

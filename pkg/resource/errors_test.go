@@ -70,7 +70,7 @@ var _ = Describe("IsNotFoundErr", func() {
 	})
 })
 
-var _ = Describe("IsMissingNamespaceErr and ExtractMissingNamespaceFromErr", func() {
+var _ = Describe("IsMissingNamespaceErr", func() {
 	When("the error isn't NotFound", func() {
 		It("should return false", func() {
 			Expect(resource.IsMissingNamespaceErr(apierrors.NewBadRequest(""))).To(BeFalse())
@@ -78,12 +78,10 @@ var _ = Describe("IsMissingNamespaceErr and ExtractMissingNamespaceFromErr", fun
 	})
 
 	When("the error details specify a namespace", func() {
-		It("should return true, and the name should be retrievable", func() {
-			err := apierrors.NewNotFound(schema.GroupResource{
+		It("should return true", func() {
+			Expect(resource.IsMissingNamespaceErr(apierrors.NewNotFound(schema.GroupResource{
 				Resource: "namespaces",
-			}, "missing-ns")
-			Expect(resource.IsMissingNamespaceErr(err)).To(BeTrue())
-			Expect(resource.ExtractMissingNamespaceFromErr(err)).To(Equal("missing-ns"))
+			}, "missing-ns"))).To(BeTrue())
 		})
 	})
 
@@ -92,6 +90,22 @@ var _ = Describe("IsMissingNamespaceErr and ExtractMissingNamespaceFromErr", fun
 			Expect(resource.IsMissingNamespaceErr(apierrors.NewNotFound(schema.GroupResource{
 				Resource: "pods",
 			}, "missing"))).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("ExtractMissingNamespaceFromErr", func() {
+	When("the error isn't NotFound", func() {
+		It("should return empty", func() {
+			Expect(resource.ExtractMissingNamespaceFromErr(apierrors.NewBadRequest(""))).To(BeEmpty())
+		})
+	})
+
+	When("the error details specify a namespace", func() {
+		It("should return the namespace", func() {
+			Expect(resource.ExtractMissingNamespaceFromErr(apierrors.NewNotFound(schema.GroupResource{
+				Resource: "namespaces",
+			}, "missing-ns"))).To(Equal("missing-ns"))
 		})
 	})
 })
