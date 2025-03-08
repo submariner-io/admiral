@@ -20,6 +20,7 @@ package resource
 
 import (
 	"context"
+	"reflect"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -90,7 +91,9 @@ func DefaultUpdateStatus[T runtime.Object](_ context.Context, _ T, _ metav1.Upda
 }
 
 func MustExtractList[T runtime.Object](from runtime.Object) []T {
-	if from == nil {
+	// If 'from' is a typed interface pointer whose underlying value is nil, equality check will return false so
+	// also check nil via reflection.
+	if from == nil || reflect.ValueOf(from).IsNil() {
 		return nil
 	}
 
