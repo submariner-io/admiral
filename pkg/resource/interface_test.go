@@ -215,6 +215,20 @@ var _ = Describe("Interface", func() {
 	})
 })
 
+var _ = Describe("MustExtractList", func() {
+	Specify("should handle nil input", func() {
+		r := resource.MustExtractList[*unstructured.Unstructured](nil)
+		Expect(r).To(BeEmpty())
+
+		// Test case with a typed interface pointer whose underlying value is nil. In this case, equality check,
+		// ie "from == nil", returns false.
+		var l *unstructured.UnstructuredList
+
+		r = resource.MustExtractList[*unstructured.Unstructured](l)
+		Expect(r).To(BeEmpty())
+	})
+})
+
 func testInterfaceFuncs[T runtime.Object](newInterface func() resource.Interface[T], initialObj T) {
 	Specify("verify functions", func() {
 		sanitize := func(o T) T {
