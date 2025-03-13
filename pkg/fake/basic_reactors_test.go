@@ -58,10 +58,17 @@ var _ = Describe("Create", func() {
 		Expect(actual.UID).ToNot(BeEmpty())
 	})
 
-	It("should set the CreationTimestamp field", func() {
+	Specify("should set the CreationTimestamp field if not specified", func() {
 		now := metav1.Now()
 		actual := t.assertCreateSuccess(t.pod)
 		Expect(actual.CreationTimestamp.After(now.Add(-time.Second * 5))).To(BeTrue())
+	})
+
+	Specify("should not set the CreationTimestamp field if specified", func() {
+		cst := metav1.Time{Time: metav1.Now().Add(time.Hour)}
+		t.pod.CreationTimestamp = cst
+		actual := t.assertCreateSuccess(t.pod)
+		Expect(actual.CreationTimestamp).To(Equal(cst))
 	})
 
 	When("the Name and GenerateName fields are empty", func() {

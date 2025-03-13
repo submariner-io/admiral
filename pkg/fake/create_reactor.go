@@ -64,7 +64,10 @@ func (r *createReactor) react(a testing.Action) (bool, runtime.Object, error) {
 	}
 
 	target.SetResourceVersion("1")
-	target.SetCreationTimestamp(metav1.Now())
+
+	if target.GetCreationTimestamp().Time.IsZero() {
+		target.SetCreationTimestamp(metav1.Now())
+	}
 
 	if !target.GetDeletionTimestamp().IsZero() {
 		target.SetDeletionTimestamp(nil)
