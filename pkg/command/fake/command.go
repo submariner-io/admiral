@@ -20,14 +20,15 @@ package fake
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os/exec"
 	"slices"
 	"sync"
 
 	. "github.com/onsi/gomega"
+	gomegaTypes "github.com/onsi/gomega/types"
 	"github.com/submariner-io/admiral/pkg/command"
-	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 type Executor struct {
@@ -47,7 +48,7 @@ type pipeReader struct {
 
 type commandOutputInfo struct {
 	pathMatcher  interface{}
-	expectedArgs []string
+	expectedArgs []any
 	output       string
 	err          error
 }
@@ -80,7 +81,7 @@ func (c *commandImpl) Wait() error {
 	return nil
 }
 
-func cmdMatches(cmd *exec.Cmd, pathMatcher interface{}, args []string) bool {
+func cmdMatches(cmd *exec.Cmd, pathMatcher interface{}, args []any) bool {
 	if pathMatcher != nil {
 		matches, err := ContainElement(pathMatcher).Match([]string{cmd.Path})
 		Expect(err).To(Succeed())
@@ -90,7 +91,27 @@ func cmdMatches(cmd *exec.Cmd, pathMatcher interface{}, args []string) bool {
 		}
 	}
 
-	return sets.New(cmd.Args...).HasAll(args...)
+	matches := true
+
+	for _, arg := range args {
+		var matcher gomegaTypes.GomegaMatcher
+
+		switch a := arg.(type) {
+		case string:
+			matcher = ContainElement(a)
+		case gomegaTypes.GomegaMatcher:
+			matcher = a
+		default:
+			panic(fmt.Errorf("invalid arg type: %T", a))
+		}
+
+		ok, err := matcher.Match(cmd.Args)
+		Expect(err).ToNot(HaveOccurred())
+
+		matches = matches && ok
+	}
+
+	return matches
 }
 
 func (c *commandImpl) StdoutPipe() (io.ReadCloser, error) {
@@ -149,7 +170,7 @@ func (e *Executor) getCommands() []*exec.Cmd {
 	return c
 }
 
-func (e *Executor) findCommand(pathMatcher interface{}, args []string) *exec.Cmd {
+func (e *Executor) findCommand(pathMatcher interface{}, args []any) *exec.Cmd {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
@@ -169,23 +190,23 @@ func (e *Executor) Clear() {
 	e.commands = nil
 }
 
-func (e *Executor) AwaitCommand(pathMatcher interface{}, args ...string) {
+func (e *Executor) AwaitCommand(pathMatcher interface{}, args ...any) {
 	Eventually(func() bool {
 		return e.findCommand(pathMatcher, args) != nil
-	}, 1).Should(BeTrue(), "Command with args %v not found. Actual: %v", args, e.getCommands())
+	}, 1).Should(BeTrue(), "Command with args %q not found. Actual: %q", args, e.getCommands())
 }
 
-func (e *Executor) EnsureNoCommand(pathMatcher interface{}, args ...string) {
+func (e *Executor) EnsureNoCommand(pathMatcher interface{}, args ...any) {
 	Consistently(func() bool {
 		return e.findCommand(pathMatcher, args) == nil
-	}).Should(BeTrue(), "Found unexpected command with args %v", args)
+	}).Should(BeTrue(), "Found unexpected command with args %q", args)
 }
 
-func (e *Executor) SetupCommandStdOut(output string, pathMatcher interface{}, expectedArgs ...string) {
+func (e *Executor) SetupCommandStdOut(output string, pathMatcher interface{}, expectedArgs ...any) {
 	e.SetupCommandOutputWithError(output, nil, pathMatcher, expectedArgs...)
 }
 
-func (e *Executor) SetupCommandOutputWithError(output string, err error, pathMatcher interface{}, expectedArgs ...string) {
+func (e *Executor) SetupCommandOutputWithError(output string, err error, pathMatcher interface{}, expectedArgs ...any) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
