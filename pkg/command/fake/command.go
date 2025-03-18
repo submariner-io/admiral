@@ -31,15 +31,28 @@ import (
 	"github.com/submariner-io/admiral/pkg/command"
 )
 
+type InterceptorFn func(*exec.Cmd) InterceptorFuncs
+
 type Executor struct {
 	mutex          sync.Mutex
 	commands       []*exec.Cmd
 	commandOutputs []commandOutputInfo
+	interceptor    InterceptorFn
+}
+
+type InterceptorFuncs struct {
+	Run            func() error
+	Start          func() error
+	Wait           func() error
+	StdoutPipe     func() (io.ReadCloser, error)
+	Output         func() ([]byte, error)
+	CombinedOutput func() ([]byte, error)
 }
 
 type commandImpl struct {
-	cmd  *exec.Cmd
-	exec *Executor
+	cmd         *exec.Cmd
+	exec        *Executor
+	interceptor InterceptorFuncs
 }
 
 type pipeReader struct {
@@ -60,15 +73,36 @@ func New() *Executor {
 	return e
 }
 
+func NewWithInterceptor(interceptor InterceptorFn) *Executor {
+	e := New()
+	e.interceptor = interceptor
+
+	return e
+}
+
 func (e *Executor) newCommand(cmd *exec.Cmd) command.Interface {
-	return &commandImpl{cmd: cmd, exec: e}
+	c := &commandImpl{cmd: cmd, exec: e}
+
+	if e.interceptor != nil {
+		c.interceptor = e.interceptor(cmd)
+	}
+
+	return c
 }
 
 func (c *commandImpl) Run() error {
+	if c.interceptor.Run != nil {
+		return c.interceptor.Run()
+	}
+
 	return c.Start()
 }
 
 func (c *commandImpl) Start() error {
+	if c.interceptor.Start != nil {
+		return c.interceptor.Start()
+	}
+
 	c.exec.mutex.Lock()
 	defer c.exec.mutex.Unlock()
 
@@ -78,10 +112,14 @@ func (c *commandImpl) Start() error {
 }
 
 func (c *commandImpl) Wait() error {
+	if c.interceptor.Wait != nil {
+		return c.interceptor.Wait()
+	}
+
 	return nil
 }
 
-func cmdMatches(cmd *exec.Cmd, pathMatcher interface{}, args []any) bool {
+func CmdMatches(cmd *exec.Cmd, pathMatcher interface{}, args ...any) bool {
 	if pathMatcher != nil {
 		matches, err := ContainElement(pathMatcher).Match([]string{cmd.Path})
 		Expect(err).To(Succeed())
@@ -115,13 +153,17 @@ func cmdMatches(cmd *exec.Cmd, pathMatcher interface{}, args []any) bool {
 }
 
 func (c *commandImpl) StdoutPipe() (io.ReadCloser, error) {
+	if c.interceptor.StdoutPipe != nil {
+		return c.interceptor.StdoutPipe()
+	}
+
 	c.exec.mutex.Lock()
 	defer c.exec.mutex.Unlock()
 
 	r := &pipeReader{}
 
 	for i := range c.exec.commandOutputs {
-		if cmdMatches(c.cmd, c.exec.commandOutputs[i].pathMatcher, c.exec.commandOutputs[i].expectedArgs) {
+		if CmdMatches(c.cmd, c.exec.commandOutputs[i].pathMatcher, c.exec.commandOutputs[i].expectedArgs...) {
 			r.buffer.WriteString(c.exec.commandOutputs[i].output)
 			break
 		}
@@ -131,13 +173,17 @@ func (c *commandImpl) StdoutPipe() (io.ReadCloser, error) {
 }
 
 func (c *commandImpl) Output() ([]byte, error) {
+	if c.interceptor.Output != nil {
+		return c.interceptor.Output()
+	}
+
 	c.exec.mutex.Lock()
 	defer c.exec.mutex.Unlock()
 
 	c.exec.commands = append(c.exec.commands, c.cmd)
 
 	for i := range c.exec.commandOutputs {
-		if cmdMatches(c.cmd, c.exec.commandOutputs[i].pathMatcher, c.exec.commandOutputs[i].expectedArgs) {
+		if CmdMatches(c.cmd, c.exec.commandOutputs[i].pathMatcher, c.exec.commandOutputs[i].expectedArgs...) {
 			co := c.exec.commandOutputs[i]
 			c.exec.commandOutputs = slices.Delete(c.exec.commandOutputs, i, i+1)
 
@@ -149,6 +195,10 @@ func (c *commandImpl) Output() ([]byte, error) {
 }
 
 func (c *commandImpl) CombinedOutput() ([]byte, error) {
+	if c.interceptor.CombinedOutput != nil {
+		return c.interceptor.CombinedOutput()
+	}
+
 	return c.Output()
 }
 
@@ -175,7 +225,7 @@ func (e *Executor) findCommand(pathMatcher interface{}, args []any) *exec.Cmd {
 	defer e.mutex.Unlock()
 
 	for _, c := range e.commands {
-		if cmdMatches(c, pathMatcher, args) {
+		if CmdMatches(c, pathMatcher, args...) {
 			return c
 		}
 	}
@@ -190,10 +240,15 @@ func (e *Executor) Clear() {
 	e.commands = nil
 }
 
-func (e *Executor) AwaitCommand(pathMatcher interface{}, args ...any) {
-	Eventually(func() bool {
-		return e.findCommand(pathMatcher, args) != nil
-	}, 1).Should(BeTrue(), "Command with args %q not found. Actual: %q", args, e.getCommands())
+func (e *Executor) AwaitCommand(pathMatcher interface{}, args ...any) *exec.Cmd {
+	var cmd *exec.Cmd
+
+	Eventually(func() *exec.Cmd {
+		cmd = e.findCommand(pathMatcher, args)
+		return cmd
+	}, 1).ShouldNot(BeNil(), "Command with args %q not found. Actual: %q", args, e.getCommands())
+
+	return cmd
 }
 
 func (e *Executor) EnsureNoCommand(pathMatcher interface{}, args ...any) {
