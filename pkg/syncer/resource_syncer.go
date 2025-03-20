@@ -703,7 +703,7 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 	converted := r.mustConvert(from)
 
 	transformed, requeue := r.config.Transform(converted, r.workQueue.NumRequeues(key), op)
-	if transformed == nil {
+	if transformed == nil || reflect.ValueOf(transformed).IsNil() {
 		r.log.V(log.LIBDEBUG).Infof("Syncer %q: transform function returned nil - not syncing - requeue: %v", r.config.Name, requeue)
 		return nil, nil, requeue
 	}
