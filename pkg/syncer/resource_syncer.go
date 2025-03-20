@@ -627,13 +627,7 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 
 		r.recordNamespaceSeen(resource.GetNamespace())
 
-		if r.syncCounter != nil {
-			r.syncCounter.With(prometheus.Labels{
-				DirectionLabel:  r.config.Direction.String(),
-				OperationLabel:  op.String(),
-				SyncerNameLabel: r.config.Name,
-			}).Inc()
-		}
+		r.incOpCounter(op)
 
 		r.log.V(log.LIBDEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, resource.GetName())
 	}
@@ -672,19 +666,23 @@ func (r *resourceSyncer) handleDeleted(key string, deletedResource *unstructured
 		}
 
 		if deleted {
-			if r.syncCounter != nil {
-				r.syncCounter.With(prometheus.Labels{
-					DirectionLabel:  r.config.Direction.String(),
-					OperationLabel:  Delete.String(),
-					SyncerNameLabel: r.config.Name,
-				}).Inc()
-			}
+			r.incOpCounter(Delete)
 
 			r.log.V(log.LIBDEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, resource.GetName())
 		}
 	}
 
 	return requeue, nil
+}
+
+func (r *resourceSyncer) incOpCounter(op Operation) {
+	if r.syncCounter != nil {
+		r.syncCounter.With(prometheus.Labels{
+			DirectionLabel:  r.config.Direction.String(),
+			OperationLabel:  op.String(),
+			SyncerNameLabel: r.config.Name,
+		}).Inc()
+	}
 }
 
 func (r *resourceSyncer) mustConvert(from interface{}) runtime.Object {
