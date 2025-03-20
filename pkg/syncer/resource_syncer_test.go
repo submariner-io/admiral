@@ -336,6 +336,7 @@ func testRemoteToLocalWithoutLocalClusterID() {
 	})
 }
 
+//nolint:maintidx // Ignore Maintainability Index threshold exceeded.
 func testTransformFunction() {
 	d := newTestDriver(test.LocalNamespace, "", syncer.RemoteToLocal)
 	ctx := context.TODO()
@@ -343,7 +344,7 @@ func testTransformFunction() {
 	var transformed *corev1.Pod
 	var expOperation chan syncer.Operation
 	var invocationCount int32
-	var requeue bool
+	var requeueOnOp *syncer.Operation
 
 	BeforeEach(func() {
 		test.SetClusterIDLabel(d.resource, "remote")
@@ -351,7 +352,7 @@ func testTransformFunction() {
 
 		expOperation = make(chan syncer.Operation, 20)
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
-		requeue = false
+		requeueOnOp = nil
 
 		d.config.Transform = func(from runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 			defer GinkgoRecover()
@@ -363,7 +364,18 @@ func testTransformFunction() {
 				"Expected:\n%#v\n to be equivalent to: \n%#v", pod.Spec, d.resource.Spec)
 			expOperation <- op
 
-			return transformed, requeue
+			requeue := false
+
+			if requeueOnOp != nil {
+				requeue = *requeueOnOp == op
+			}
+
+			retObj := transformed
+			if requeue {
+				retObj = nil
+			}
+
+			return retObj, requeue
 		}
 	})
 
@@ -390,7 +402,7 @@ func testTransformFunction() {
 
 		Context("and the transform function specifies to re-queue", func() {
 			BeforeEach(func() {
-				requeue = true
+				requeueOnOp = ptr.To(syncer.Create)
 			})
 
 			It("should eventually retry", func() {
@@ -423,7 +435,6 @@ func testTransformFunction() {
 		})
 
 		JustBeforeEach(func() {
-			verifyDistribute()
 			Eventually(expOperation).Should(Receive(Equal(syncer.Create)))
 			atomic.StoreInt32(&invocationCount, 0)
 		})
@@ -438,8 +449,8 @@ func testTransformFunction() {
 		})
 
 		Context("and the transform function specifies to re-queue", func() {
-			JustBeforeEach(func() {
-				requeue = true
+			BeforeEach(func() {
+				requeueOnOp = ptr.To(syncer.Delete)
 			})
 
 			It("should eventually retry", func() {
@@ -447,6 +458,18 @@ func testTransformFunction() {
 				Eventually(func() int {
 					return int(atomic.LoadInt32(&invocationCount))
 				}, 3).Should(BeNumerically(">", 1))
+			})
+		})
+
+		Context("after the create operation is re-queued", func() {
+			BeforeEach(func() {
+				requeueOnOp = ptr.To(syncer.Create)
+			})
+
+			It("should not retry the create operation", func() {
+				Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
+				Eventually(expOperation).Should(Receive(Equal(syncer.Delete)))
+				Consistently(expOperation).ShouldNot(Receive(Equal(syncer.Create)))
 			})
 		})
 	})
