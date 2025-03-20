@@ -638,6 +638,11 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 		r.log.V(log.LIBDEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, resource.GetName())
 	}
 
+	if requeue && op == Create && !exists {
+		// Don't requeue a create operation if the resource no longer exists.
+		requeue = false
+	}
+
 	return requeue, nil
 }
 
