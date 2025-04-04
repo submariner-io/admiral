@@ -207,6 +207,10 @@ type resourceSyncer struct {
 	stopCh            <-chan struct{}
 	log               log.Logger
 	missingNamespaces map[string]set.Set[string]
+	//nolint:containedctx // We're using this as a top-level context to cancel all operations on shut down so
+	//                       have to store it here.
+	ctx       context.Context
+	ctxCancel context.CancelFunc
 }
 
 func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
@@ -227,12 +231,12 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				options.LabelSelector = config.SourceLabelSelector
 				options.FieldSelector = config.SourceFieldSelector
-				return resourceClient.List(context.TODO(), options)
+				return resourceClient.List(syncer.ctx, options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				options.LabelSelector = config.SourceLabelSelector
 				options.FieldSelector = config.SourceFieldSelector
-				return resourceClient.Watch(context.TODO(), options)
+				return resourceClient.Watch(syncer.ctx, options)
 			},
 		},
 		ObjectType:   rawType,
@@ -286,6 +290,8 @@ func newResourceSyncer(config *ResourceSyncerConfig) (*resourceSyncer, error) {
 		log:               log.Logger{Logger: logf.Log.WithName("ResourceSyncer")},
 		missingNamespaces: map[string]set.Set[string]{},
 	}
+
+	syncer.ctx, syncer.ctxCancel = context.WithCancel(context.Background())
 
 	if syncer.config.Scheme == nil {
 		syncer.config.Scheme = scheme.Scheme
@@ -383,7 +389,10 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 			r.stopped <- struct{}{}
 			r.log.V(log.LIBDEBUG).Infof("Syncer %q stopped", r.config.Name)
 		}()
-		defer r.workQueue.ShutDownWithDrain()
+		defer func() {
+			r.workQueue.ShutDownWithDrain()
+			r.ctxCancel()
+		}()
 
 		if r.informer != nil {
 			r.informer.Run(stopCh)
@@ -613,7 +622,7 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 
 		r.log.V(log.LIBDEBUG).Infof("Syncer %q syncing resource %q", r.config.Name, resource.GetName())
 
-		err = r.config.Federator.Distribute(context.Background(), resource)
+		err = r.config.Federator.Distribute(r.ctx, resource)
 		if err != nil || r.onSuccessfulSync(resource, transformed, op) {
 			namespace := resourceUtil.ExtractMissingNamespaceFromErr(err)
 			if namespace != "" {
@@ -653,7 +662,7 @@ func (r *resourceSyncer) handleDeleted(key string, deletedResource *unstructured
 
 		deleted := true
 
-		err := r.config.Federator.Delete(context.Background(), resource)
+		err := r.config.Federator.Delete(r.ctx, resource)
 		if apierrors.IsNotFound(err) {
 			r.log.V(log.LIBDEBUG).Infof("Syncer %q: resource %q not found", r.config.Name, resource.GetName())
 

@@ -59,7 +59,10 @@ type queueType struct {
 	name          string
 }
 
-var logger = log.Logger{Logger: logf.Log.WithName("WorkQueue")}
+var (
+	logger       = log.Logger{Logger: logf.Log.WithName("WorkQueue")}
+	DrainTimeout = 5 * time.Second
+)
 
 func New(name string) Interface {
 	return NewWithConfig(name, DefaultConfig())
@@ -171,7 +174,7 @@ func (q *queueType) ShutDownWithDrain() {
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(DrainTimeout):
 		logger.Warningf("%s: timed out draining the queue on shut down", q.name)
 	}
 }
