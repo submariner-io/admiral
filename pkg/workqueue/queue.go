@@ -20,13 +20,13 @@ limitations under the License.
 package workqueue
 
 import (
+	"context"
 	"fmt"
-	"time"
 
+	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/log"
 	"golang.org/x/time/rate"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -43,9 +43,9 @@ type Interface interface {
 	Enqueue(obj interface{})
 	EnqueueWithOpts(obj interface{}, opts EnqueueOpts)
 	NumRequeues(key string) int
-	Run(stopCh <-chan struct{}, process ProcessFunc)
+	Run(process ProcessFunc)
 	ShutDown()
-	ShutDownWithDrain()
+	ShutDownWithDrain(ctx context.Context) error
 }
 
 type EnqueueOpts struct {
@@ -115,11 +115,11 @@ func (q *queueType) EnqueueWithOpts(obj interface{}, opts EnqueueOpts) {
 	}
 }
 
-func (q *queueType) Run(stopCh <-chan struct{}, process ProcessFunc) {
-	go wait.Until(func() {
+func (q *queueType) Run(process ProcessFunc) {
+	go func() {
 		for q.processNextWorkItem(process) {
 		}
-	}, time.Second, stopCh)
+	}()
 }
 
 func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
@@ -152,18 +152,29 @@ func (q *queueType) NumRequeues(key string) int {
 	return q.TypedRateLimitingInterface.NumRequeues(key)
 }
 
-func (q *queueType) ShutDownWithDrain() {
+func (q *queueType) ShutDownWithDrain(ctx context.Context) error {
 	done := make(chan struct{})
 
-	// ShutDownWithDrain waits for all in-flight work to complete and thus could block indefinitely so put a deadline on it.
 	go func() {
-		q.TypedRateLimitingInterface.ShutDownWithDrain()
+		for {
+			q.TypedRateLimitingInterface.ShutDownWithDrain()
+
+			// The queue should be empty after ShutDownWithDrain returns, but sometimes it isn't so ensure it is.
+			if q.Len() == 0 {
+				break
+			}
+		}
+
 		done <- struct{}{}
 	}()
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
-		logger.Warningf("%s: timed out draining the queue on shut down", q.name)
+	case <-ctx.Done():
+		// Calling ShutDown causes ShutDownWithDrain to return.
+		q.TypedRateLimitingInterface.ShutDown()
+		return errors.Wrapf(ctx.Err(), "%s: did not complete draining the queue on shut down", q.name)
 	}
+
+	return nil
 }
