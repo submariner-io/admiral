@@ -79,6 +79,7 @@ var _ = Describe("Resource Syncer", func() {
 	Describe("With missing namespace", testWithMissingNamespace)
 	Describe("Event Ordering", testEventOrdering)
 	Describe("Priority Ordering", testPriorityOrdering)
+	Describe("AwaitStopped", testAwaitStopped)
 })
 
 func testReconcileLocalToRemote() {
@@ -1537,8 +1538,14 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 	})
 
 	JustAfterEach(func() {
-		close(d.stopCh)
-		d.syncer.AwaitStopped()
+		if d.stopCh != nil {
+			close(d.stopCh)
+		}
+
+		ctx, cancel := context.WithTimeout(context.TODO(), time.Second*3)
+		defer cancel()
+		Expect(d.syncer.AwaitStopped(ctx)).To(Succeed())
+
 		utilruntime.ErrorHandlers = d.savedErrorHandlers
 	})
 
