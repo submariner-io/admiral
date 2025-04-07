@@ -23,8 +23,22 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/log/kzerolog"
 )
+
+type EmptyRegisterer struct{}
+
+func (e EmptyRegisterer) Register(_ prometheus.Collector) error {
+	return nil
+}
+
+func (e EmptyRegisterer) MustRegister(_ ...prometheus.Collector) {
+}
+
+func (e EmptyRegisterer) Unregister(_ prometheus.Collector) bool {
+	return true
+}
 
 func init() {
 	flags := flag.NewFlagSet("kzerolog", flag.ExitOnError)
@@ -32,6 +46,8 @@ func init() {
 	_ = flags.Parse([]string{"-v=1"})
 
 	kzerolog.AddFlags(nil)
+
+	prometheus.DefaultRegisterer = &EmptyRegisterer{}
 }
 
 var _ = Describe("", func() {
