@@ -192,6 +192,8 @@ type ResourceSyncerConfig struct {
 
 	// WorkQueueConfig if specified, configures the underlying work queue
 	WorkQueueConfig *workqueue.Config
+
+	DrainWorkQueueTimeout time.Duration
 }
 
 type resourceSyncer struct {
@@ -300,6 +302,10 @@ func newResourceSyncer(config *ResourceSyncerConfig) (*resourceSyncer, error) {
 		syncer.config.WaitForCacheSync = &wait
 	}
 
+	if syncer.config.DrainWorkQueueTimeout == 0 {
+		syncer.config.DrainWorkQueueTimeout = time.Second * 5
+	}
+
 	if syncer.config.SyncCounter != nil {
 		syncer.syncCounter = syncer.config.SyncCounter
 	} else if syncer.config.SyncCounterOpts != nil {
@@ -380,10 +386,9 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 				r.unregHandler()
 			}
 
-			r.stopped <- struct{}{}
 			r.log.V(log.LIBDEBUG).Infof("Syncer %q stopped", r.config.Name)
 		}()
-		defer r.workQueue.ShutDownWithDrain()
+		defer r.shutDownWorkQueue()
 
 		if r.informer != nil {
 			r.informer.Run(stopCh)
@@ -398,15 +403,44 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 		_ = cache.WaitForCacheSync(stopCh, r.cachesSynced...)
 	}
 
-	r.workQueue.Run(stopCh, r.processNextWorkItem)
+	r.workQueue.Run(r.processNextWorkItem)
 
 	r.log.V(log.LIBDEBUG).Infof("Syncer %q started", r.config.Name)
 
 	return nil
 }
 
-func (r *resourceSyncer) AwaitStopped() {
-	<-r.stopped
+func (r *resourceSyncer) shutDownWorkQueue() {
+	shutDownWithDrain := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), r.config.DrainWorkQueueTimeout)
+		defer cancel()
+
+		return r.workQueue.ShutDownWithDrain(ctx)
+	}
+
+	for {
+		err := shutDownWithDrain()
+		if err == nil {
+			break
+		}
+
+		r.log.Warningf(err.Error())
+	}
+
+	close(r.stopped)
+}
+
+func (r *resourceSyncer) AwaitStopped(ctx context.Context) error {
+	select {
+	case _, closed := <-r.stopped:
+		if closed {
+			return nil
+		}
+	case <-ctx.Done():
+		return errors.Wrapf(ctx.Err(), "syncer %q await stopped did not complete", r.config.Name)
+	}
+
+	return nil
 }
 
 func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bool, error) {
