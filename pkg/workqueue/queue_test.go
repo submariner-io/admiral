@@ -68,12 +68,10 @@ var _ = Describe("Work Queue", func() {
 		}
 
 		itemCh = make(chan string, itemCount)
-		stopCh := make(chan struct{})
-		wq.Run(stopCh, processFn)
+		wq.Run(processFn)
 
 		DeferCleanup(func() {
-			wq.ShutDownWithDrain()
-			close(stopCh)
+			wq.ShutDown()
 		})
 	})
 
@@ -287,6 +285,87 @@ var _ = Describe("Work Queue", func() {
 
 			It("should not affect functionality", func() {
 			})
+		})
+	})
+
+	Context("ShutDownWithDrain", func() {
+		var (
+			processContinue chan any
+			processStart    chan any
+			processed       sync.Map
+			once            sync.Once
+		)
+
+		BeforeEach(func() {
+			processContinue = make(chan any)
+			processStart = make(chan any)
+			processed = sync.Map{}
+			once = sync.Once{}
+
+			processFn = func(key, _, _ string) (bool, error) {
+				once.Do(func() {
+					processStart <- true
+					<-processContinue
+				})
+
+				processed.Store(key, true)
+
+				// Delay a bit to ensure the majority of the items are processed after ShutDownWithDrain has started.
+				time.Sleep(time.Millisecond * 20)
+
+				return false, nil
+			}
+		})
+
+		It("should process all previously queued items", func() {
+			count := 10
+
+			var keys []string
+			for i := 1; i <= count; i++ {
+				keys = append(keys, strconv.Itoa(i))
+			}
+
+			for _, key := range keys {
+				wq.EnqueueWithOpts(cache.ExplicitKey(key),
+					workqueue.EnqueueOpts{Priority: workqueue.NormalPriority, RateLimited: false})
+			}
+
+			Eventually(processStart).Should(Receive())
+
+			ctx, cancel := context.WithTimeout(context.TODO(), time.Second*5)
+			defer cancel()
+
+			processContinue <- true
+			Expect(wq.ShutDownWithDrain(ctx)).To(Succeed())
+
+			for _, key := range keys {
+				_, ok := processed.Load(key)
+				Expect(ok).To(BeTrue(), "%q was not processed", key)
+			}
+		})
+
+		It("should time out if the current item processing is delayed", func() {
+			itemKey := "item"
+
+			wq.EnqueueWithOpts(cache.ExplicitKey(itemKey),
+				workqueue.EnqueueOpts{Priority: workqueue.NormalPriority, RateLimited: false})
+
+			Eventually(processStart).Should(Receive())
+
+			ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond*100)
+			defer cancel()
+
+			Expect(wq.ShutDownWithDrain(ctx)).NotTo(Succeed())
+
+			processContinue <- true
+
+			ctx, cancel = context.WithTimeout(context.TODO(), time.Second*3)
+			defer cancel()
+
+			Expect(wq.ShutDownWithDrain(ctx)).To(Succeed())
+
+			_, ok := processed.Load(itemKey)
+			Expect(ok).To(BeTrue(), "Item was not processed")
 		})
 	})
 })
