@@ -82,7 +82,7 @@ func createLogger() zerolog.Logger {
 	return log.Output(consoleWriter).With().Caller().Logger()
 }
 
-func formatCaller(i interface{}) string {
+func formatCaller(i any) string {
 	return truncate(i, maxLenCaller)
 }
 
@@ -101,7 +101,7 @@ func (ctx *zeroLogContext) clone() zeroLogContext {
 	}
 }
 
-func truncate(i interface{}, maxLen int) string {
+func truncate(i any, maxLen int) string {
 	s := fmt.Sprintf("%s", i)
 	if len(s) > maxLen {
 		s = ".." + s[len(s)-maxLen+2:]
@@ -147,7 +147,7 @@ func (ctx *zeroLogContext) calculateSkipFrames() int {
 	return int(skipFrames)
 }
 
-func (ctx *zeroLogContext) logEvent(evt *zerolog.Event, msg string, kvList ...interface{}) {
+func (ctx *zeroLogContext) logEvent(evt *zerolog.Event, msg string, kvList ...any) {
 	msg = truncate(ctx.prefix, maxLenLogger) + " " + msg
 
 	evt.Fields(kvList).CallerSkipFrame(ctx.calculateSkipFrames()).Msg(msg)
@@ -157,7 +157,7 @@ func (ctx *zeroLogContext) Init(logr.RuntimeInfo) {
 	// Intentionally empty to satisfy the LogSink interface.
 }
 
-func (ctx *zeroLogContext) Info(level int, msg string, kvList ...interface{}) {
+func (ctx *zeroLogContext) Info(level int, msg string, kvList ...any) {
 	if level > ctx.maxVerbosity {
 		return
 	}
@@ -188,7 +188,7 @@ func (ctx *zeroLogContext) Info(level int, msg string, kvList ...interface{}) {
 	ctx.logEvent(evt, msg, kvList...)
 }
 
-func (ctx *zeroLogContext) Error(err error, msg string, kvList ...interface{}) {
+func (ctx *zeroLogContext) Error(err error, msg string, kvList ...any) {
 	var evt *zerolog.Event
 
 	for i := 0; i < len(kvList); i += 2 {
@@ -223,7 +223,7 @@ func (ctx *zeroLogContext) WithName(name string) logr.LogSink {
 	return &subCtx
 }
 
-func (ctx *zeroLogContext) WithValues(kvList ...interface{}) logr.LogSink {
+func (ctx *zeroLogContext) WithValues(kvList ...any) logr.LogSink {
 	subCtx := ctx.clone()
 	logger := ctx.zLogger.With().Fields(kvList).Logger()
 	subCtx.zLogger = &logger

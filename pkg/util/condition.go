@@ -31,7 +31,7 @@ func ConditionsFromUnstructured(from *unstructured.Unstructured, fields ...strin
 
 	for i := range rawConditions {
 		c := &metav1.Condition{}
-		_ = runtime.DefaultUnstructuredConverter.FromUnstructured(rawConditions[i].(map[string]interface{}), c)
+		_ = runtime.DefaultUnstructuredConverter.FromUnstructured(rawConditions[i].(map[string]any), c)
 		conditions[i] = *c
 	}
 
@@ -39,7 +39,7 @@ func ConditionsFromUnstructured(from *unstructured.Unstructured, fields ...strin
 }
 
 func ConditionsToUnstructured(conditions []metav1.Condition, to *unstructured.Unstructured, fields ...string) {
-	newConditions := make([]interface{}, len(conditions))
+	newConditions := make([]any, len(conditions))
 	for i := range conditions {
 		newConditions[i], _ = runtime.DefaultUnstructuredConverter.ToUnstructured(&conditions[i])
 	}

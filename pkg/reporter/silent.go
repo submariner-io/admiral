@@ -24,7 +24,7 @@ func Silent() Interface {
 	return &Adapter{Basic: &silent{}}
 }
 
-func (s silent) Start(_ string, _ ...interface{}) {
+func (s silent) Start(_ string, _ ...any) {
 	// Intentionally empty to satisfy the reporter Interface.
 }
 
@@ -32,14 +32,14 @@ func (s silent) End() {
 	// Intentionally empty to satisfy the reporter Interface.
 }
 
-func (s silent) Success(_ string, _ ...interface{}) {
+func (s silent) Success(_ string, _ ...any) {
 	// Intentionally empty to satisfy the reporter Interface.
 }
 
-func (s silent) Failure(_ string, _ ...interface{}) {
+func (s silent) Failure(_ string, _ ...any) {
 	// Intentionally empty to satisfy the reporter Interface.
 }
 
-func (s silent) Warning(_ string, _ ...interface{}) {
+func (s silent) Warning(_ string, _ ...any) {
 	// Intentionally empty to satisfy the reporter Interface.
 }

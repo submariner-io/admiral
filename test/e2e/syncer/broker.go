@@ -313,14 +313,14 @@ func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.G
 	Expect(err).To(Succeed())
 
 	msg := fmt.Sprintf("get %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
-	raw, ok := framework.AwaitUntil(msg, func() (interface{}, error) {
+	raw, ok := framework.AwaitUntil(msg, func() (any, error) {
 		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(
 			context.TODO(), meta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil, nil //nolint:nilnil // Returning nil value is intentional
 		}
 		return obj, err
-	}, func(result interface{}) (bool, string, error) {
+	}, func(result any) (bool, string, error) {
 		if result == nil {
 			return false, fmt.Sprintf("%s %q not found", gvr.Resource, meta.GetName()), nil
 		}
@@ -343,7 +343,7 @@ func (t *testDriver) awaitNoResource(cluster framework.ClusterIndex, gvr *schema
 	Expect(err).To(Succeed())
 
 	msg := fmt.Sprintf("get %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
-	framework.AwaitUntil(msg, func() (interface{}, error) {
+	framework.AwaitUntil(msg, func() (any, error) {
 		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(
 			context.TODO(), meta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -351,7 +351,7 @@ func (t *testDriver) awaitNoResource(cluster framework.ClusterIndex, gvr *schema
 		}
 
 		return obj, err
-	}, func(result interface{}) (bool, string, error) {
+	}, func(result any) (bool, string, error) {
 		if result != nil {
 			return false, fmt.Sprintf("%#v still exists", result), nil
 		}

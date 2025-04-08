@@ -28,7 +28,7 @@ type Adapter struct {
 	Basic
 }
 
-func (a *Adapter) Error(err error, message string, args ...interface{}) error {
+func (a *Adapter) Error(err error, message string, args ...any) error {
 	if err == nil {
 		return nil
 	}

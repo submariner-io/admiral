@@ -55,9 +55,9 @@ func DeleteAllOf(dynClient dynamic.Interface, gvr *schema.GroupVersionResource, 
 	Expect(client.DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{})).To(Succeed())
 
 	framework.AwaitUntil(fmt.Sprintf("list %s in namespace %q from %q", gvr.Resource, namespace, clusterName),
-		func() (interface{}, error) {
+		func() (any, error) {
 			return client.List(context.TODO(), metav1.ListOptions{})
-		}, func(result interface{}) (bool, string, error) {
+		}, func(result any) (bool, string, error) {
 			list, ok := result.(*unstructured.UnstructuredList)
 			Expect(ok).To(BeTrue())
 
@@ -89,7 +89,7 @@ func DeleteToaster(client dynamic.Interface, toDelete runtime.Object, clusterNam
 	By(fmt.Sprintf("Deleting Toaster %q in namespace %q from %q", meta.GetName(), meta.GetNamespace(), clusterName))
 
 	msg := fmt.Sprintf("delete Toaster %q in namespace %q from %q", meta.GetName(), meta.GetNamespace(), clusterName)
-	framework.AwaitUntil(msg, func() (interface{}, error) {
+	framework.AwaitUntil(msg, func() (any, error) {
 		return nil, client.Resource(*ToasterGVR()).Namespace(meta.GetNamespace()).Delete(context.TODO(), meta.GetName(), metav1.DeleteOptions{})
 	}, framework.NoopCheckResult)
 }

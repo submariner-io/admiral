@@ -1530,7 +1530,7 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 		}
 
 		utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers,
-			func(_ context.Context, err error, _ string, _ ...interface{}) {
+			func(_ context.Context, err error, _ string, _ ...any) {
 				d.handledError <- err
 			})
 

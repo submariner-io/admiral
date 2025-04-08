@@ -37,40 +37,40 @@ type Logger struct {
 	logr.Logger
 }
 
-func (l Logger) Info(msg string, keysAndValues ...interface{}) {
+func (l Logger) Info(msg string, keysAndValues ...any) {
 	l.Logger.Info(msg, keysAndValues...)
 }
 
-func (l Logger) Infof(format string, args ...interface{}) {
+func (l Logger) Infof(format string, args ...any) {
 	l.Logger.Info(fmt.Sprintf(format, args...))
 }
 
-func (l Logger) Error(err error, msg string, keysAndValues ...interface{}) {
+func (l Logger) Error(err error, msg string, keysAndValues ...any) {
 	l.Logger.Error(err, msg, keysAndValues...)
 }
 
-func (l Logger) Errorf(err error, format string, args ...interface{}) {
+func (l Logger) Errorf(err error, format string, args ...any) {
 	l.Logger.Error(err, fmt.Sprintf(format, args...))
 }
 
-func (l Logger) Warning(msg string, keysAndValues ...interface{}) {
+func (l Logger) Warning(msg string, keysAndValues ...any) {
 	l.Logger.Info(msg, append(keysAndValues, WarningKey, "true")...)
 }
 
-func (l Logger) Warningf(format string, args ...interface{}) {
+func (l Logger) Warningf(format string, args ...any) {
 	l.Logger.Info(fmt.Sprintf(format, args...), WarningKey, "true")
 }
 
-func (l Logger) Fatal(msg string, keysAndValues ...interface{}) {
+func (l Logger) Fatal(msg string, keysAndValues ...any) {
 	l.Logger.Error(nil, msg, append(keysAndValues, FatalKey, "true")...)
 	Exit(255)
 }
 
-func (l Logger) Fatalf(format string, args ...interface{}) {
+func (l Logger) Fatalf(format string, args ...any) {
 	l.Fatal(fmt.Sprintf(format, args...))
 }
 
-func (l Logger) FatalOnError(err error, msg string, keysAndValues ...interface{}) {
+func (l Logger) FatalOnError(err error, msg string, keysAndValues ...any) {
 	if err == nil {
 		return
 	}
@@ -79,7 +79,7 @@ func (l Logger) FatalOnError(err error, msg string, keysAndValues ...interface{}
 	Exit(255)
 }
 
-func (l Logger) FatalfOnError(err error, format string, args ...interface{}) {
+func (l Logger) FatalfOnError(err error, format string, args ...any) {
 	l.FatalOnError(err, fmt.Sprintf(format, args...))
 }
 

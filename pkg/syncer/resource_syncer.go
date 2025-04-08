@@ -324,12 +324,12 @@ func newResourceSyncer(config *ResourceSyncerConfig) (*resourceSyncer, error) {
 
 	if config.NamespaceInformer != nil {
 		reg, err := config.NamespaceInformer.AddEventHandler(cache.ResourceEventHandlerDetailedFuncs{
-			AddFunc: func(obj interface{}, _ bool) {
+			AddFunc: func(obj any, _ bool) {
 				key := cache.NewObjectName(namespaceKey, resourceUtil.MustToMeta(obj).GetName()).String()
 				syncer.operationQueues.add(key, createOperation(&unstructured.Unstructured{}))
 				syncer.workQueue.Enqueue(cache.ExplicitKey(key))
 			},
-			DeleteFunc: func(obj interface{}) {
+			DeleteFunc: func(obj any) {
 				objName, err := cache.DeletionHandlingObjectToName(obj)
 				utilruntime.Must(err)
 
@@ -723,7 +723,7 @@ func (r *resourceSyncer) incOpCounter(op Operation) {
 	}
 }
 
-func (r *resourceSyncer) mustConvert(from interface{}) runtime.Object {
+func (r *resourceSyncer) mustConvert(from any) runtime.Object {
 	converted := r.config.ResourceType.DeepCopyObject()
 	err := r.config.Scheme.Convert(from, converted, nil)
 	utilruntime.Must(err)
@@ -773,7 +773,7 @@ func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op
 	return r.config.OnSuccessfulSync(converted, op)
 }
 
-func (r *resourceSyncer) onCreate(obj interface{}, isInInitialList bool) {
+func (r *resourceSyncer) onCreate(obj any, isInInitialList bool) {
 	resource := r.assertUnstructured(obj)
 
 	if !r.shouldProcess(resource, Create) {
@@ -794,7 +794,7 @@ func (r *resourceSyncer) onCreate(obj interface{}, isInInitialList bool) {
 	}
 }
 
-func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
+func (r *resourceSyncer) onUpdate(oldObj, newObj any) {
 	if !r.shouldProcess(newObj.(*unstructured.Unstructured), Update) {
 		return
 	}
@@ -817,7 +817,7 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj interface{}) {
 	}
 }
 
-func (r *resourceSyncer) onDelete(obj interface{}) {
+func (r *resourceSyncer) onDelete(obj any) {
 	switch t := obj.(type) {
 	case cache.DeletedFinalStateUnknown:
 		obj = t.Obj
@@ -869,7 +869,7 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 	return true
 }
 
-func (r *resourceSyncer) assertUnstructured(obj interface{}) *unstructured.Unstructured {
+func (r *resourceSyncer) assertUnstructured(obj any) *unstructured.Unstructured {
 	u, ok := obj.(*unstructured.Unstructured)
 	if !ok {
 		panic(fmt.Sprintf("Syncer %q received type %T instead of *Unstructured", r.config.Name, obj))

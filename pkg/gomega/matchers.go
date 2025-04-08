@@ -38,7 +38,7 @@ func ContainErrorSubstring(expected error) gomegaTypes.GomegaMatcher {
 	return &containErrorSubstring{expected}
 }
 
-func (m *containErrorSubstring) Match(x interface{}) (bool, error) {
+func (m *containErrorSubstring) Match(x any) (bool, error) {
 	actual, ok := x.(error)
 	if !ok {
 		return false, fmt.Errorf("containErrorSubstring matcher requires an error.  Got:\n%s", format.Object(x, 1))
@@ -47,10 +47,10 @@ func (m *containErrorSubstring) Match(x interface{}) (bool, error) {
 	return strings.Contains(actual.Error(), m.expected.Error()), nil
 }
 
-func (m *containErrorSubstring) FailureMessage(actual interface{}) string {
+func (m *containErrorSubstring) FailureMessage(actual any) string {
 	return format.Message(actual, "to contain substring", m.expected.Error())
 }
 
-func (m *containErrorSubstring) NegatedFailureMessage(actual interface{}) string {
+func (m *containErrorSubstring) NegatedFailureMessage(actual any) string {
 	return format.Message(actual, "not to contain substring", m.expected.Error())
 }

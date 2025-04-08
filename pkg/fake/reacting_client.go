@@ -38,7 +38,7 @@ const (
 	Delete
 )
 
-type ReactionFunc func(obj interface{}) (bool, error)
+type ReactionFunc func(obj any) (bool, error)
 
 type ReactingClient struct {
 	client.Client
@@ -62,7 +62,7 @@ func NewReactingClient(c client.Client) *ReactingClient {
 	}
 }
 
-func (c *ReactingClient) AddReactor(verb VerbType, objType interface{}, r ReactionFunc) *ReactingClient {
+func (c *ReactingClient) AddReactor(verb VerbType, objType any, r ReactionFunc) *ReactingClient {
 	c.reactors[verb][reflect.TypeOf(objType)] = r
 	return c
 }
@@ -97,7 +97,7 @@ func (c *ReactingClient) Delete(ctx context.Context, obj client.Object, opts ...
 	})
 }
 
-func (c *ReactingClient) react(verb VerbType, obj interface{}, fallBack func() error) error {
+func (c *ReactingClient) react(verb VerbType, obj any, fallBack func() error) error {
 	reactor := c.reactors[verb][reflect.TypeOf(obj)]
 	if reactor != nil {
 		handled, err := reactor(obj)
@@ -109,12 +109,12 @@ func (c *ReactingClient) react(verb VerbType, obj interface{}, fallBack func() e
 	return fallBack()
 }
 
-func FailingReaction(err error) func(obj interface{}) (bool, error) {
+func FailingReaction(err error) func(obj any) (bool, error) {
 	if err == nil {
 		err = errors.New("mock error")
 	}
 
-	return func(_ interface{}) (bool, error) {
+	return func(_ any) (bool, error) {
 		return true, err
 	}
 }
