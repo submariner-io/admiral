@@ -41,8 +41,8 @@ const (
 type ProcessFunc func(key, name, namespace string) (bool, error)
 
 type Interface interface {
-	Enqueue(obj interface{})
-	EnqueueWithOpts(obj interface{}, opts EnqueueOpts)
+	Enqueue(obj any)
+	EnqueueWithOpts(obj any, opts EnqueueOpts)
 	NumRequeues(key string) int
 	Run(process ProcessFunc)
 	ShutDown()
@@ -104,11 +104,11 @@ func NewWithConfig(name string, config Config) Interface {
 	}
 }
 
-func (q *queueType) Enqueue(obj interface{}) {
+func (q *queueType) Enqueue(obj any) {
 	q.EnqueueWithOpts(obj, EnqueueOpts{Priority: NormalPriority, RateLimited: true})
 }
 
-func (q *queueType) EnqueueWithOpts(obj interface{}, opts EnqueueOpts) {
+func (q *queueType) EnqueueWithOpts(obj any, opts EnqueueOpts) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	utilruntime.Must(err)
 

@@ -26,7 +26,7 @@ func Klog() Interface {
 	return &Adapter{Basic: &klogType{}}
 }
 
-func (k klogType) Start(message string, args ...interface{}) {
+func (k klogType) Start(message string, args ...any) {
 	klog.Infof(message, args...)
 }
 
@@ -34,14 +34,14 @@ func (k klogType) End() {
 	// Intentionally empty to satisfy the reporter Interface.
 }
 
-func (k klogType) Success(message string, args ...interface{}) {
+func (k klogType) Success(message string, args ...any) {
 	klog.Infof(message, args...)
 }
 
-func (k klogType) Failure(message string, args ...interface{}) {
+func (k klogType) Failure(message string, args ...any) {
 	klog.Errorf(message, args...)
 }
 
-func (k klogType) Warning(message string, args ...interface{}) {
+func (k klogType) Warning(message string, args ...any) {
 	klog.Warningf(message, args...)
 }

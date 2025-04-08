@@ -117,7 +117,7 @@ var _ = Describe("Work Queue", func() {
 			handledError = make(chan error, 50)
 
 			utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers,
-				func(_ context.Context, err error, _ string, _ ...interface{}) {
+				func(_ context.Context, err error, _ string, _ ...any) {
 					handledError <- err
 				})
 

@@ -257,13 +257,13 @@ var _ = Describe("ToJSON", func() {
 
 func newUnstructuredPod() *unstructured.Unstructured {
 	return &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"metadata": map[string]interface{}{
+		Object: map[string]any{
+			"metadata": map[string]any{
 				"name":      "test-pod",
 				"namespace": "ns",
-				"labels":    map[string]interface{}{"app": "test"},
+				"labels":    map[string]any{"app": "test"},
 			},
-			"spec": map[string]interface{}{
+			"spec": map[string]any{
 				"nodeName": "node",
 			},
 		},

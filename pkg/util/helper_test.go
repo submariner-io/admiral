@@ -35,44 +35,44 @@ import (
 
 var _ = Describe("DeeplyEmpty", func() {
 	Specify("with an empty map should return true", func() {
-		Expect(util.DeeplyEmpty(map[string]interface{}{})).To(BeTrue())
+		Expect(util.DeeplyEmpty(map[string]any{})).To(BeTrue())
 	})
 
 	Specify("with nested empty maps should return true", func() {
-		Expect(util.DeeplyEmpty(map[string]interface{}{
-			"nested": map[string]interface{}{},
+		Expect(util.DeeplyEmpty(map[string]any{
+			"nested": map[string]any{},
 		})).To(BeTrue())
 
-		Expect(util.DeeplyEmpty(map[string]interface{}{
-			"nested1": map[string]interface{}{},
-			"nested2": map[string]interface{}{},
+		Expect(util.DeeplyEmpty(map[string]any{
+			"nested1": map[string]any{},
+			"nested2": map[string]any{},
 		})).To(BeTrue())
 
-		Expect(util.DeeplyEmpty(map[string]interface{}{
-			"nested1": map[string]interface{}{
-				"nested2": map[string]interface{}{},
+		Expect(util.DeeplyEmpty(map[string]any{
+			"nested1": map[string]any{
+				"nested2": map[string]any{},
 			},
 		})).To(BeTrue())
 	})
 
 	Specify("with a non-empty map should return false", func() {
-		Expect(util.DeeplyEmpty(map[string]interface{}{"foo": "bar"})).To(BeFalse())
+		Expect(util.DeeplyEmpty(map[string]any{"foo": "bar"})).To(BeFalse())
 	})
 
 	Specify("with nested non-empty maps should return false", func() {
-		Expect(util.DeeplyEmpty(map[string]interface{}{
-			"nested": map[string]interface{}{},
+		Expect(util.DeeplyEmpty(map[string]any{
+			"nested": map[string]any{},
 			"foo":    "bar",
 		})).To(BeFalse())
 
-		Expect(util.DeeplyEmpty(map[string]interface{}{
+		Expect(util.DeeplyEmpty(map[string]any{
 			"foo":    "bar",
-			"nested": map[string]interface{}{},
+			"nested": map[string]any{},
 		})).To(BeFalse())
 
-		Expect(util.DeeplyEmpty(map[string]interface{}{
-			"nested1": map[string]interface{}{
-				"nested2": map[string]interface{}{},
+		Expect(util.DeeplyEmpty(map[string]any{
+			"nested1": map[string]any{
+				"nested2": map[string]any{},
 				"foo":     "bar",
 			},
 		})).To(BeFalse())
@@ -80,7 +80,7 @@ var _ = Describe("DeeplyEmpty", func() {
 
 	Specify("an empty Service status should return true", func() {
 		Expect(util.DeeplyEmpty(util.GetNestedField(resource.MustToUnstructuredUsingDefaultConverter(&corev1.Service{}),
-			util.StatusField).(map[string]interface{}))).To(BeTrue())
+			util.StatusField).(map[string]any))).To(BeTrue())
 	})
 })
 
@@ -119,7 +119,7 @@ var _ = Describe("ToUnstructuredResource", func() {
 		Expect(obj.GetName()).To(Equal("test-pod"))
 
 		spec := &corev1.PodSpec{}
-		_ = runtime.DefaultUnstructuredConverter.FromUnstructured(util.GetSpec(obj).(map[string]interface{}), spec)
+		_ = runtime.DefaultUnstructuredConverter.FromUnstructured(util.GetSpec(obj).(map[string]any), spec)
 		Expect(spec.NodeName).To(Equal("node"))
 	})
 
@@ -149,11 +149,11 @@ var _ = Describe("AddCertificateErrorHandler", func() {
 		errorLogged = make(chan error, 20)
 		fatalLogged = make(chan error, 20)
 
-		util.ErrorHook = func(err error, _ string, _ ...interface{}) {
+		util.ErrorHook = func(err error, _ string, _ ...any) {
 			errorLogged <- err
 		}
 
-		util.FatalHook = func(err error, _ string, _ ...interface{}) {
+		util.FatalHook = func(err error, _ string, _ ...any) {
 			fatalLogged <- err
 		}
 
@@ -204,7 +204,7 @@ var _ = Describe("GetMetadata", func() {
 		objMeta := util.GetMetadata(resource.MustToUnstructured(pod))
 		Expect(objMeta).ToNot(BeNil())
 		Expect(objMeta).To(HaveKeyWithValue("name", pod.Name))
-		Expect(objMeta).To(HaveKeyWithValue("labels", map[string]interface{}{"foo": "bar"}))
+		Expect(objMeta).To(HaveKeyWithValue("labels", map[string]any{"foo": "bar"}))
 
 		Expect(util.GetMetadata(&unstructured.Unstructured{})).To(BeEmpty())
 	})

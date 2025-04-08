@@ -83,27 +83,27 @@ func FindGroupVersionResource(from *unstructured.Unstructured, restMapper meta.R
 	return &mapping.Resource, nil
 }
 
-func GetMetadata(from *unstructured.Unstructured) map[string]interface{} {
+func GetMetadata(from *unstructured.Unstructured) map[string]any {
 	value, _, _ := unstructured.NestedFieldNoCopy(from.Object, MetadataField)
 	if value != nil {
-		return value.(map[string]interface{})
+		return value.(map[string]any)
 	}
 
-	return map[string]interface{}{}
+	return map[string]any{}
 }
 
-func GetSpec(obj *unstructured.Unstructured) interface{} {
+func GetSpec(obj *unstructured.Unstructured) any {
 	return GetNestedField(obj, "spec")
 }
 
-func GetNestedField(obj *unstructured.Unstructured, fields ...string) interface{} {
+func GetNestedField(obj *unstructured.Unstructured, fields ...string) any {
 	nested, _, err := unstructured.NestedFieldNoCopy(obj.Object, fields...)
 	utilruntime.Must(errors.Wrapf(err, "error retrieving %v field for %#v", fields, obj))
 
 	return nested
 }
 
-func SetNestedField(to map[string]interface{}, value interface{}, fields ...string) {
+func SetNestedField(to map[string]any, value any, fields ...string) {
 	if value != nil {
 		err := unstructured.SetNestedField(to, value, fields...)
 		utilruntime.Must(errors.Wrapf(err, "error setting value (%v) for nested field %v in object %v", value, fields, to))
@@ -117,7 +117,7 @@ func CopyImmutableMetadata(from, to *unstructured.Unstructured) *unstructured.Un
 		return to
 	}
 
-	fromMetadata := value.(map[string]interface{})
+	fromMetadata := value.(map[string]any)
 	err := unstructured.SetNestedStringMap(fromMetadata, to.GetLabels(), LabelsField)
 	utilruntime.Must(err)
 
@@ -129,10 +129,10 @@ func CopyImmutableMetadata(from, to *unstructured.Unstructured) *unstructured.Un
 	return to
 }
 
-func DeeplyEmpty(m map[string]interface{}) bool {
+func DeeplyEmpty(m map[string]any) bool {
 	for _, v := range m {
 		switch t := v.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			if !DeeplyEmpty(t) {
 				return false
 			}
@@ -156,7 +156,7 @@ func AddCertificateErrorHandler(fatal bool) {
 	}
 
 	utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers,
-		func(_ context.Context, err error, _ string, _ ...interface{}) {
+		func(_ context.Context, err error, _ string, _ ...any) {
 			var unknownAuthorityError x509.UnknownAuthorityError
 			if errors.As(err, &unknownAuthorityError) && lastBadCertificate.Swap(unknownAuthorityError.Cert) != unknownAuthorityError.Cert {
 				logCertificateError(err, "Certificate error: %s", resource.ToJSON(err))

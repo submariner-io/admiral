@@ -71,7 +71,7 @@ func (r *DeleteCollectionReactor) react(action testing.Action) (bool, runtime.Ob
 		Expect(found).To(BeTrue())
 
 		for _, m := range items {
-			item := unstructured.Unstructured{Object: m.(map[string]interface{})}
+			item := unstructured.Unstructured{Object: m.(map[string]any)}
 
 			fieldSet := fields.Set{"metadata.namespace": item.GetNamespace(), "metadata.name": item.GetName()}
 			if dc.ListRestrictions.Labels.Matches(labels.Set(item.GetLabels())) &&

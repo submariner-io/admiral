@@ -30,17 +30,17 @@ func NewTracker(forReporter Interface) *Tracker {
 	}
 }
 
-func (t *Tracker) Warning(message string, args ...interface{}) {
+func (t *Tracker) Warning(message string, args ...any) {
 	t.hasWarnings = true
 	t.Interface.Warning(message, args...)
 }
 
-func (t *Tracker) Failure(message string, args ...interface{}) {
+func (t *Tracker) Failure(message string, args ...any) {
 	t.hasFailures = true
 	t.Interface.Failure(message, args...)
 }
 
-func (t *Tracker) Start(message string, args ...interface{}) {
+func (t *Tracker) Start(message string, args ...any) {
 	t.hasWarnings = false
 	t.hasFailures = false
 	t.Interface.Start(message, args...)

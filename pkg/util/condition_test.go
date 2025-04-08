@@ -41,13 +41,13 @@ var _ = Describe("Unstructured Conditions conversion", func() {
 			},
 		}
 
-		obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
+		obj := &unstructured.Unstructured{Object: map[string]any{}}
 		util.ConditionsToUnstructured(conditions, obj, "status", "conditions")
 
 		newConditions := util.ConditionsFromUnstructured(obj, "status", "conditions")
 		Expect(newConditions).To(Equal(conditions))
 
-		obj = &unstructured.Unstructured{Object: map[string]interface{}{}}
+		obj = &unstructured.Unstructured{Object: map[string]any{}}
 		newConditions = util.ConditionsFromUnstructured(obj, "status", "conditions")
 		Expect(newConditions).To(BeEmpty())
 	})

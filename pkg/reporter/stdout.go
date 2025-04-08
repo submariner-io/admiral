@@ -26,7 +26,7 @@ func Stdout() Interface {
 	return &Adapter{Basic: &stdout{}}
 }
 
-func (s stdout) Start(message string, args ...interface{}) {
+func (s stdout) Start(message string, args ...any) {
 	s.Success(message, args...)
 }
 
@@ -34,14 +34,14 @@ func (s stdout) End() {
 	// Intentionally empty to satisfy the reporter Interface.
 }
 
-func (s stdout) Success(message string, args ...interface{}) {
+func (s stdout) Success(message string, args ...any) {
 	fmt.Printf(message+"\n", args...)
 }
 
-func (s stdout) Failure(message string, args ...interface{}) {
+func (s stdout) Failure(message string, args ...any) {
 	fmt.Printf("ERROR: "+message+"\n", args...)
 }
 
-func (s stdout) Warning(message string, args ...interface{}) {
+func (s stdout) Warning(message string, args ...any) {
 	fmt.Printf("WARNING: "+message+"\n", args...)
 }

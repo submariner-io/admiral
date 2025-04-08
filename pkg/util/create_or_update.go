@@ -165,7 +165,7 @@ func maybeCreateOrUpdate[T runtime.Object](ctx context.Context, options CreateOr
 		newObj := resource.MustToUnstructuredUsingDefaultConverter(toUpdate)
 
 		origStatus := GetNestedField(origObj, StatusField)
-		newStatus, ok := GetNestedField(newObj, StatusField).(map[string]interface{})
+		newStatus, ok := GetNestedField(newObj, StatusField).(map[string]any)
 
 		if !ok || DeeplyEmpty(newStatus) {
 			unstructured.RemoveNestedField(origObj.Object, StatusField)
@@ -264,7 +264,7 @@ func createResource[T runtime.Object](ctx context.Context, client resource.Inter
 		return *new(T), errors.Wrapf(err, "error creating %#v", obj)
 	}
 
-	status, ok := GetNestedField(resource.MustToUnstructuredUsingDefaultConverter(obj), StatusField).(map[string]interface{})
+	status, ok := GetNestedField(resource.MustToUnstructuredUsingDefaultConverter(obj), StatusField).(map[string]any)
 	if ok && !DeeplyEmpty(status) {
 		// If the resource CRD has the status subresource the Create won't set the status field so we need to
 		// do a separate UpdateStatus call.

@@ -97,7 +97,7 @@ func MustFromUnstructuredUsingScheme[T runtime.Object](u *unstructured.Unstructu
 	return actual
 }
 
-func MustToMeta(obj interface{}) metav1.Object {
+func MustToMeta(obj any) metav1.Object {
 	objMeta, err := meta.Accessor(obj)
 	utilruntime.Must(err)
 
@@ -128,7 +128,7 @@ func ToJSON(o any) string {
 
 // TrimManagedFields is a cache.TransformFunc that removes the ManagedFields metadata field if present. Note that if 'obj' does not
 // implement metav1.Object then it is ignored and no error is returned.
-func TrimManagedFields(obj interface{}) (interface{}, error) {
+func TrimManagedFields(obj any) (any, error) {
 	objMeta, err := meta.Accessor(obj)
 	if err == nil && len(objMeta.GetManagedFields()) > 0 {
 		objMeta.SetManagedFields(nil)

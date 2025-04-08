@@ -21,19 +21,19 @@ package reporter
 type Basic interface {
 	// Start reports that an operation or sequence of operations is starting;
 	// any operation in progress is ended.
-	Start(message string, args ...interface{})
+	Start(message string, args ...any)
 
 	// Success reports that the last operation succeeded with the specified message.
-	Success(message string, args ...interface{})
+	Success(message string, args ...any)
 
 	// Failure reports that the last operation failed with the specified message.
-	Failure(message string, args ...interface{})
+	Failure(message string, args ...any)
 
 	// End the current operation that was previously initiated via Start.
 	End()
 
 	// Warning reports a warning message for the last operation.
-	Warning(message string, args ...interface{})
+	Warning(message string, args ...any)
 }
 
 // Interface for reporting on the progress of an operation.
@@ -41,5 +41,5 @@ type Interface interface {
 	Basic
 	// Error wraps err with the supplied message, reports it as a failure, ends the current operation, and returns the error.
 	// If err is nil, does nothing and returns nil.
-	Error(err error, message string, args ...interface{}) error
+	Error(err error, message string, args ...any) error
 }

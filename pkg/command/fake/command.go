@@ -60,7 +60,7 @@ type pipeReader struct {
 }
 
 type commandOutputInfo struct {
-	pathMatcher  interface{}
+	pathMatcher  any
 	expectedArgs []any
 	output       string
 	err          error
@@ -119,7 +119,7 @@ func (c *commandImpl) Wait() error {
 	return nil
 }
 
-func CmdMatches(cmd *exec.Cmd, pathMatcher interface{}, args ...any) bool {
+func CmdMatches(cmd *exec.Cmd, pathMatcher any, args ...any) bool {
 	if pathMatcher != nil {
 		matches, err := ContainElement(pathMatcher).Match([]string{cmd.Path})
 		Expect(err).To(Succeed())
@@ -220,7 +220,7 @@ func (e *Executor) getCommands() []*exec.Cmd {
 	return c
 }
 
-func (e *Executor) findCommand(pathMatcher interface{}, args []any) *exec.Cmd {
+func (e *Executor) findCommand(pathMatcher any, args []any) *exec.Cmd {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
@@ -240,7 +240,7 @@ func (e *Executor) Clear() {
 	e.commands = nil
 }
 
-func (e *Executor) AwaitCommand(pathMatcher interface{}, args ...any) *exec.Cmd {
+func (e *Executor) AwaitCommand(pathMatcher any, args ...any) *exec.Cmd {
 	var cmd *exec.Cmd
 
 	Eventually(func() *exec.Cmd {
@@ -251,17 +251,17 @@ func (e *Executor) AwaitCommand(pathMatcher interface{}, args ...any) *exec.Cmd 
 	return cmd
 }
 
-func (e *Executor) EnsureNoCommand(pathMatcher interface{}, args ...any) {
+func (e *Executor) EnsureNoCommand(pathMatcher any, args ...any) {
 	Consistently(func() bool {
 		return e.findCommand(pathMatcher, args) == nil
 	}).Should(BeTrue(), "Found unexpected command with args %q", args)
 }
 
-func (e *Executor) SetupCommandStdOut(output string, pathMatcher interface{}, expectedArgs ...any) {
+func (e *Executor) SetupCommandStdOut(output string, pathMatcher any, expectedArgs ...any) {
 	e.SetupCommandOutputWithError(output, nil, pathMatcher, expectedArgs...)
 }
 
-func (e *Executor) SetupCommandOutputWithError(output string, err error, pathMatcher interface{}, expectedArgs ...any) {
+func (e *Executor) SetupCommandOutputWithError(output string, err error, pathMatcher any, expectedArgs ...any) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
