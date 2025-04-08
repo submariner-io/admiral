@@ -21,6 +21,7 @@ package test
 
 import (
 	"context"
+	"maps"
 
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/federate"
@@ -89,9 +90,7 @@ func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev
 	Expect(actual.Status).To(Equal(expected.Status))
 
 	duplicate := make(map[string]string)
-	for k, v := range expected.GetLabels() {
-		duplicate[k] = v
-	}
+	maps.Copy(duplicate, expected.GetLabels())
 
 	if clusterID != "" {
 		duplicate[federate.ClusterIDLabelKey] = clusterID

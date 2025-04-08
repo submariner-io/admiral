@@ -20,6 +20,7 @@ package finalizer
 
 import (
 	"context"
+	"slices"
 
 	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/resource"
@@ -75,11 +76,5 @@ func Remove[T runtime.Object](ctx context.Context, client resource.Interface[T],
 }
 
 func IsPresent(objMeta metav1.Object, finalizerName string) bool {
-	for _, f := range objMeta.GetFinalizers() {
-		if f == finalizerName {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(objMeta.GetFinalizers(), finalizerName)
 }

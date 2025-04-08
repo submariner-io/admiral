@@ -46,7 +46,7 @@ var _ = Describe("PriorityQueue", func() {
 	It("should retrieve in priority order", func() {
 		count := 10
 
-		for i := 0; i < count; i++ { //nolint:intrange // Ignore
+		for i := range count {
 			push(strconv.Itoa(i), i)
 		}
 

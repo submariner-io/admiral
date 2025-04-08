@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -166,7 +167,7 @@ func (ctx *zeroLogContext) Info(level int, msg string, kvList ...interface{}) {
 	for i := 0; i < len(kvList); i += 2 {
 		s, ok := kvList[i].(string)
 		if ok && s == loga.WarningKey {
-			kvList = append(kvList[:i], kvList[i+2:]...)
+			kvList = slices.Delete(kvList, i, i+2)
 			evt = ctx.zLogger.Warn()
 
 			break
@@ -193,7 +194,7 @@ func (ctx *zeroLogContext) Error(err error, msg string, kvList ...interface{}) {
 	for i := 0; i < len(kvList); i += 2 {
 		s, ok := kvList[i].(string)
 		if ok && s == loga.FatalKey {
-			kvList = append(kvList[:i], kvList[i+2:]...)
+			kvList = slices.Delete(kvList, i, i+2)
 			evt = ctx.zLogger.WithLevel(zerolog.FatalLevel)
 
 			break
