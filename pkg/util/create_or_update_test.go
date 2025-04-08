@@ -20,6 +20,7 @@ package util_test
 import (
 	"context"
 	"errors"
+	"maps"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -155,9 +156,7 @@ var _ = Describe("CreateOrUpdate function", func() {
 
 		if t.pod.GenerateName != "" {
 			options.IdentifyingLabels = map[string]string{}
-			for k, v := range t.pod.Labels {
-				options.IdentifyingLabels[k] = v
-			}
+			maps.Copy(options.IdentifyingLabels, t.pod.Labels)
 
 			t.pod.Labels["new-label"] = "new-value"
 		}
