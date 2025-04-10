@@ -431,6 +431,9 @@ func (r *resourceSyncer) shutDownWorkQueue() {
 }
 
 func (r *resourceSyncer) AwaitStopped(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, r.config.DrainWorkQueueTimeout)
+	defer cancel()
+
 	select {
 	case _, closed := <-r.stopped:
 		if closed {
