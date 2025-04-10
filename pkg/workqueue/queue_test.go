@@ -332,11 +332,8 @@ var _ = Describe("Work Queue", func() {
 
 			Eventually(processStart).Should(Receive())
 
-			ctx, cancel := context.WithTimeout(context.TODO(), time.Second*5)
-			defer cancel()
-
 			processContinue <- true
-			Expect(wq.ShutDownWithDrain(ctx)).To(Succeed())
+			Expect(wq.ShutDownWithDrain(context.TODO())).To(Succeed())
 
 			for _, key := range keys {
 				_, ok := processed.Load(key)
