@@ -63,7 +63,7 @@ func testAwaitStopped() {
 		defer cancel()
 
 		Expect(t.syncer.AwaitStopped(ctx)).To(Succeed())
-		Expect(t.syncer.AwaitStopped(ctx)).To(Succeed())
+		Expect(t.syncer.AwaitStopped(context.TODO())).To(Succeed())
 	})
 }
 
