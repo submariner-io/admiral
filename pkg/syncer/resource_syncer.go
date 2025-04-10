@@ -431,14 +431,15 @@ func (r *resourceSyncer) shutDownWorkQueue() {
 }
 
 func (r *resourceSyncer) AwaitStopped(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, r.config.DrainWorkQueueTimeout)
-	defer cancel()
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+
+		ctx, cancel = context.WithTimeout(ctx, r.config.DrainWorkQueueTimeout)
+		defer cancel()
+	}
 
 	select {
-	case _, closed := <-r.stopped:
-		if closed {
-			return nil
-		}
+	case <-r.stopped:
 	case <-ctx.Done():
 		return errors.Wrapf(ctx.Err(), "syncer %q await stopped did not complete", r.config.Name)
 	}

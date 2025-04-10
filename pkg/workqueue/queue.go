@@ -169,8 +169,12 @@ func (q *queueType) ShutDownWithDrain(ctx context.Context) error {
 		done <- struct{}{}
 	}()
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
-	defer cancel()
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+
+		ctx, cancel = context.WithTimeout(ctx, time.Second*5)
+		defer cancel()
+	}
 
 	select {
 	case <-done:
