@@ -22,6 +22,7 @@ package workqueue
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/log"
@@ -167,6 +168,9 @@ func (q *queueType) ShutDownWithDrain(ctx context.Context) error {
 
 		done <- struct{}{}
 	}()
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
 
 	select {
 	case <-done:
