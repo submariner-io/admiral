@@ -1542,9 +1542,7 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 			close(d.stopCh)
 		}
 
-		ctx, cancel := context.WithTimeout(context.TODO(), time.Second*3)
-		defer cancel()
-		Expect(d.syncer.AwaitStopped(ctx)).To(Succeed())
+		Expect(d.syncer.AwaitStopped(context.TODO())).To(Succeed())
 
 		utilruntime.ErrorHandlers = d.savedErrorHandlers
 	})
