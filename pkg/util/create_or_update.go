@@ -21,6 +21,7 @@ package util
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/pkg/errors"
@@ -160,7 +161,7 @@ func maybeCreateOrUpdate[T runtime.Object](ctx context.Context, options CreateOr
 		objMeta := resource.MustToMeta(toUpdate)
 		objMeta.SetResourceVersion(origObj.GetResourceVersion())
 		objMeta.SetName(origObj.GetName())
-		objMeta.SetGenerateName("")
+		objMeta.SetGenerateName(resource.MustToMeta(options.Obj).GetGenerateName())
 
 		newObj := resource.MustToUnstructuredUsingDefaultConverter(toUpdate)
 
@@ -227,6 +228,14 @@ func getResource[T runtime.Object](ctx context.Context, options *CreateOrUpdateO
 	if err != nil {
 		return *new(T), err
 	}
+
+	// Filter out resources whose GenerateName field doesn't match.
+	list = slices.DeleteFunc(list, func(t T) bool {
+		gn := resource.MustToMeta(t).GetGenerateName()
+		// Don't filter out the resource if it's GenerateName is empty. This shouldn't be the case but
+		// the prior release erroneously set GenerateName to empty.
+		return gn != "" && gn != objMeta.GetGenerateName()
+	})
 
 	count := len(list)
 	if count == 0 {
