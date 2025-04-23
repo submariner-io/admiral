@@ -423,7 +423,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 		Context("and GenerateName is set", func() {
 			BeforeEach(func() {
 				t.pod.Name = ""
-				t.pod.GenerateName = "name-prefix-g"
+				t.pod.GenerateName = "name-prefix"
 				t.pod.Labels = map[string]string{"label1": "value1", "label2": "value2"}
 			})
 
@@ -432,6 +432,13 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 			})
 
 			It("should update the resource", func() {
+				test.CreateResource(t.client, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						GenerateName: "other-prefix",
+						Labels:       t.pod.Labels,
+					},
+				})
+
 				Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
 				t.verifyPod()
 			})
@@ -440,8 +447,8 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 				It("should return an error", func() {
 					test.CreateResource(t.client, &corev1.Pod{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:   "another",
-							Labels: t.pod.Labels,
+							GenerateName: t.pod.GenerateName,
+							Labels:       t.pod.Labels,
 						},
 					})
 					Expect(doUpdate(util.OperationResultNone)).ToNot(Succeed())
