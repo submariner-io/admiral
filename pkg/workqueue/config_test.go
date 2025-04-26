@@ -90,6 +90,7 @@ var _ = Describe("ConfigFromConfigMap", func() {
 				workqueue.ToConfigMapDataKey(keyPrefix, workqueue.OverallRateLimiterMaxDelayKey):   "2h",
 				workqueue.ToConfigMapDataKey(keyPrefix, workqueue.BucketRateLimiterItemsPerSecKey): "99",
 				workqueue.ToConfigMapDataKey(keyPrefix, workqueue.BucketRateLimiterMaxBurstKey):    "999",
+				workqueue.ToConfigMapDataKey(keyPrefix, workqueue.MaxVerbosityKey):                 "2",
 				workqueue.ToConfigMapDataKey("other", workqueue.BucketRateLimiterMaxBurstKey):      "888",
 			}
 
@@ -99,6 +100,7 @@ var _ = Describe("ConfigFromConfigMap", func() {
 				OverallRateLimiterMaxDelay:   time.Hour * 2,
 				BucketRateLimiterItemsPerSec: 99,
 				BucketRateLimiterMaxBurst:    999,
+				MaxVerbosity:                 2,
 			}))
 		})
 
@@ -128,6 +130,7 @@ var _ = Describe("ConfigFromConfigMap", func() {
 					OverallRateLimiterMaxDelay:   time.Hour * 2,
 					BucketRateLimiterItemsPerSec: 99,
 					BucketRateLimiterMaxBurst:    workqueue.DefaultConfig().BucketRateLimiterMaxBurst,
+					MaxVerbosity:                 0,
 				}))
 			})
 		})
