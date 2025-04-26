@@ -34,6 +34,7 @@ const (
 	OverallRateLimiterMaxDelayKey   = "overall-rate-limiter-max-delay"
 	BucketRateLimiterItemsPerSecKey = "bucket-rate-limiter-items-per-sec"
 	BucketRateLimiterMaxBurstKey    = "bucket-rate-limiter-max-burst"
+	MaxVerbosityKey                 = "max-verbosity"
 )
 
 type Config struct {
@@ -42,6 +43,7 @@ type Config struct {
 	OverallRateLimiterMaxDelay   time.Duration
 	BucketRateLimiterItemsPerSec int
 	BucketRateLimiterMaxBurst    int
+	MaxVerbosity                 int
 }
 
 func DefaultConfig() Config {
@@ -93,6 +95,9 @@ func ConfigFromConfigMap(configMap *corev1.ConfigMap, keyPrefix string, defaultC
 			utilruntime.Must(err)
 		case BucketRateLimiterMaxBurstKey:
 			config.BucketRateLimiterMaxBurst, err = strconv.Atoi(v)
+			utilruntime.Must(err)
+		case MaxVerbosityKey:
+			config.MaxVerbosity, err = strconv.Atoi(v)
 			utilruntime.Must(err)
 		}
 	}
