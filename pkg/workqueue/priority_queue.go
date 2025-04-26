@@ -21,6 +21,9 @@ package workqueue
 import (
 	"container/heap"
 	"sync"
+
+	"github.com/submariner-io/admiral/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type itemType struct {
@@ -39,12 +42,16 @@ type PriorityQueue struct {
 	items      []itemType
 	indices    map[any]int
 	priorities sync.Map
+	name       string
+	logger     log.Logger
 }
 
-func NewPriorityQueue() *PriorityQueue {
+func NewPriorityQueue(name string) *PriorityQueue {
 	return &PriorityQueue{
+		name:    name,
 		items:   []itemType{},
 		indices: map[any]int{},
+		logger:  log.Logger{Logger: logf.Log.WithName("PriorityQueue")},
 	}
 }
 
@@ -63,8 +70,13 @@ func (p *PriorityQueue) Swap(i, j int) {
 }
 
 func (p *PriorityQueue) Push(item any) {
-	p.indices[item] = len(p.items)
-	p.items = append(p.items, itemType{value: item, priority: p.getPriority(item)})
+	index := len(p.items)
+	priority := p.getPriority(item)
+
+	p.logger.V(log.DEBUG).Infof("%s: Push \"%v\" at index %d, priority %d", p.name, item, index, priority)
+
+	p.indices[item] = index
+	p.items = append(p.items, itemType{value: item, priority: priority})
 }
 
 func (p *PriorityQueue) Pop() any {
@@ -76,6 +88,8 @@ func (p *PriorityQueue) Pop() any {
 
 	delete(p.indices, item.value)
 	p.priorities.Delete(item.value)
+
+	p.logger.V(log.DEBUG).Infof("%s: Pop \"%v\", size %d", p.name, item.value, len(p.items))
 
 	return item.value
 }
