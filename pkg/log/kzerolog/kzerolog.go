@@ -229,3 +229,7 @@ func (ctx *zeroLogContext) WithValues(kvList ...interface{}) logr.LogSink {
 
 	return &subCtx
 }
+
+func (ctx *zeroLogContext) SetMaxVerbosity(v int) {
+	ctx.maxVerbosity = v
+}

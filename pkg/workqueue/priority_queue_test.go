@@ -31,7 +31,7 @@ var _ = Describe("PriorityQueue", func() {
 	var pq *workqueue.PriorityQueue
 
 	BeforeEach(func() {
-		pq = workqueue.NewPriorityQueue()
+		pq = workqueue.NewPriorityQueue("test")
 	})
 
 	JustBeforeEach(func() {

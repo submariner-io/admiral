@@ -58,18 +58,18 @@ type queueType struct {
 	workqueue.TypedRateLimitingInterface[string]
 	priorityQueue *PriorityQueue
 	name          string
+	logger        log.Logger
 }
-
-var logger = log.Logger{Logger: logf.Log.WithName("WorkQueue")}
 
 func New(name string) Interface {
 	return NewWithConfig(name, DefaultConfig())
 }
 
 func NewWithConfig(name string, config Config) Interface {
-	priorityQueue := NewPriorityQueue()
+	priorityQueue := NewPriorityQueue(name)
 
-	return &queueType{
+	q := &queueType{
+		logger:        log.Logger{Logger: logf.Log.WithName("WorkQueue")},
 		priorityQueue: priorityQueue,
 		TypedRateLimitingInterface: workqueue.NewTypedRateLimitingQueueWithConfig(
 			// caps the maximum wait
@@ -87,13 +87,20 @@ func NewWithConfig(name string, config Config) Interface {
 				DelayingQueue: workqueue.NewTypedDelayingQueueWithConfig(workqueue.TypedDelayingQueueConfig[string]{
 					Name: name,
 					Queue: workqueue.NewTypedWithConfig(workqueue.TypedQueueConfig[string]{
-						Name:  name,
-						Queue: &priorityWorkQueue[string]{priorityQueue: priorityQueue},
+						Name: name,
+						Queue: &priorityWorkQueue[string]{
+							priorityQueue: priorityQueue,
+						},
 					}),
 				}),
 			}),
 		name: name,
 	}
+
+	q.logger.SetMaxVerbosity(config.MaxVerbosity)
+	q.priorityQueue.logger.SetMaxVerbosity(config.MaxVerbosity)
+
+	return q
 }
 
 func (q *queueType) Enqueue(obj interface{}) {
@@ -104,7 +111,7 @@ func (q *queueType) EnqueueWithOpts(obj interface{}, opts EnqueueOpts) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	utilruntime.Must(err)
 
-	logger.V(log.LIBTRACE).Infof("%s: enqueueing key %q for %T object with priority %d",
+	q.logger.V(log.DEBUG).Infof("%s: enqueueing key %q for %T object with priority %d",
 		q.name, key, obj, opts.Priority)
 
 	q.priorityQueue.SetPriority(key, opts.Priority)
@@ -141,7 +148,8 @@ func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
 
 	if requeue {
 		q.AddRateLimited(key)
-		logger.V(log.LIBDEBUG).Infof("%s: enqueued %q for retry - # of times re-queued: %d", q.name, key, q.NumRequeues(key))
+		q.logger.V(log.DEBUG).Infof("%s: enqueued %q for retry - # of times re-queued: %d, queue size: %d",
+			q.name, key, q.NumRequeues(key), q.Len())
 	} else {
 		q.Forget(key)
 	}
