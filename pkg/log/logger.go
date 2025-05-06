@@ -89,11 +89,7 @@ func (l Logger) V(level int) Logger {
 }
 
 func (l Logger) SetMaxVerbosity(v int) {
-	type configurableLogSink interface {
-		SetMaxVerbosity(v int)
-	}
-
-	c, ok := l.Logger.GetSink().(configurableLogSink)
+	c, ok := l.Logger.GetSink().(interface{ SetMaxVerbosity(v int) })
 	if ok {
 		c.SetMaxVerbosity(v)
 	}
