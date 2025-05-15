@@ -731,7 +731,6 @@ func (r *resourceSyncer) mustConvert(from any) runtime.Object {
 	return converted
 }
 
-//nolint:interfacer //false positive for "`from` can be `k8s.io/apimachinery/pkg/runtime.Object`" as it returns 'from' as Unstructured
 func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 	op Operation,
 ) (*unstructured.Unstructured, runtime.Object, bool) {
