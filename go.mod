@@ -1,6 +1,8 @@
 module github.com/submariner-io/admiral
 
-go 1.23.0
+go 1.24.0
+
+toolchain go1.24.4
 
 retract v0.10.0 // Tag was moved
 
@@ -13,7 +15,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.22.0
 	github.com/rs/zerolog v1.34.0
-	github.com/submariner-io/shipyard v0.21.0-m3
+	github.com/submariner-io/shipyard v0.21.0-rc0
 	golang.org/x/time v0.11.0
 	k8s.io/api v0.32.6
 	k8s.io/apimachinery v0.32.6
