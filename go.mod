@@ -6,7 +6,7 @@ retract v0.10.0 // Tag was moved
 
 require (
 	github.com/emirpasic/gods v1.18.1
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
@@ -14,7 +14,7 @@ require (
 	github.com/prometheus/client_golang v1.22.0
 	github.com/rs/zerolog v1.34.0
 	github.com/submariner-io/shipyard v0.21.0-m3.0.20250710134254-66f43f32f7f5
-	golang.org/x/time v0.11.0
+	golang.org/x/time v0.12.0
 	k8s.io/api v0.33.2
 	k8s.io/apimachinery v0.33.2
 	k8s.io/client-go v0.33.2
