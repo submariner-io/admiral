@@ -50,16 +50,27 @@ type FederatorExt interface {
 	LogEvents(withName string)
 }
 
-type noopFederator struct{}
+type FederatorFuncs struct {
+	DistributeFunc func(ctx context.Context, resource runtime.Object) error
+	DeleteFunc     func(ctx context.Context, resource runtime.Object) error
+}
+
+func (f *FederatorFuncs) Distribute(ctx context.Context, resource runtime.Object) error {
+	if f.DistributeFunc == nil {
+		return nil
+	}
+
+	return f.DistributeFunc(ctx, resource)
+}
+
+func (f *FederatorFuncs) Delete(ctx context.Context, resource runtime.Object) error {
+	if f.DeleteFunc == nil {
+		return nil
+	}
+
+	return f.DeleteFunc(ctx, resource)
+}
 
 func NewNoopFederator() Federator {
-	return &noopFederator{}
-}
-
-func (n noopFederator) Distribute(_ context.Context, _ runtime.Object) error {
-	return nil
-}
-
-func (n noopFederator) Delete(_ context.Context, _ runtime.Object) error {
-	return nil
+	return &FederatorFuncs{}
 }

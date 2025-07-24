@@ -51,6 +51,8 @@ var (
 	_ = Describe("Update Federator", testUpdateFederator)
 	_ = Describe("Update Status Federator", testUpdateStatusFederator)
 	_ = Describe("Federator Delete", testDelete)
+	_ = Describe("FederatorFuncs", testFederatorFuncs)
+	_ = Describe("Noop Federator", testNoopFederator)
 )
 
 func testCreateOrUpdateFederator() {
@@ -564,6 +566,50 @@ func testDelete() {
 				Expect(apierrors.IsNotFound(f.Delete(ctx, t.resource))).To(BeTrue())
 			})
 		})
+	})
+}
+
+func testFederatorFuncs() {
+	var t *testDriver
+
+	BeforeEach(func() {
+		t = newTestDriver()
+	})
+
+	It("should invoke the proxied functions", func() {
+		f := federate.NewCreateOrUpdateFederator(federate.CreateOrUpdateOptions{
+			Client:          t.dynClient,
+			RestMapper:      t.restMapper,
+			TargetNamespace: t.federatorNamespace,
+		})
+
+		funcs := federate.FederatorFuncs{
+			DistributeFunc: f.Distribute,
+			DeleteFunc:     f.Delete,
+		}
+
+		Expect(funcs.Distribute(ctx, t.resource)).To(Succeed())
+		test.GetResource(t.resourceClient, t.resource)
+
+		Expect(funcs.Delete(ctx, t.resource)).To(Succeed())
+
+		_, err := test.GetResourceAndError(t.resourceClient, t.resource)
+		Expect(apierrors.IsNotFound(err)).To(BeTrue())
+	})
+}
+
+func testNoopFederator() {
+	var t *testDriver
+
+	BeforeEach(func() {
+		t = newTestDriver()
+	})
+
+	It("should not fail", func() {
+		f := federate.NewNoopFederator()
+
+		Expect(f.Distribute(ctx, t.resource)).To(Succeed())
+		Expect(f.Delete(ctx, t.resource)).To(Succeed())
 	})
 }
 
