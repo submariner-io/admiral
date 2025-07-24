@@ -30,17 +30,24 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+type CreateOrUpdateOptions struct {
+	Client             dynamic.Interface
+	RestMapper         meta.RESTMapper
+	TargetNamespace    string
+	LocalClusterID     string
+	KeepMetadataFields []string
+}
+
 type createOrUpdateFederator struct {
 	*baseFederator
 	localClusterID string
 }
 
-func NewCreateOrUpdateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace,
-	localClusterID string, keepMetadataField ...string,
-) FederatorExt {
+//nolint:gocritic // Ignore hugeParam
+func NewCreateOrUpdateFederator(options CreateOrUpdateOptions) FederatorExt {
 	return &createOrUpdateFederator{
-		baseFederator:  newBaseFederator(dynClient, restMapper, targetNamespace, keepMetadataField...),
-		localClusterID: localClusterID,
+		baseFederator:  newBaseFederator(options.Client, options.RestMapper, options.TargetNamespace, options.KeepMetadataFields),
+		localClusterID: options.LocalClusterID,
 	}
 }
 

@@ -195,11 +195,20 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 		localClient:     config.LocalClient,
 	}
 
-	f := federate.NewCreateOrUpdateFederator(config.BrokerClient, config.RestMapper, config.BrokerNamespace, config.LocalClusterID)
+	f := federate.NewCreateOrUpdateFederator(federate.CreateOrUpdateOptions{
+		Client:          config.BrokerClient,
+		RestMapper:      config.RestMapper,
+		TargetNamespace: config.BrokerNamespace,
+		LocalClusterID:  config.LocalClusterID,
+	})
 	f.LogEvents("local -> broker")
 	brokerSyncer.remoteFederator = f
 
-	f = federate.NewCreateOrUpdateFederator(config.LocalClient, config.RestMapper, config.LocalNamespace, "")
+	f = federate.NewCreateOrUpdateFederator(federate.CreateOrUpdateOptions{
+		Client:          config.LocalClient,
+		RestMapper:      config.RestMapper,
+		TargetNamespace: config.LocalNamespace,
+	})
 	f.LogEvents("broker -> local")
 	brokerSyncer.localFederator = f
 

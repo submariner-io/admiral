@@ -39,7 +39,7 @@ type updateFederator struct {
 
 func NewUpdateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string, update UpdateFn) Federator {
 	return &updateFederator{
-		baseFederator: newBaseFederator(dynClient, restMapper, targetNamespace),
+		baseFederator: newBaseFederator(dynClient, restMapper, targetNamespace, nil),
 		update:        update,
 	}
 }
