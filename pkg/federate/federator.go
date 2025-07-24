@@ -71,6 +71,34 @@ func (f *FederatorFuncs) Delete(ctx context.Context, resource runtime.Object) er
 	return f.DeleteFunc(ctx, resource)
 }
 
+type compositeFederator []Federator
+
+func (f compositeFederator) Distribute(ctx context.Context, resource runtime.Object) error {
+	for _, federator := range f {
+		err := federator.Distribute(ctx, resource)
+		if err != nil {
+			return err //nolint:wrapcheck // No need to wrap
+		}
+	}
+
+	return nil
+}
+
+func (f compositeFederator) Delete(ctx context.Context, resource runtime.Object) error {
+	for _, federator := range f {
+		err := federator.Delete(ctx, resource)
+		if err != nil {
+			return err //nolint:wrapcheck // No need to wrap
+		}
+	}
+
+	return nil
+}
+
+func NewCompositeFederator(federators ...Federator) Federator {
+	return compositeFederator(federators)
+}
+
 func NewNoopFederator() Federator {
 	return &FederatorFuncs{}
 }

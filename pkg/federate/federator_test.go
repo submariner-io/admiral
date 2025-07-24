@@ -53,6 +53,7 @@ var (
 	_ = Describe("Federator Delete", testDelete)
 	_ = Describe("FederatorFuncs", testFederatorFuncs)
 	_ = Describe("Noop Federator", testNoopFederator)
+	_ = Describe("Composite Federator", testCompositeFederator)
 )
 
 func testCreateOrUpdateFederator() {
@@ -610,6 +611,81 @@ func testNoopFederator() {
 
 		Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 		Expect(f.Delete(ctx, t.resource)).To(Succeed())
+	})
+}
+
+func testCompositeFederator() {
+	var (
+		t                    *testDriver
+		composite            federate.Federator
+		federator1           *federate.FederatorFuncs
+		federator1Distribute chan any
+		federator1Delete     chan any
+		federator2           *federate.FederatorFuncs
+		federator2Distribute chan any
+		federator2Delete     chan any
+	)
+
+	BeforeEach(func() {
+		t = newTestDriver()
+
+		federator1Distribute = make(chan any, 10)
+		federator1Delete = make(chan any, 10)
+		federator2Distribute = make(chan any, 10)
+		federator2Delete = make(chan any, 10)
+
+		federator1 = &federate.FederatorFuncs{
+			DistributeFunc: func(_ context.Context, _ runtime.Object) error {
+				federator1Distribute <- true
+				return nil
+			},
+			DeleteFunc: func(_ context.Context, _ runtime.Object) error {
+				federator1Delete <- true
+				return nil
+			},
+		}
+
+		federator2 = &federate.FederatorFuncs{
+			DistributeFunc: func(_ context.Context, _ runtime.Object) error {
+				federator2Distribute <- true
+				return nil
+			},
+			DeleteFunc: func(_ context.Context, _ runtime.Object) error {
+				federator2Delete <- true
+				return nil
+			},
+		}
+
+		composite = federate.NewCompositeFederator(federator1, federator2)
+	})
+
+	It("should invoke all the functions", func() {
+		Expect(composite.Distribute(ctx, t.resource)).To(Succeed())
+		Expect(federator1Distribute).To(Receive())
+		Expect(federator1Distribute).NotTo(Receive())
+		Expect(federator2Distribute).To(Receive())
+		Expect(federator2Distribute).NotTo(Receive())
+
+		Expect(composite.Delete(ctx, t.resource)).To(Succeed())
+		Expect(federator1Delete).To(Receive())
+		Expect(federator1Delete).NotTo(Receive())
+		Expect(federator2Delete).To(Receive())
+		Expect(federator2Delete).NotTo(Receive())
+	})
+
+	When("the first Federator fails", func() {
+		It("should fail fast and not invoke the second", func() {
+			federator1.DistributeFunc = func(_ context.Context, _ runtime.Object) error {
+				return errors.New("mock error")
+			}
+			federator1.DeleteFunc = federator1.DistributeFunc
+
+			Expect(composite.Distribute(ctx, t.resource)).NotTo(Succeed())
+			Expect(federator2Distribute).NotTo(Receive())
+
+			Expect(composite.Delete(ctx, t.resource)).NotTo(Succeed())
+			Expect(federator2Delete).NotTo(Receive())
+		})
 	})
 }
 
