@@ -60,7 +60,14 @@ func testCreateOrUpdateFederator() {
 	})
 
 	JustBeforeEach(func() {
-		f = federate.NewCreateOrUpdateFederator(t.dynClient, t.restMapper, t.federatorNamespace, t.localClusterID, t.keepMetadataFields...)
+		f = federate.NewCreateOrUpdateFederator(federate.CreateOrUpdateOptions{
+			Client:             t.dynClient,
+			RestMapper:         t.restMapper,
+			TargetNamespace:    t.federatorNamespace,
+			KeepMetadataFields: t.keepMetadataFields,
+			LocalClusterID:     t.localClusterID,
+		})
+
 		f.LogEvents("test")
 	})
 
@@ -406,7 +413,12 @@ func testDelete() {
 	})
 
 	JustBeforeEach(func() {
-		f = federate.NewCreateOrUpdateFederator(t.dynClient, t.restMapper, t.federatorNamespace, "")
+		f = federate.NewCreateOrUpdateFederator(federate.CreateOrUpdateOptions{
+			Client:          t.dynClient,
+			RestMapper:      t.restMapper,
+			TargetNamespace: t.federatorNamespace,
+		})
+
 		f.LogEvents("test")
 	})
 
