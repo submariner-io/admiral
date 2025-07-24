@@ -20,11 +20,13 @@ package federate_test
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/fake"
 	"github.com/submariner-io/admiral/pkg/federate"
+	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	assert "github.com/submariner-io/admiral/pkg/test"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -38,6 +40,8 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 )
+
+const GenerateNamePrefix = "prefix-"
 
 var (
 	ctx = context.Background()
@@ -66,6 +70,7 @@ func testCreateOrUpdateFederator() {
 			TargetNamespace:    t.federatorNamespace,
 			KeepMetadataFields: t.keepMetadataFields,
 			LocalClusterID:     t.localClusterID,
+			IdentifyingLabels:  t.identifyingLabels,
 		})
 
 		f.LogEvents("test")
@@ -182,6 +187,44 @@ func testCreateOrUpdateFederator() {
 			It("should return an error", func() {
 				Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 			})
+		})
+	})
+
+	When("the resource specifies the GenerateName field", func() {
+		BeforeEach(func() {
+			t.setIdentifyingLabels()
+
+			t.resource.Name = ""
+			t.resource.GenerateName = GenerateNamePrefix
+		})
+
+		It("should create and update the resource", func() {
+			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
+
+			list, err := t.resourceClient.List(context.TODO(), metav1.ListOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(list.Items).To(HaveLen(1))
+
+			t.resource.Name = list.Items[0].GetName()
+			t.verifyResource()
+
+			_, err = t.resourceClient.Create(context.TODO(), resource.MustToUnstructured(&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "another-pod",
+				},
+			}), metav1.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			labels := t.resource.Labels
+			t.resource = test.NewPodWithImage(test.LocalNamespace, "apache")
+			t.resource.Name = ""
+			t.resource.GenerateName = GenerateNamePrefix
+			t.resource.Labels = labels
+
+			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
+
+			t.resource.Name = list.Items[0].GetName()
+			t.verifyResource()
 		})
 	})
 
@@ -414,16 +457,17 @@ func testDelete() {
 
 	JustBeforeEach(func() {
 		f = federate.NewCreateOrUpdateFederator(federate.CreateOrUpdateOptions{
-			Client:          t.dynClient,
-			RestMapper:      t.restMapper,
-			TargetNamespace: t.federatorNamespace,
+			Client:            t.dynClient,
+			RestMapper:        t.restMapper,
+			TargetNamespace:   t.federatorNamespace,
+			IdentifyingLabels: t.identifyingLabels,
 		})
 
 		f.LogEvents("test")
 	})
 
 	When("the resource exists in the datastore", func() {
-		BeforeEach(func() {
+		JustBeforeEach(func() {
 			existing := t.resource.DeepCopy()
 			existing.SetNamespace(t.targetNamespace)
 			test.CreateResource(t.resourceClient, existing)
@@ -459,11 +503,66 @@ func testDelete() {
 				Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			})
 		})
+
+		Context("and identifying labels are specified", func() {
+			BeforeEach(func() {
+				t.setIdentifyingLabels()
+
+				t.resource.GenerateName = GenerateNamePrefix
+			})
+
+			JustBeforeEach(func() {
+				test.CreateResource(t.resourceClient, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						GenerateName: "other-",
+						Labels:       t.resource.Labels,
+					},
+				})
+
+				t.resource.Name = ""
+			})
+
+			It("should delete the resource", func() {
+				Expect(f.Delete(ctx, t.resource)).To(Succeed())
+
+				_, err := test.GetResourceAndError(t.resourceClient, t.resource)
+				Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			})
+
+			Context("but another resource also exists with same labels and GenerateName", func() {
+				JustBeforeEach(func() {
+					test.CreateResource(t.resourceClient, &corev1.Pod{
+						ObjectMeta: metav1.ObjectMeta{
+							GenerateName: GenerateNamePrefix,
+							Labels:       t.resource.Labels,
+						},
+					})
+				})
+
+				It("should fail", func() {
+					err := f.Delete(ctx, t.resource)
+					Expect(err).NotTo(Succeed())
+					Expect(apierrors.IsNotFound(f.Delete(ctx, t.resource))).To(BeFalse())
+				})
+			})
+		})
 	})
 
 	When("the resource does not exist in the datastore", func() {
 		It("should return NotFound error", func() {
 			Expect(apierrors.IsNotFound(f.Delete(ctx, t.resource))).To(BeTrue())
+		})
+
+		Context("and identifying labels are specified", func() {
+			BeforeEach(func() {
+				t.setIdentifyingLabels()
+			})
+
+			It("should return NotFound error", func() {
+				t.resource.Name = ""
+
+				Expect(apierrors.IsNotFound(f.Delete(ctx, t.resource))).To(BeTrue())
+			})
 		})
 	})
 }
@@ -474,6 +573,7 @@ type testDriver struct {
 	federatorNamespace string
 	targetNamespace    string
 	keepMetadataFields []string
+	identifyingLabels  []string
 	dynClient          *dynamicfake.FakeDynamicClient
 	resourceClient     dynamic.ResourceInterface
 	restMapper         meta.RESTMapper
@@ -501,4 +601,12 @@ func newTestDriver() *testDriver {
 
 func (t *testDriver) verifyResource() {
 	test.VerifyResource(t.resourceClient, t.resource, t.targetNamespace, t.localClusterID)
+}
+
+func (t *testDriver) setIdentifyingLabels() {
+	t.identifyingLabels = []string{"IDLabel1", "IDLabel2"}
+
+	for i, l := range t.identifyingLabels {
+		t.resource.Labels[l] = strconv.Itoa(i)
+	}
 }
