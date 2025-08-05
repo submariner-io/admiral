@@ -35,7 +35,7 @@ type createFederator struct {
 
 func NewCreateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string) FederatorExt {
 	return &createFederator{
-		baseFederator: newBaseFederator(dynClient, restMapper, targetNamespace),
+		baseFederator: newBaseFederator(dynClient, restMapper, targetNamespace, nil),
 	}
 }
 

@@ -163,12 +163,17 @@ var _ = Describe("CreateOrUpdate function", func() {
 
 		options.Obj = resource.MustToUnstructured(t.pod)
 
-		result, _, err := util.CreateOrUpdateWithOptions[*unstructured.Unstructured](context.TODO(), options)
+		result, retObj, err := util.CreateOrUpdateWithOptions[*unstructured.Unstructured](context.TODO(), options)
 		if err != nil && expResult != util.OperationResultNone {
 			return err
 		}
 
 		Expect(result).To(Equal(expResult))
+
+		if result != util.OperationResultNone {
+			Expect(retObj).NotTo(BeNil())
+			Expect(retObj).To(Equal(test.GetResource(t.client, retObj)))
+		}
 
 		return err
 	}

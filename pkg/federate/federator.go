@@ -50,16 +50,55 @@ type FederatorExt interface {
 	LogEvents(withName string)
 }
 
-type noopFederator struct{}
+type FederatorFuncs struct {
+	DistributeFunc func(ctx context.Context, resource runtime.Object) error
+	DeleteFunc     func(ctx context.Context, resource runtime.Object) error
+}
+
+func (f *FederatorFuncs) Distribute(ctx context.Context, resource runtime.Object) error {
+	if f.DistributeFunc == nil {
+		return nil
+	}
+
+	return f.DistributeFunc(ctx, resource)
+}
+
+func (f *FederatorFuncs) Delete(ctx context.Context, resource runtime.Object) error {
+	if f.DeleteFunc == nil {
+		return nil
+	}
+
+	return f.DeleteFunc(ctx, resource)
+}
+
+type compositeFederator []Federator
+
+func (f compositeFederator) Distribute(ctx context.Context, resource runtime.Object) error {
+	for _, federator := range f {
+		err := federator.Distribute(ctx, resource)
+		if err != nil {
+			return err //nolint:wrapcheck // No need to wrap
+		}
+	}
+
+	return nil
+}
+
+func (f compositeFederator) Delete(ctx context.Context, resource runtime.Object) error {
+	for _, federator := range f {
+		err := federator.Delete(ctx, resource)
+		if err != nil {
+			return err //nolint:wrapcheck // No need to wrap
+		}
+	}
+
+	return nil
+}
+
+func NewCompositeFederator(federators ...Federator) Federator {
+	return compositeFederator(federators)
+}
 
 func NewNoopFederator() Federator {
-	return &noopFederator{}
-}
-
-func (n noopFederator) Distribute(_ context.Context, _ runtime.Object) error {
-	return nil
-}
-
-func (n noopFederator) Delete(_ context.Context, _ runtime.Object) error {
-	return nil
+	return &FederatorFuncs{}
 }

@@ -44,7 +44,7 @@ type baseFederator struct {
 var logger = log.Logger{Logger: logf.Log.WithName("Federator")}
 
 func newBaseFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string,
-	keepMetadataField ...string,
+	keepMetadataField []string,
 ) *baseFederator {
 	b := &baseFederator{
 		dynClient:       dynClient,
