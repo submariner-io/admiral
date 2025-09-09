@@ -91,6 +91,9 @@ type ResourceConfig struct {
 	// for more details.
 	BrokerResourcesEquivalent syncer.ResourceEquivalenceFunc
 
+	// BrokerShouldProcess function invoked to determine if a broker resource should be processed.
+	BrokerShouldProcess syncer.ShouldProcessFunc
+
 	// BrokerWaitForCacheSync if true, waits for the broker informer cache to sync on Start. Default is false.
 	BrokerWaitForCacheSync *bool
 
@@ -271,6 +274,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			Transform:           rc.TransformBrokerToLocal,
 			OnSuccessfulSync:    rc.OnSuccessfulSyncFromBroker,
 			ResourcesEquivalent: rc.BrokerResourcesEquivalent,
+			ShouldProcess:       rc.BrokerShouldProcess,
 			WaitForCacheSync:    &waitForCacheSync,
 			WorkQueueConfig:     rc.BrokerWorkQueueConfig,
 			Scheme:              config.Scheme,
