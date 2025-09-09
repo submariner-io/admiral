@@ -68,6 +68,9 @@ type ResourceConfig struct {
 	// LocalShouldProcess function invoked to determine if a local resource should be processed.
 	LocalShouldProcess syncer.ShouldProcessFunc
 
+	// LocalFederator used to perform the syncing of resources locally from the broker.
+	LocalFederator federate.Federator
+
 	// LocalWaitForCacheSync if true, waits for the local informer cache to sync on Start. Default is true.
 	LocalWaitForCacheSync *bool
 
@@ -94,6 +97,9 @@ type ResourceConfig struct {
 	// BrokerShouldProcess function invoked to determine if a broker resource should be processed.
 	BrokerShouldProcess syncer.ShouldProcessFunc
 
+	// BrokerFederator used to perform the syncing of local resources to the broker.
+	BrokerFederator federate.Federator
+
 	// BrokerWaitForCacheSync if true, waits for the broker informer cache to sync on Start. Default is false.
 	BrokerWaitForCacheSync *bool
 
@@ -109,6 +115,8 @@ type ResourceConfig struct {
 }
 
 type SyncerConfig struct {
+	Name string
+
 	// LocalRestConfig the REST config used to access the local resources to sync.
 	LocalRestConfig *rest.Config
 
@@ -168,26 +176,12 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 		return nil, errors.New("no resources to sync")
 	}
 
-	var err error
-
-	if config.RestMapper == nil {
-		config.RestMapper, err = util.BuildRestMapper(config.LocalRestConfig)
-		if err != nil {
-			return nil, errors.Wrap(err, "error building the REST mapper")
-		}
+	if err := config.ensureClients(); err != nil {
+		return nil, err
 	}
 
-	if config.LocalClient == nil {
-		config.LocalClient, err = resource.NewDynamicClient(config.LocalRestConfig)
-		if err != nil {
-			return nil, errors.Wrap(err, "error creating dynamic client")
-		}
-	}
-
-	if config.BrokerClient == nil {
-		if err := createBrokerClient(&config); err != nil {
-			return nil, err
-		}
+	if config.Name == "" {
+		config.Name = "BrokerSyncer"
 	}
 
 	brokerSyncer := &Syncer{
@@ -198,22 +192,20 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 		localClient:     config.LocalClient,
 	}
 
-	f := federate.NewCreateOrUpdateFederator(federate.CreateOrUpdateOptions{
+	defaultRemoteFederator := federate.NewCreateOrUpdateFederator(federate.CreateOrUpdateOptions{
 		Client:          config.BrokerClient,
 		RestMapper:      config.RestMapper,
 		TargetNamespace: config.BrokerNamespace,
 		LocalClusterID:  config.LocalClusterID,
 	})
-	f.LogEvents("local -> broker")
-	brokerSyncer.remoteFederator = f
+	defaultRemoteFederator.LogEvents(config.Name + ":local -> broker")
 
-	f = federate.NewCreateOrUpdateFederator(federate.CreateOrUpdateOptions{
+	defaultLocalFederator := federate.NewCreateOrUpdateFederator(federate.CreateOrUpdateOptions{
 		Client:          config.LocalClient,
 		RestMapper:      config.RestMapper,
 		TargetNamespace: config.LocalNamespace,
 	})
-	f.LogEvents("broker -> local")
-	brokerSyncer.localFederator = f
+	defaultLocalFederator.LogEvents(config.Name + ":broker -> local")
 
 	for i := range config.ResourceConfigs {
 		rc := &config.ResourceConfigs[i]
@@ -230,8 +222,17 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			prometheus.MustRegister(syncCounter)
 		}
 
+		federator := rc.BrokerFederator
+		if federator == nil {
+			federator = defaultRemoteFederator
+		}
+
+		if brokerSyncer.remoteFederator == nil {
+			brokerSyncer.remoteFederator = federator
+		}
+
 		localSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
-			Name:                fmt.Sprintf("local -> broker for %T", rc.LocalResourceType),
+			Name:                fmt.Sprintf("%s:local -> broker for %T", config.Name, rc.LocalResourceType),
 			SourceClient:        config.LocalClient,
 			SourceNamespace:     rc.LocalSourceNamespace,
 			SourceLabelSelector: rc.LocalSourceLabelSelector,
@@ -239,7 +240,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			LocalClusterID:      config.LocalClusterID,
 			Direction:           syncer.LocalToRemote,
 			RestMapper:          config.RestMapper,
-			Federator:           brokerSyncer.remoteFederator,
+			Federator:           federator,
 			ResourceType:        rc.LocalResourceType,
 			Transform:           rc.TransformLocalToBroker,
 			OnSuccessfulSync:    rc.OnSuccessfulSyncToBroker,
@@ -260,8 +261,17 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 
 		waitForCacheSync := ptr.Deref(rc.BrokerWaitForCacheSync, false)
 
+		federator = rc.LocalFederator
+		if federator == nil {
+			federator = defaultLocalFederator
+		}
+
+		if brokerSyncer.localFederator == nil {
+			brokerSyncer.localFederator = federator
+		}
+
 		remoteSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
-			Name:                fmt.Sprintf("broker -> local for %T", rc.BrokerResourceType),
+			Name:                fmt.Sprintf("%s:broker -> local for %T", config.Name, rc.BrokerResourceType),
 			SourceClient:        config.BrokerClient,
 			SourceNamespace:     config.BrokerNamespace,
 			SourceLabelSelector: rc.LocalSourceLabelSelector,
@@ -269,7 +279,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			LocalClusterID:      config.LocalClusterID,
 			Direction:           syncer.RemoteToLocal,
 			RestMapper:          config.RestMapper,
-			Federator:           brokerSyncer.localFederator,
+			Federator:           federator,
 			ResourceType:        rc.BrokerResourceType,
 			Transform:           rc.TransformBrokerToLocal,
 			OnSuccessfulSync:    rc.OnSuccessfulSyncFromBroker,
@@ -292,8 +302,8 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 	return brokerSyncer, nil
 }
 
-func createBrokerClient(config *SyncerConfig) error {
-	_, gvr, e := util.ToUnstructuredResource(config.ResourceConfigs[0].BrokerResourceType, config.RestMapper)
+func (c *SyncerConfig) createBrokerClient() error {
+	_, gvr, e := util.ToUnstructuredResource(c.ResourceConfigs[0].BrokerResourceType, c.RestMapper)
 	if e != nil {
 		return e //nolint:wrapcheck // OK to return the error as is.
 	}
@@ -301,20 +311,20 @@ func createBrokerClient(config *SyncerConfig) error {
 	var authorized bool
 	var err error
 
-	if config.BrokerRestConfig != nil {
+	if c.BrokerRestConfig != nil {
 		// We have an existing REST configuration, assume it’s correct (but check it anyway)
-		authorized, err = resource.IsAuthorizedFor(config.BrokerRestConfig, *gvr, config.BrokerNamespace)
+		authorized, err = resource.IsAuthorizedFor(c.BrokerRestConfig, *gvr, c.BrokerNamespace)
 	} else {
 		spec, e := getBrokerSpecification()
 		if e != nil {
 			return e
 		}
 
-		config.BrokerNamespace = spec.RemoteNamespace
+		c.BrokerNamespace = spec.RemoteNamespace
 
 		// If we have a secret, try to use it
 		if spec.Secret != "" {
-			config.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromFiles(spec.APIServer,
+			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromFiles(spec.APIServer,
 				filepath.Join(SecretPath(spec.Secret), "token"), filepath.Join(SecretPath(spec.Secret), "ca.crt"),
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 			if err != nil {
@@ -324,7 +334,7 @@ func createBrokerClient(config *SyncerConfig) error {
 
 		// If we encountered an error, or we don't have a secret, use the values in the spec
 		if spec.Secret == "" || err != nil {
-			config.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(spec.APIServer, spec.APIServerToken, spec.Ca,
+			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(spec.APIServer, spec.APIServerToken, spec.Ca,
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 		}
 	}
@@ -337,9 +347,35 @@ func createBrokerClient(config *SyncerConfig) error {
 		logger.Error(err, "Error accessing the broker API server")
 	}
 
-	config.BrokerClient, err = resource.NewDynamicClient(config.BrokerRestConfig)
+	c.BrokerClient, err = resource.NewDynamicClient(c.BrokerRestConfig)
 
 	return errors.Wrap(err, "error creating dynamic client")
+}
+
+func (c *SyncerConfig) ensureClients() error {
+	var err error
+
+	if c.RestMapper == nil {
+		c.RestMapper, err = util.BuildRestMapper(c.LocalRestConfig)
+		if err != nil {
+			return errors.Wrap(err, "error building the REST mapper")
+		}
+	}
+
+	if c.LocalClient == nil {
+		c.LocalClient, err = resource.NewDynamicClient(c.LocalRestConfig)
+		if err != nil {
+			return errors.Wrap(err, "error creating dynamic client")
+		}
+	}
+
+	if c.BrokerClient == nil {
+		if err := c.createBrokerClient(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *Syncer) Start(stopCh <-chan struct{}) error {
