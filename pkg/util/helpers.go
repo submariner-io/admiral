@@ -44,7 +44,7 @@ const (
 
 var lastBadCertificate atomic.Value
 
-func BuildRestMapper(restConfig *rest.Config) (meta.RESTMapper, error) {
+var BuildRestMapper = func(restConfig *rest.Config) (meta.RESTMapper, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(restConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating discovery client")
