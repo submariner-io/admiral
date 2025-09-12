@@ -37,7 +37,7 @@ type updateFederator struct {
 	update UpdateFn
 }
 
-func NewUpdateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string, update UpdateFn) Federator {
+func NewUpdateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string, update UpdateFn) FederatorExt {
 	return &updateFederator{
 		baseFederator: newBaseFederator(dynClient, restMapper, targetNamespace, nil),
 		update:        update,

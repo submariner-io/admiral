@@ -30,6 +30,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/fake"
+	fakefederator "github.com/submariner-io/admiral/pkg/federate/fake"
 	resourceutils "github.com/submariner-io/admiral/pkg/resource"
 	sync "github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/broker"
@@ -336,6 +337,33 @@ var _ = Describe("Broker Syncer", func() {
 				test.AwaitResource(localClient, resource.GetName())
 				test.VerifyResource(localClient, transformed, config.LocalNamespace, "remote")
 			})
+		})
+	})
+
+	When("a local Federator is specified", func() {
+		BeforeEach(func() {
+			config.ResourceConfigs[0].LocalFederator = fakefederator.New()
+		})
+
+		It("should use the Federator to sync resources from the broker datastore", func() {
+			test.SetClusterIDLabel(resource, "remote")
+			test.CreateResource(brokerClient, resource)
+
+			resource.Namespace = test.RemoteNamespace
+			config.ResourceConfigs[0].LocalFederator.(*fakefederator.Federator).VerifyDistribute(resource)
+		})
+	})
+
+	When("a broker Federator is specified", func() {
+		BeforeEach(func() {
+			config.ResourceConfigs[0].BrokerFederator = fakefederator.New()
+		})
+
+		It("should use the Federator to sync resources to the broker datastore", func() {
+			test.CreateResource(localClient, resource)
+
+			resource.Namespace = test.LocalNamespace
+			config.ResourceConfigs[0].BrokerFederator.(*fakefederator.Federator).VerifyDistribute(resource)
 		})
 	})
 
