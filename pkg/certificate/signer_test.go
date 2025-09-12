@@ -19,6 +19,14 @@ limitations under the License.
 package certificate_test
 
 import (
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"net"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/certificate"
@@ -41,9 +49,11 @@ var _ = Describe("Signer", func() {
 	var (
 		dynClient *dynamicfake.FakeDynamicClient
 		signer    certificate.Signer
+		ctx       context.Context
 	)
 
 	BeforeEach(func() {
+		ctx = context.Background()
 		dynClient = dynamicfake.NewSimpleDynamicClient(scheme.Scheme)
 
 		resource.NewDynamicClient = func(_ *rest.Config) (dynamic.Interface, error) {
@@ -65,7 +75,7 @@ var _ = Describe("Signer", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(signer.Start(namespace)).To(Succeed())
+		Expect(signer.Start(ctx, namespace)).To(Succeed())
 	})
 
 	AfterEach(func() {
@@ -75,7 +85,7 @@ var _ = Describe("Signer", func() {
 	When("a CSR Secret is created and updated", func() {
 		It("should sign it", func() {
 			// Starting again should be a no-op.
-			Expect(signer.Start(namespace)).To(Succeed())
+			Expect(signer.Start(ctx, namespace)).To(Succeed())
 
 			client := secretClient(dynClient, namespace)
 
@@ -96,7 +106,7 @@ var _ = Describe("Signer", func() {
 
 			By("Updating the signed Secret")
 
-			secret.Data[certificate.CSRDataKey] = []byte("csr-data-updated")
+			secret.Data[certificate.CSRDataKey] = generateTestCSR()
 			delete(secret.Annotations, certificate.RequestSignedLabelKey)
 
 			test.UpdateResource(client, secret)
@@ -136,7 +146,7 @@ var _ = Describe("Signer", func() {
 			client1 := secretClient(dynClient, namespace)
 			client2 := secretClient(dynClient, namespace2)
 
-			Expect(signer.Start(namespace2)).To(Succeed())
+			Expect(signer.Start(ctx, namespace2)).To(Succeed())
 
 			secret := newCSR()
 
@@ -178,6 +188,9 @@ var _ = Describe("Signer", func() {
 })
 
 func newCSR() *corev1.Secret {
+	// Generate valid CSR data
+	csrPEM := generateTestCSR()
+
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "ipsec",
@@ -185,6 +198,31 @@ func newCSR() *corev1.Secret {
 				certificate.SigningRequestLabelKey: "east",
 			},
 		},
-		Data: map[string][]byte{certificate.CSRDataKey: []byte("csr-data")},
+		Data: map[string][]byte{certificate.CSRDataKey: csrPEM},
 	}
+}
+
+func generateTestCSR() []byte {
+	// Generate a test private key
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Create CSR template
+	template := x509.CertificateRequest{
+		Subject: pkix.Name{
+			CommonName:   "test-cert",
+			Organization: []string{"submariner.io"},
+		},
+		SignatureAlgorithm: x509.SHA256WithRSA,
+		IPAddresses:        []net.IP{net.ParseIP("192.168.1.1")},
+	}
+
+	// Create CSR
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &template, privateKey)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Encode to PEM
+	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
+
+	return csrPEM
 }
