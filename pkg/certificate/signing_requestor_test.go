@@ -20,8 +20,15 @@ package certificate_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
+	"net"
 	"sync/atomic"
 	"time"
 
@@ -95,7 +102,7 @@ var _ = Describe("SigningRequestor", func() {
 			brokerSecret := awaitSecret(t.brokerSecretClient())
 
 			brokerSecret.Annotations = map[string]string{certificate.RequestSignedLabelKey: "true"}
-			brokerSecret.Data[certificate.TLSDataKey] = []byte("tls-data")
+			brokerSecret.Data[certificate.TLSDataKey] = generateTestCertificate()
 			brokerSecret.Data[certificate.CADataKey] = []byte("ca-data")
 
 			test.UpdateResource(t.brokerSecretClient(), brokerSecret)
@@ -152,7 +159,7 @@ var _ = Describe("SigningRequestor", func() {
 			By("Re-sign the request on the broker")
 
 			brokerSecret.Annotations = map[string]string{certificate.RequestSignedLabelKey: "true"}
-			brokerSecret.Data[certificate.TLSDataKey] = []byte("tls-data2")
+			brokerSecret.Data[certificate.TLSDataKey] = generateTestCertificate()
 			brokerSecret.Data[certificate.CADataKey] = []byte("ca-data2")
 
 			test.UpdateResource(t.brokerSecretClient(), brokerSecret)
@@ -184,6 +191,11 @@ var _ = Describe("SigningRequestor", func() {
 
 			brokerSecret := awaitSecret(t.brokerSecretClient())
 			brokerSecret.Annotations = map[string]string{certificate.RequestSignedLabelKey: "true"}
+			if brokerSecret.Data == nil {
+				brokerSecret.Data = make(map[string][]byte)
+			}
+			brokerSecret.Data[certificate.TLSDataKey] = generateTestCertificate()
+			brokerSecret.Data[certificate.CADataKey] = []byte("ca-data")
 			test.UpdateResource(t.brokerSecretClient(), brokerSecret)
 
 			Eventually(t.signedDataCh).Should(Receive())
@@ -204,6 +216,11 @@ var _ = Describe("SigningRequestor", func() {
 
 			brokerSecret := awaitSecret(t.brokerSecretClient())
 			brokerSecret.Annotations = map[string]string{certificate.RequestSignedLabelKey: "true"}
+			if brokerSecret.Data == nil {
+				brokerSecret.Data = make(map[string][]byte)
+			}
+			brokerSecret.Data[certificate.TLSDataKey] = generateTestCertificate()
+			brokerSecret.Data[certificate.CADataKey] = []byte("ca-data")
 			test.UpdateResource(t.brokerSecretClient(), brokerSecret)
 
 			Eventually(func(g Gomega) {
@@ -221,7 +238,7 @@ var _ = Describe("SigningRequestor", func() {
 
 	When("an existing request was already signed prior to startup and the request is re-issued", func() {
 		privateData := []byte("private-data")
-		csrData := []byte("csr-data")
+		csrData := generateTestCSRForSigningRequestor()
 
 		BeforeEach(func() {
 			t.localDynClient = dynamicfake.NewSimpleDynamicClient(scheme.Scheme, resource.MustToUnstructured(&corev1.Secret{
@@ -238,7 +255,7 @@ var _ = Describe("SigningRequestor", func() {
 				Data: map[string][]byte{
 					certificate.PrivateKeyDataKey: privateData,
 					certificate.CSRDataKey:        csrData,
-					certificate.TLSDataKey:        []byte("tls-data"),
+					certificate.TLSDataKey:        generateTestCertificate(),
 					certificate.CADataKey:         []byte("ca-data"),
 				},
 			}))
@@ -407,6 +424,60 @@ func (t *testDriver) localSecretClient() dynamic.ResourceInterface {
 func awaitSecret(client dynamic.ResourceInterface) *corev1.Secret {
 	return resource.MustFromUnstructured(test.AwaitResource(client, fmt.Sprintf("%s-%s", secretName, localClusterID)),
 		&corev1.Secret{})
+}
+
+func generateTestCSRForSigningRequestor() []byte {
+	// Generate a test private key
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Create CSR template
+	template := x509.CertificateRequest{
+		Subject: pkix.Name{
+			CommonName:   "test-cert",
+			Organization: []string{"submariner.io"},
+		},
+		SignatureAlgorithm: x509.SHA256WithRSA,
+		IPAddresses:        []net.IP{net.ParseIP("192.168.1.1")},
+	}
+
+	// Create CSR
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &template, privateKey)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Encode to PEM
+	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
+
+	return csrPEM
+}
+
+func generateTestCertificate() []byte {
+	// Generate a test private key
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Create certificate template
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:   "test-cert",
+			Organization: []string{"submariner.io"},
+		},
+		NotBefore:   time.Now().Add(-5 * time.Minute),
+		NotAfter:    time.Now().Add(365 * 24 * time.Hour), // 1 year
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		IPAddresses: []net.IP{net.ParseIP("192.168.1.1")},
+	}
+
+	// Create self-signed certificate
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Encode to PEM
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+
+	return certPEM
 }
 
 func secretClient(c dynamic.Interface, ns string) dynamic.ResourceInterface {
