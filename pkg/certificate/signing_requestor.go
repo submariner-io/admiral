@@ -21,14 +21,8 @@ package certificate
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	goerrors "errors"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
@@ -244,7 +238,7 @@ func (s *signingRequestorImpl) Issue(ctx context.Context, name string, ips []str
 			var needsNewCSR bool
 
 			// Parse existing CSR to extract IPs and compare
-			existingIPs, err := s.extractIPsFromCSR(existing.Data[CSRDataKey])
+			existingIPs, err := ExtractIPsFromCertificateRequestPEM(existing.Data[CSRDataKey])
 			if err != nil {
 				logger.Warningf("Failed to parse existing CSR for secret %q: %v", existing.Name, err)
 				needsNewCSR = true
@@ -314,40 +308,7 @@ func (s *signingRequestorImpl) SetKeyGenerator(kg KeyGeneratorFn) {
 }
 
 func (s *signingRequestorImpl) generateKeyAndCSR(ips []string) ([]byte, []byte, error) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, RSABitSize)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to generate RSA key")
-	}
-
-	ipAddresses := []net.IP{}
-
-	for _, ip := range ips {
-		parsed := net.ParseIP(ip)
-		if parsed == nil {
-			return nil, nil, errors.New("invalid IP address in SAN: " + ip)
-		}
-
-		ipAddresses = append(ipAddresses, parsed)
-	}
-
-	csrTemplate := x509.CertificateRequest{
-		Subject: pkix.Name{
-			CommonName:   "submariner-" + s.localClusterID,
-			Organization: []string{"submariner.io"},
-		},
-		SignatureAlgorithm: x509.SHA256WithRSA,
-		IPAddresses:        ipAddresses,
-	}
-
-	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privateKey)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to create certificate request")
-	}
-
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
-	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
-
-	return keyPEM, csrPEM, nil
+	return CreatePEMEncodedKeyAndCertificateRequest("submariner-"+s.localClusterID, ips)
 }
 
 func (s *signingRequestorImpl) onLocalSecretSigned(obj runtime.Object, numRequeues int) bool {
@@ -406,14 +367,7 @@ func (s *signingRequestorImpl) startCertificateRenewalMonitoring(stopCh <-chan s
 
 // updateCertificateExpiration extracts and stores the certificate expiration time.
 func (s *signingRequestorImpl) updateCertificateExpiration(secret *corev1.Secret) error {
-	certPEM := secret.Data[TLSDataKey]
-
-	block, _ := pem.Decode(certPEM)
-	if block == nil {
-		return errors.Errorf("failed to find certificate PEM in %q for secret %q", TLSDataKey, secret.Name)
-	}
-
-	cert, err := x509.ParseCertificate(block.Bytes)
+	cert, err := ParseCertificateFromPEM(secret.Data[TLSDataKey])
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse certificate for secret %q", secret.Name)
 	}
@@ -459,24 +413,4 @@ func (s *signingRequestorImpl) checkCertificateRenewal() {
 
 		return true
 	})
-}
-
-// extractIPsFromCSR parses a CSR PEM and extracts the IP addresses from the Subject Alternative Names.
-func (s *signingRequestorImpl) extractIPsFromCSR(csrPEM []byte) ([]string, error) {
-	block, _ := pem.Decode(csrPEM)
-	if block == nil {
-		return nil, errors.New("failed to decode CSR PEM")
-	}
-
-	csr, err := x509.ParseCertificateRequest(block.Bytes)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse CSR")
-	}
-
-	ips := make([]string, 0, len(csr.IPAddresses))
-	for _, ip := range csr.IPAddresses {
-		ips = append(ips, ip.String())
-	}
-
-	return ips, nil
 }

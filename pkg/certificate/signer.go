@@ -21,9 +21,7 @@ package certificate
 import (
 	"context"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
 	"strconv"
@@ -164,12 +162,6 @@ func (s *signerImpl) Stop(namespace string) {
 }
 
 func (s *signerImpl) signSecret(ctx context.Context, secret *corev1.Secret) error {
-	csrPEM := secret.Data[CSRDataKey]
-	if len(csrPEM) == 0 {
-		logger.Warning("CSR data is empty for secret \"%s/%s\"", secret.Namespace, secret.Name)
-		return nil
-	}
-
 	// Get CA secret using dynamic client
 	caSecretClient := s.dynClient.Resource(corev1.SchemeGroupVersion.WithResource("secrets")).Namespace(secret.Namespace)
 	caSecretUnstructured, err := caSecretClient.Get(ctx, CASecretName, metav1.GetOptions{})
@@ -182,35 +174,17 @@ func (s *signerImpl) signSecret(ctx context.Context, secret *corev1.Secret) erro
 	caCertPEM := caSecret.Data[CACertFileName]
 	caKeyPEM := caSecret.Data[CAKeyFileName]
 
-	// Parse CA cert
-	caBlock, _ := pem.Decode(caCertPEM)
-	if caBlock == nil {
-		return errors.Errorf("failed to decode CA secret for signing secret \"%s/%s\"", secret.Namespace, secret.Name)
-	}
-
-	caCert, err := x509.ParseCertificate(caBlock.Bytes)
+	caCert, err := ParseCertificateFromPEM(caCertPEM)
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse CA certificate for signing secret \"%s/%s\"", secret.Namespace, secret.Name)
 	}
 
-	// Parse CA private key
-	keyBlock, _ := pem.Decode(caKeyPEM)
-	if keyBlock == nil {
-		return errors.Errorf("failed to decode CA private key for signing secret \"%s/%s\"", secret.Namespace, secret.Name)
-	}
-
-	caKey, err := x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
+	caKey, err := ParsePKCS1PrivateKeyFromPEM(caKeyPEM)
 	if err != nil {
 		return errors.Errorf("failed to parse CA private key for signing secret \"%s/%s\"", secret.Namespace, secret.Name)
 	}
 
-	// Parse CSR
-	csrBlock, _ := pem.Decode(csrPEM)
-	if csrBlock == nil {
-		return errors.Errorf("failed to decode CSR PEM for secret \"%s/%s\"", secret.Namespace, secret.Name)
-	}
-
-	csr, err := x509.ParseCertificateRequest(csrBlock.Bytes)
+	csr, err := ParseCertificateRequestFromPEM(secret.Data[CSRDataKey])
 	if err != nil {
 		return errors.Errorf("failed to parse CSR PEM for secret \"%s/%s\"", secret.Namespace, secret.Name)
 	}
@@ -306,36 +280,7 @@ func (s *signerImpl) issueCA(ctx context.Context, namespace string) error {
 // signCASecret generates and signs a CA certificate, storing it in the provided secret.
 func (s *signerImpl) signCASecret(secret *corev1.Secret, version string) error {
 	// Generate new CA certificate
-	privateKey, err := rsa.GenerateKey(rand.Reader, RSABitSize)
-	if err != nil {
-		return errors.Wrapf(err, "failed to generate RSA key")
-	}
-
-	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	if err != nil {
-		return errors.Wrapf(err, "failed to generate serial number")
-	}
-
-	certTemplate := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			CommonName:   "submariner-ca",
-			Organization: []string{"submariner.io"},
-		},
-		NotBefore:             time.Now().Add(-5 * time.Minute),
-		NotAfter:              time.Now().Add(CACertValidity),
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &privateKey.PublicKey, privateKey)
-	if err != nil {
-		return errors.Wrapf(err, "failed to create CA certificate")
-	}
-
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyPEM, certPEM, err := CreatePEMEncodedKeyAndCertificate("submariner-ca", CACertValidity)
 
 	maps.Ensure(&secret.Data)[CAKeyFileName] = keyPEM
 	secret.Data[CACertFileName] = certPEM
@@ -343,7 +288,7 @@ func (s *signerImpl) signCASecret(secret *corev1.Secret, version string) error {
 	// Ensure annotations exist and set the version
 	maps.Ensure(&secret.Annotations)[CAVersionAnnotation] = version
 
-	return nil
+	return errors.Wrapf(err, "failed to create CA certificate")
 }
 
 // shouldReissueCA checks if the CA certificate should be reissued based on expiration time.
@@ -355,21 +300,9 @@ func (s *signerImpl) shouldReissueCA(secret *corev1.Secret, namespace string) (b
 		currentVersion = existingVersion
 	}
 
-	certPEM := secret.Data[CACertFileName]
-	if len(certPEM) == 0 {
-		logger.Warning("CA certificate data is empty, re-issuing for %v", namespace)
-		return true, currentVersion
-	}
-
-	block, _ := pem.Decode(certPEM)
-	if block == nil {
-		logger.Warning("Failed to decode existing CA cert PEM, re-issuingfor %v", namespace)
-		return true, currentVersion
-	}
-
-	cert, err := x509.ParseCertificate(block.Bytes)
+	cert, err := ParseCertificateFromPEM(secret.Data[CACertFileName])
 	if err != nil {
-		logger.Warning("Failed to parse existing CA cert, re-issuing for %v", namespace)
+		logger.Errorf(err, "Failed to parse existing CA cert, re-issuing for namespace %q", namespace)
 		return true, currentVersion
 	}
 

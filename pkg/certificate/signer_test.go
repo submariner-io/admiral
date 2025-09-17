@@ -20,12 +20,6 @@ package certificate_test
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
-	"net"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -203,26 +197,8 @@ func newCSR() *corev1.Secret {
 }
 
 func generateTestCSR() []byte {
-	// Generate a test private key
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	_, csrPEM, err := certificate.CreatePEMEncodedKeyAndCertificateRequest("test-cert", []string{"192.168.1.1"})
 	Expect(err).NotTo(HaveOccurred())
-
-	// Create CSR template
-	template := x509.CertificateRequest{
-		Subject: pkix.Name{
-			CommonName:   "test-cert",
-			Organization: []string{"submariner.io"},
-		},
-		SignatureAlgorithm: x509.SHA256WithRSA,
-		IPAddresses:        []net.IP{net.ParseIP("192.168.1.1")},
-	}
-
-	// Create CSR
-	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &template, privateKey)
-	Expect(err).NotTo(HaveOccurred())
-
-	// Encode to PEM
-	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
 
 	return csrPEM
 }

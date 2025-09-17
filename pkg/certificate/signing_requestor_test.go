@@ -20,15 +20,8 @@ package certificate_test
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/big"
-	"net"
 	"sync/atomic"
 	"time"
 
@@ -237,9 +230,6 @@ var _ = Describe("SigningRequestor", func() {
 	})
 
 	When("an existing request was already signed prior to startup and the request is re-issued", func() {
-		privateData := []byte("private-data")
-		csrData := generateTestCSRForSigningRequestor()
-
 		BeforeEach(func() {
 			t.localDynClient = dynamicfake.NewSimpleDynamicClient(scheme.Scheme, resource.MustToUnstructured(&corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -253,18 +243,12 @@ var _ = Describe("SigningRequestor", func() {
 					},
 				},
 				Data: map[string][]byte{
-					certificate.PrivateKeyDataKey: privateData,
-					certificate.CSRDataKey:        csrData,
+					certificate.PrivateKeyDataKey: []byte("private-data"),
+					certificate.CSRDataKey:        generateTestCSR(),
 					certificate.TLSDataKey:        generateTestCertificate(),
 					certificate.CADataKey:         []byte("ca-data"),
 				},
 			}))
-		})
-
-		JustBeforeEach(func() {
-			t.signingRequestor.SetKeyGenerator(func(_ []string) ([]byte, []byte, error) {
-				return privateData, csrData, nil
-			})
 		})
 
 		It("should notify the OnSigned function", func() {
@@ -426,56 +410,9 @@ func awaitSecret(client dynamic.ResourceInterface) *corev1.Secret {
 		&corev1.Secret{})
 }
 
-func generateTestCSRForSigningRequestor() []byte {
-	// Generate a test private key
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	Expect(err).NotTo(HaveOccurred())
-
-	// Create CSR template
-	template := x509.CertificateRequest{
-		Subject: pkix.Name{
-			CommonName:   "test-cert",
-			Organization: []string{"submariner.io"},
-		},
-		SignatureAlgorithm: x509.SHA256WithRSA,
-		IPAddresses:        []net.IP{net.ParseIP("192.168.1.1")},
-	}
-
-	// Create CSR
-	csrDER, err := x509.CreateCertificateRequest(rand.Reader, &template, privateKey)
-	Expect(err).NotTo(HaveOccurred())
-
-	// Encode to PEM
-	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
-
-	return csrPEM
-}
-
 func generateTestCertificate() []byte {
-	// Generate a test private key
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	_, certPEM, err := certificate.CreatePEMEncodedKeyAndCertificate("test-cert", 365*24*time.Hour)
 	Expect(err).NotTo(HaveOccurred())
-
-	// Create certificate template
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			CommonName:   "test-cert",
-			Organization: []string{"submariner.io"},
-		},
-		NotBefore:   time.Now().Add(-5 * time.Minute),
-		NotAfter:    time.Now().Add(365 * 24 * time.Hour), // 1 year
-		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-		IPAddresses: []net.IP{net.ParseIP("192.168.1.1")},
-	}
-
-	// Create self-signed certificate
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
-	Expect(err).NotTo(HaveOccurred())
-
-	// Encode to PEM
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
 	return certPEM
 }
