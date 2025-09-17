@@ -63,8 +63,6 @@ const (
 
 type OnSignedFn func(secretData map[string][]byte) error
 
-type KeyGeneratorFn func(ips []string) ([]byte, []byte, error)
-
 type certInfo struct {
 	name      string
 	ips       []string
@@ -76,9 +74,6 @@ type SigningRequestor interface {
 	Issue(ctx context.Context, name string, ips []string, onSigned OnSignedFn) error
 	Remove(ctx context.Context, name string) error
 	Uninstall(ctx context.Context) error
-
-	// SetKeyGenerator is intended for unit tests.
-	SetKeyGenerator(kg KeyGeneratorFn)
 }
 
 type signingRequestorImpl struct {
@@ -86,7 +81,6 @@ type signingRequestorImpl struct {
 	localClusterID     string
 	localSecretClient  dynamic.ResourceInterface
 	brokerSecretClient dynamic.ResourceInterface
-	keyGenerator       KeyGeneratorFn
 
 	// Certificate management fields
 	issuedCerts sync.Map // map[secretName]certInfo
@@ -100,8 +94,6 @@ func StartSigningRequestor(syncerConfig broker.SyncerConfig, stopCh <-chan struc
 		localNamespace: syncerConfig.LocalNamespace,
 		localClusterID: syncerConfig.LocalClusterID,
 	}
-
-	sr.keyGenerator = sr.generateKeyAndCSR
 
 	syncerConfig.Name = "CertSR"
 
@@ -208,7 +200,7 @@ func (s *signingRequestorImpl) Issue(ctx context.Context, name string, ips []str
 		return errors.New("ips cannot be empty")
 	}
 
-	keyPEM, csrPEM, err := s.keyGenerator(ips)
+	keyPEM, csrPEM, err := s.generateKeyAndCSR(ips)
 	if err != nil {
 		return errors.Wrapf(err, "error generating key and CSR data for %q and IPs %v", name, ips)
 	}
@@ -301,10 +293,6 @@ func (s *signingRequestorImpl) Uninstall(ctx context.Context) error {
 
 	return goerrors.Join(s.localSecretClient.DeleteCollection(ctx, metav1.DeleteOptions{}, listOpts),
 		s.brokerSecretClient.DeleteCollection(ctx, metav1.DeleteOptions{}, listOpts))
-}
-
-func (s *signingRequestorImpl) SetKeyGenerator(kg KeyGeneratorFn) {
-	s.keyGenerator = kg
 }
 
 func (s *signingRequestorImpl) generateKeyAndCSR(ips []string) ([]byte, []byte, error) {
