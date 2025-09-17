@@ -35,6 +35,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
+	"github.com/submariner-io/admiral/pkg/maps"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/slices"
 	"github.com/submariner-io/admiral/pkg/syncer"
@@ -115,11 +116,7 @@ func StartSigningRequestor(syncerConfig broker.SyncerConfig, stopCh <-chan struc
 			existingSecret := resource.MustFromUnstructured(oldObj, &corev1.Secret{})
 			updatedSecret := resource.MustFromUnstructured(newObj, &corev1.Secret{})
 
-			if existingSecret.Annotations == nil {
-				existingSecret.Annotations = map[string]string{}
-			}
-
-			existingSecret.Annotations[RequestSignedLabelKey] = updatedSecret.Annotations[RequestSignedLabelKey]
+			maps.Ensure(&existingSecret.Annotations)[RequestSignedLabelKey] = updatedSecret.Annotations[RequestSignedLabelKey]
 			existingSecret.Data[TLSDataKey] = updatedSecret.Data[TLSDataKey]
 			existingSecret.Data[CADataKey] = updatedSecret.Data[CADataKey]
 

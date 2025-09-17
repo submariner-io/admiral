@@ -33,6 +33,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
+	"github.com/submariner-io/admiral/pkg/maps"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -129,11 +130,7 @@ func (s *signerImpl) Start(ctx context.Context, namespace string) error {
 				existingSecret := resource.MustFromUnstructured(oldObj, &corev1.Secret{})
 				updatedSecret := resource.MustFromUnstructured(newObj, &corev1.Secret{})
 
-				if existingSecret.Annotations == nil {
-					existingSecret.Annotations = map[string]string{}
-				}
-
-				existingSecret.Annotations[RequestSignedLabelKey] = "true"
+				maps.Ensure(&existingSecret.Annotations)[RequestSignedLabelKey] = "true"
 				existingSecret.Data[TLSDataKey] = updatedSecret.Data[TLSDataKey]
 				existingSecret.Data[CADataKey] = updatedSecret.Data[CADataKey]
 
@@ -340,19 +337,11 @@ func (s *signerImpl) signCASecret(secret *corev1.Secret, version string) error {
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
-	if secret.Data == nil {
-		secret.Data = map[string][]byte{}
-	}
-
-	secret.Data[CAKeyFileName] = keyPEM
+	maps.Ensure(&secret.Data)[CAKeyFileName] = keyPEM
 	secret.Data[CACertFileName] = certPEM
 
 	// Ensure annotations exist and set the version
-	if secret.Annotations == nil {
-		secret.Annotations = map[string]string{}
-	}
-
-	secret.Annotations[CAVersionAnnotation] = version
+	maps.Ensure(&secret.Annotations)[CAVersionAnnotation] = version
 
 	return nil
 }

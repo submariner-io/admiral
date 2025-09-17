@@ -21,10 +21,11 @@ package test
 
 import (
 	"context"
-	"maps"
+	gomaps "maps"
 
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/federate"
+	"github.com/submariner-io/admiral/pkg/maps"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/test"
 	"github.com/submariner-io/admiral/pkg/util"
@@ -90,7 +91,7 @@ func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev
 	Expect(actual.Status).To(Equal(expected.Status))
 
 	duplicate := make(map[string]string)
-	maps.Copy(duplicate, expected.GetLabels())
+	gomaps.Copy(duplicate, expected.GetLabels())
 
 	if clusterID != "" {
 		duplicate[federate.ClusterIDLabelKey] = clusterID
@@ -176,11 +177,7 @@ func PrepInitialClientObjs(namespace, clusterID string, initObjs ...runtime.Obje
 
 		if clusterID != "" {
 			labels := raw.GetLabels()
-			if labels == nil {
-				labels = map[string]string{}
-			}
-
-			labels[federate.ClusterIDLabelKey] = clusterID
+			maps.Ensure(&labels)[federate.ClusterIDLabelKey] = clusterID
 			raw.SetLabels(labels)
 		}
 
@@ -194,14 +191,11 @@ func SetClusterIDLabel[T runtime.Object](obj T, clusterID string) T {
 	meta := resource.MustToMeta(obj)
 
 	labels := meta.GetLabels()
-	if labels == nil {
-		labels = map[string]string{}
-	}
 
 	if clusterID == "" {
 		delete(labels, federate.ClusterIDLabelKey)
 	} else {
-		labels[federate.ClusterIDLabelKey] = clusterID
+		maps.Ensure(&labels)[federate.ClusterIDLabelKey] = clusterID
 	}
 
 	meta.SetLabels(labels)
