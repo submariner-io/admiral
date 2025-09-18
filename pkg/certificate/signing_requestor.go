@@ -19,7 +19,6 @@ limitations under the License.
 package certificate
 
 import (
-	"bytes"
 	"context"
 	goerrors "errors"
 	"fmt"
@@ -55,17 +54,11 @@ const (
 	CSRDataKey             = "csr.pem"
 	TLSDataKey             = "tls.crt"
 	CADataKey              = "ca.crt"
-
-	// Certificate renewal constants.
-	CertRenewBefore   = 30 * 24 * time.Hour // Renew 30 days before expiration
-	CertCheckInterval = 12 * time.Hour      // Check certificate expiration every 12 hours
 )
 
 type OnSignedFn func(secretData map[string][]byte) error
 
 type certInfo struct {
-	name      string
-	ips       []string
 	onSigned  OnSignedFn
 	expiresAt time.Time
 }
@@ -87,6 +80,12 @@ type signingRequestorImpl struct {
 }
 
 var logger = log.Logger{Logger: logf.Log.WithName("Certificate")}
+
+var (
+	// Certificate renewal constants.
+	CertRenewBefore   = 30 * 24 * time.Hour // Renew 30 days before expiration
+	CertCheckInterval = 12 * time.Hour      // Check certificate expiration every 12 hours
+)
 
 //nolint:gocritic // Ignore hugeParam - minimal performance hit, we modify our copy
 func StartSigningRequestor(syncerConfig broker.SyncerConfig, stopCh <-chan struct{}) (SigningRequestor, error) {
@@ -122,11 +121,6 @@ func StartSigningRequestor(syncerConfig broker.SyncerConfig, stopCh <-chan struc
 			LocalResourceType:        &corev1.Secret{},
 			LocalShouldProcess: func(obj *unstructured.Unstructured, op syncer.Operation) bool {
 				return op == syncer.Delete || obj.GetAnnotations()[RequestSignedLabelKey] == ""
-			},
-			LocalResourcesEquivalent: func(obj1, obj2 *unstructured.Unstructured) bool {
-				secret1 := resource.MustFromUnstructured(obj1, &corev1.Secret{})
-				secret2 := resource.MustFromUnstructured(obj2, &corev1.Secret{})
-				return bytes.Equal(secret1.Data[CSRDataKey], secret2.Data[CSRDataKey])
 			},
 			LocalFederator: localFederator,
 			TransformLocalToBroker: func(from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
@@ -253,9 +247,7 @@ func (s *signingRequestorImpl) Issue(ctx context.Context, name string, ips []str
 	})
 	if err == nil {
 		// Track certificate for renewal (expiration will be set when certificate is signed)
-		s.issuedCerts.Store(newSecret.Name, certInfo{
-			name:      name,
-			ips:       ips,
+		s.issuedCerts.LoadOrStore(newSecret.Name, certInfo{
 			onSigned:  onSigned,
 			expiresAt: time.Time{}, // Will be updated when certificate is signed
 		})
@@ -348,7 +340,9 @@ func deleteIfPresent(ctx context.Context, client dynamic.ResourceInterface, name
 
 // startCertificateRenewalMonitoring starts periodic monitoring of certificate expiration.
 func (s *signingRequestorImpl) startCertificateRenewalMonitoring(stopCh <-chan struct{}) {
-	go wait.Until(s.checkCertificateRenewal, CertCheckInterval, stopCh)
+	go wait.Until(func() {
+		s.checkCertificateRenewal(wait.ContextForChannel(stopCh))
+	}, CertCheckInterval, stopCh)
 
 	logger.Infof("Started certificate renewal monitoring with interval %s", CertCheckInterval)
 }
@@ -374,7 +368,7 @@ func (s *signingRequestorImpl) updateCertificateExpiration(secret *corev1.Secret
 }
 
 // checkCertificateRenewal checks all tracked certificates and renews those close to expiration.
-func (s *signingRequestorImpl) checkCertificateRenewal() {
+func (s *signingRequestorImpl) checkCertificateRenewal(ctx context.Context) {
 	s.issuedCerts.Range(func(key, value interface{}) bool {
 		secretName := key.(string)
 		info := value.(certInfo)
@@ -389,8 +383,17 @@ func (s *signingRequestorImpl) checkCertificateRenewal() {
 		if timeUntilExpiry <= CertRenewBefore {
 			logger.Infof("Certificate %q expires in %s, renewing", secretName, timeUntilExpiry.String())
 
-			// Renew the certificate by re-issuing it
-			if err := s.Issue(context.TODO(), info.name, info.ips, info.onSigned); err != nil {
+			// Renew the certificate by clearing the signed annotation.
+			err := util.MustUpdate(ctx, resource.ForDynamic(s.localSecretClient),
+				resource.MustToUnstructured(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName}}),
+				func(existing *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+					annotations := existing.GetAnnotations()
+					delete(annotations, RequestSignedLabelKey)
+					existing.SetAnnotations(annotations)
+
+					return existing, nil
+				})
+			if err != nil {
 				logger.Errorf(err, "Failed to renew certificate %q", secretName)
 			} else {
 				logger.Infof("Successfully initiated renewal for certificate %q", secretName)
