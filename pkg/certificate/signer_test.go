@@ -19,7 +19,7 @@ limitations under the License.
 package certificate_test
 
 import (
-	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -27,9 +27,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	assert "github.com/submariner-io/admiral/pkg/test"
-	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -38,56 +36,26 @@ import (
 )
 
 var _ = Describe("Signer", func() {
-	const namespace = "broker1"
+	t := newSignerTestDriver()
 
-	var (
-		dynClient *dynamicfake.FakeDynamicClient
-		signer    certificate.Signer
-		ctx       context.Context
-	)
+	Context("Start", t.testStart)
+	Context("Stop", t.testStop)
+	Context("CA expiration", t.testExpiration)
+})
 
-	BeforeEach(func() {
-		ctx = context.Background()
-		dynClient = dynamicfake.NewSimpleDynamicClient(scheme.Scheme)
+type signerTestDriver struct {
+	dynClient *dynamicfake.FakeDynamicClient
+	signer    certificate.Signer
+}
 
-		resource.NewDynamicClient = func(_ *rest.Config) (dynamic.Interface, error) {
-			return dynClient, nil
-		}
-
-		util.BuildRestMapper = func(_ *rest.Config) (meta.RESTMapper, error) {
-			return test.GetRESTMapperFor(&corev1.Secret{}), nil
-		}
-	})
-
-	JustBeforeEach(func() {
-		var err error
-
-		signer, err = certificate.NewSigner(certificate.SignerConfig{
-			RestConfig: &rest.Config{
-				Host: "https://local",
-			},
-		})
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(signer.Start(ctx, namespace)).To(Succeed())
-	})
-
-	AfterEach(func() {
-		signer.Stop(namespace)
-	})
-
+func (t *signerTestDriver) testStart() {
 	When("a CSR Secret is created and updated", func() {
 		It("should sign it", func() {
-			// Starting again should be a no-op.
-			Expect(signer.Start(ctx, namespace)).To(Succeed())
-
-			client := secretClient(dynClient, namespace)
-
 			secret := newCSR()
-			test.CreateResource(client, secret)
+			test.CreateResource(t.secretClient(), secret)
 
 			Eventually(func(g Gomega) {
-				secret = resource.MustFromUnstructured(test.AwaitResource(client, secret.Name), &corev1.Secret{})
+				secret = resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), secret.Name), &corev1.Secret{})
 				g.Expect(secret.Data).To(HaveKeyWithValue(certificate.TLSDataKey, Not(BeEmpty())))
 				g.Expect(secret.Data).To(HaveKeyWithValue(certificate.CADataKey, Not(BeEmpty())))
 				g.Expect(secret.Annotations).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
@@ -95,7 +63,7 @@ var _ = Describe("Signer", func() {
 
 			// It should not try to re-sign and update again.
 			Consistently(func() []string {
-				return assert.GetOccurredActionVerbs(&dynClient.Fake, "secrets", "update")
+				return assert.GetOccurredActionVerbs(&t.dynClient.Fake, "secrets", "update")
 			}).Should(HaveLen(1))
 
 			By("Updating the signed Secret")
@@ -103,33 +71,22 @@ var _ = Describe("Signer", func() {
 			secret.Data[certificate.CSRDataKey] = generateTestCSR()
 			delete(secret.Annotations, certificate.RequestSignedLabelKey)
 
-			test.UpdateResource(client, secret)
+			test.UpdateResource(t.secretClient(), secret)
 
 			Eventually(func(g Gomega) {
-				s := resource.MustFromUnstructured(test.AwaitResource(client, secret.Name), &corev1.Secret{})
+				s := resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), secret.Name), &corev1.Secret{})
 				g.Expect(s.Data).To(HaveKeyWithValue(certificate.TLSDataKey, Not(Equal(secret.Data[certificate.TLSDataKey]))))
 				g.Expect(s.Data).To(HaveKeyWithValue(certificate.CADataKey, Not(Equal(secret.Data[certificate.TLSDataKey]))))
 				g.Expect(s.Annotations).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
 				secret = s
 			}).To(Succeed())
-		})
-	})
 
-	Context("Stop", func() {
-		It("should cease signing activity", func() {
-			signer.Stop(namespace)
+			t.dynClient.Fake.ClearActions()
 
-			client := secretClient(dynClient, namespace)
+			// Starting again should be a no-op.
+			Expect(t.signer.Start(ctx, brokerNamespace)).To(Succeed())
 
-			secret := newCSR()
-			test.CreateResource(client, secret)
-
-			Consistently(func(g Gomega) {
-				secret := resource.MustFromUnstructured(test.AwaitResource(client, secret.Name), &corev1.Secret{})
-				g.Expect(secret.Data).NotTo(HaveKey(certificate.TLSDataKey))
-				g.Expect(secret.Data).NotTo(HaveKey(certificate.CADataKey))
-				g.Expect(secret.Annotations).NotTo(HaveKey(certificate.RequestSignedLabelKey))
-			}).To(Succeed())
+			assert.EnsureNoActionsForResource(&t.dynClient.Fake, "secrets", "update")
 		})
 	})
 
@@ -137,10 +94,10 @@ var _ = Describe("Signer", func() {
 		const namespace2 = "broker2"
 
 		It("should not interfere with each other", func() {
-			client1 := secretClient(dynClient, namespace)
-			client2 := secretClient(dynClient, namespace2)
+			client1 := secretClient(t.dynClient, brokerNamespace)
+			client2 := secretClient(t.dynClient, namespace2)
 
-			Expect(signer.Start(ctx, namespace2)).To(Succeed())
+			Expect(t.signer.Start(ctx, namespace2)).To(Succeed())
 
 			secret := newCSR()
 
@@ -166,7 +123,7 @@ var _ = Describe("Signer", func() {
 
 			By("Stop second signer and create new Secret in first namespace")
 
-			signer.Stop(namespace2)
+			t.signer.Stop(namespace2)
 
 			newSecret := newCSR()
 			newSecret.Name += "2"
@@ -179,7 +136,129 @@ var _ = Describe("Signer", func() {
 			}).To(Succeed())
 		})
 	})
-})
+}
+
+func (t *signerTestDriver) testStop() {
+	Context("Stop", func() {
+		It("should cease signing activity", func() {
+			t.signer.Stop(brokerNamespace)
+
+			client := secretClient(t.dynClient, brokerNamespace)
+
+			secret := newCSR()
+			test.CreateResource(client, secret)
+
+			Consistently(func(g Gomega) {
+				secret := resource.MustFromUnstructured(test.AwaitResource(client, secret.Name), &corev1.Secret{})
+				g.Expect(secret.Data).NotTo(HaveKey(certificate.TLSDataKey))
+				g.Expect(secret.Data).NotTo(HaveKey(certificate.CADataKey))
+				g.Expect(secret.Annotations).NotTo(HaveKey(certificate.RequestSignedLabelKey))
+			}).To(Succeed())
+		})
+	})
+}
+
+func (t *signerTestDriver) testExpiration() {
+	var (
+		caSecret  *corev1.Secret
+		csrSecret *corev1.Secret
+	)
+
+	BeforeEach(func() {
+		savedCACheckInterval := certificate.CACheckInterval
+		certificate.CACheckInterval = time.Millisecond * 20
+
+		DeferCleanup(func() {
+			certificate.CACheckInterval = savedCACheckInterval
+		})
+	})
+
+	JustBeforeEach(func() {
+		caSecret = resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), certificate.CASecretName), &corev1.Secret{})
+
+		csrSecret = newCSR()
+		test.CreateResource(t.secretClient(), csrSecret)
+
+		Eventually(func(g Gomega) {
+			csrSecret = resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), csrSecret.Name), &corev1.Secret{})
+			g.Expect(csrSecret.Annotations).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
+		}).To(Succeed())
+	})
+
+	When("the CA certificate has not expired", func() {
+		It("should not rotate it", func() {
+			Consistently(func(g Gomega) {
+				s := test.AwaitResource(t.secretClient(), csrSecret.Name)
+				g.Expect(s.GetAnnotations()).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
+
+				s = test.AwaitResource(t.secretClient(), certificate.CASecretName)
+				g.Expect(s.GetAnnotations()).To(Equal(caSecret.Annotations))
+				g.Expect(resource.MustFromUnstructured(s, &corev1.Secret{}).Data).To(Equal(caSecret.Data))
+			}).Within(time.Millisecond * 200).To(Succeed())
+		})
+	})
+
+	When("the CA certificate expires", func() {
+		BeforeEach(func() {
+			savedCACertValidity := certificate.CACertValidity
+			certificate.CACertValidity = time.Second * 2
+
+			savedRotateBefore := certificate.RotateBefore
+			certificate.RotateBefore = time.Second
+
+			DeferCleanup(func() {
+				certificate.CACertValidity = savedCACertValidity
+				certificate.RotateBefore = savedRotateBefore
+			})
+		})
+
+		It("should rotate it and re-sign all CSRs", func() {
+			Eventually(func(g Gomega) {
+				s := resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), csrSecret.Name), &corev1.Secret{})
+				g.Expect(s.Data[certificate.TLSDataKey]).NotTo(Equal(csrSecret.Data[certificate.TLSDataKey]))
+
+				s = resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), certificate.CASecretName), &corev1.Secret{})
+				g.Expect(s.Annotations).NotTo(Equal(caSecret.Annotations))
+				g.Expect(s.Data).NotTo(Equal(caSecret.Data))
+			}).Within(certificate.CACertValidity + time.Second).To(Succeed())
+		})
+	})
+}
+
+func (t *signerTestDriver) secretClient() dynamic.ResourceInterface {
+	return secretClient(t.dynClient, brokerNamespace)
+}
+
+func newSignerTestDriver() *signerTestDriver {
+	t := &signerTestDriver{}
+
+	BeforeEach(func() {
+		t.dynClient = dynamicfake.NewSimpleDynamicClient(scheme.Scheme)
+
+		resource.NewDynamicClient = func(_ *rest.Config) (dynamic.Interface, error) {
+			return t.dynClient, nil
+		}
+	})
+
+	JustBeforeEach(func() {
+		var err error
+
+		t.signer, err = certificate.NewSigner(certificate.SignerConfig{
+			RestConfig: &rest.Config{
+				Host: "https://local",
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(t.signer.Start(ctx, brokerNamespace)).To(Succeed())
+	})
+
+	AfterEach(func() {
+		t.signer.Stop(brokerNamespace)
+	})
+
+	return t
+}
 
 func newCSR() *corev1.Secret {
 	// Generate valid CSR data

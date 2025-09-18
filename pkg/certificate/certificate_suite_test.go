@@ -25,6 +25,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/log/kzerolog"
+	"github.com/submariner-io/admiral/pkg/syncer/test"
+	"github.com/submariner-io/admiral/pkg/util"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/client-go/rest"
 )
 
 var _ = BeforeSuite(func() {
@@ -33,6 +38,10 @@ var _ = BeforeSuite(func() {
 	_ = flags.Parse([]string{"-v=2"})
 
 	kzerolog.InitK8sLogging()
+
+	util.BuildRestMapper = func(_ *rest.Config) (meta.RESTMapper, error) {
+		return test.GetRESTMapperFor(&corev1.Secret{}), nil
+	}
 })
 
 func TestCertificate(t *testing.T) {

@@ -23,6 +23,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	goerrors "errors"
 	"math/big"
 	"strconv"
 	"sync"
@@ -47,10 +48,7 @@ import (
 
 const (
 	CASecretName        = "submariner-ca"
-	CertValidity        = 365 * 24 * time.Hour      // 1 year
-	CACertValidity      = 10 * 365 * 24 * time.Hour // 10 years
-	RotateBefore        = 90 * 24 * time.Hour       // 90 days
-	CACheckInterval     = 24 * time.Hour            // Check CA daily
+	CertValidity        = 365 * 24 * time.Hour // 1 year // 10 years
 	CAKeyFileName       = "ca.key"
 	CACertFileName      = "ca.crt"
 	CAVersionAnnotation = "submariner.io/ca-version"
@@ -73,24 +71,31 @@ type signerImpl struct {
 	syncerMap  sync.Map
 }
 
+var (
+	CACheckInterval = 24 * time.Hour
+	CACertValidity  = 10 * 365 * 24 * time.Hour // Check CA daily
+	RotateBefore    = 90 * 24 * time.Hour       // 90 days
+)
+
 func NewSigner(config SignerConfig) (Signer, error) {
 	s := &signerImpl{}
 
-	var err error
+	var (
+		err  error
+		errs []error
+	)
 
 	if config.RestMapper == nil {
-		if s.restMapper, err = util.BuildRestMapper(config.RestConfig); err != nil {
-			return nil, errors.Wrap(err, "error building the REST mapper")
-		}
+		s.restMapper, err = util.BuildRestMapper(config.RestConfig)
+		errs = append(errs, errors.Wrap(err, "error building the REST mapper"))
 	}
 
 	if config.DynClient == nil {
-		if s.dynClient, err = resource.NewDynamicClient(config.RestConfig); err != nil {
-			return nil, errors.Wrap(err, "error creating dynamic client")
-		}
+		s.dynClient, err = resource.NewDynamicClient(config.RestConfig)
+		errs = append(errs, errors.Wrap(err, "error creating dynamic client"))
 	}
 
-	return s, nil
+	return s, goerrors.Join(errs...)
 }
 
 func (s *signerImpl) Start(ctx context.Context, namespace string) error {
@@ -145,9 +150,7 @@ func (s *signerImpl) Start(ctx context.Context, namespace string) error {
 		return errors.Wrap(err, "error starting resource syncer")
 	}
 
-	if _, loaded := s.syncerMap.LoadOrStore(namespace, stopCh); loaded {
-		return nil // Already started for this namespace
-	}
+	s.syncerMap.Store(namespace, stopCh)
 
 	// Start periodic CA check for this namespace
 	s.startPeriodicCACheck(ctx, namespace, stopCh)
@@ -181,12 +184,12 @@ func (s *signerImpl) signSecret(ctx context.Context, secret *corev1.Secret) erro
 
 	caKey, err := ParsePKCS1PrivateKeyFromPEM(caKeyPEM)
 	if err != nil {
-		return errors.Errorf("failed to parse CA private key for signing secret \"%s/%s\"", secret.Namespace, secret.Name)
+		return errors.Wrapf(err, "failed to parse CA private key for signing secret \"%s/%s\"", secret.Namespace, secret.Name)
 	}
 
 	csr, err := ParseCertificateRequestFromPEM(secret.Data[CSRDataKey])
 	if err != nil {
-		return errors.Errorf("failed to parse CSR PEM for secret \"%s/%s\"", secret.Namespace, secret.Name)
+		return errors.Wrapf(err, "failed to parse CSR PEM for secret \"%s/%s\"", secret.Namespace, secret.Name)
 	}
 
 	if err := csr.CheckSignature(); err != nil {
@@ -258,7 +261,7 @@ func (s *signerImpl) issueCA(ctx context.Context, namespace string) error {
 			return resource.MustToUnstructured(existing), err
 		},
 	})
-	if err != nil {
+	if result == util.OperationResultNone || err != nil {
 		return errors.Wrapf(err, "failed to create or update CA Secret")
 	}
 
@@ -312,7 +315,8 @@ func (s *signerImpl) shouldReissueCA(secret *corev1.Secret, namespace string) (b
 
 	if timeRemaining < RotateBefore {
 		newVersion := s.incrementVersion(currentVersion)
-		logger.Infof("CA is expiring soon — rotating it for namespace %s from version %s to %s", namespace, currentVersion, newVersion)
+		logger.Infof("CA is expiring in %s — rotating it for namespace %s from version %s to %s",
+			timeRemaining, namespace, currentVersion, newVersion)
 
 		return true, newVersion
 	}
@@ -337,11 +341,11 @@ func (s *signerImpl) incrementVersion(currentVersion string) string {
 // startPeriodicCACheck starts a periodic check for CA certificate expiration.
 func (s *signerImpl) startPeriodicCACheck(ctx context.Context, namespace string, stopCh <-chan struct{}) {
 	go wait.Until(func() {
-		logger.V(log.TRACE).Info("Performing periodic CA check", "namespace", namespace)
+		logger.V(log.TRACE).Infof("Performing periodic CA check for namespace %q", namespace)
 
 		// CA exists, check if it needs rotation
 		if err := s.issueCA(ctx, namespace); err != nil {
-			logger.Error(err, "failed periodic CA check", "namespace", namespace)
+			logger.Errorf(err, "Failed periodic CA check for namespace %q", namespace)
 		}
 	}, CACheckInterval, stopCh)
 
@@ -373,7 +377,7 @@ func (s *signerImpl) resignAllCSRs(ctx context.Context, namespace string) error 
 			})
 
 		if err != nil {
-			logger.Warning("failed to mark CSR secret \"%s/%s\" for re-signing: %v", err, namespace, item.GetName())
+			logger.Errorf(err, "Failed to mark CSR secret \"%s/%s\" for re-signing", namespace, item.GetName())
 		} else {
 			logger.Infof("Marked CSR secret \"%s/%s\" for re-signing", namespace, item.GetName())
 		}
