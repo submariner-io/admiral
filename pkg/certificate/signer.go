@@ -108,6 +108,8 @@ func (s *signerImpl) Start(ctx context.Context, namespace string) error {
 		return errors.Wrapf(err, "error issuing CA certificate for namespace %s", namespace)
 	}
 
+	stopCh := make(chan struct{})
+
 	//nolint:contextcheck // NewResourceSyncer doesn't accept context parameter
 	secretSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
 		Name:            "Cert Signer",
@@ -121,7 +123,7 @@ func (s *signerImpl) Start(ctx context.Context, namespace string) error {
 		Transform: func(from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 			secret := from.(*corev1.Secret)
 
-			err := s.signSecret(ctx, secret)
+			err := s.signSecret(wait.ContextForChannel(stopCh), secret)
 			if err != nil {
 				logger.Errorf(err, "error signing Secret %q", secret.Name)
 			}
@@ -144,8 +146,6 @@ func (s *signerImpl) Start(ctx context.Context, namespace string) error {
 		return errors.Wrap(err, "error creating resource syncer")
 	}
 
-	stopCh := make(chan struct{})
-
 	if err := secretSyncer.Start(stopCh); err != nil {
 		return errors.Wrap(err, "error starting resource syncer")
 	}
@@ -153,7 +153,8 @@ func (s *signerImpl) Start(ctx context.Context, namespace string) error {
 	s.syncerMap.Store(namespace, stopCh)
 
 	// Start periodic CA check for this namespace
-	s.startPeriodicCACheck(ctx, namespace, stopCh)
+	//nolint:contextcheck // startPeriodicCACheck uses its own context on another thread.
+	s.startPeriodicCACheck(namespace, stopCh)
 
 	return nil
 }
@@ -339,12 +340,12 @@ func (s *signerImpl) incrementVersion(currentVersion string) string {
 }
 
 // startPeriodicCACheck starts a periodic check for CA certificate expiration.
-func (s *signerImpl) startPeriodicCACheck(ctx context.Context, namespace string, stopCh <-chan struct{}) {
+func (s *signerImpl) startPeriodicCACheck(namespace string, stopCh <-chan struct{}) {
 	go wait.Until(func() {
 		logger.V(log.TRACE).Infof("Performing periodic CA check for namespace %q", namespace)
 
 		// CA exists, check if it needs rotation
-		if err := s.issueCA(ctx, namespace); err != nil {
+		if err := s.issueCA(wait.ContextForChannel(stopCh), namespace); err != nil {
 			logger.Errorf(err, "Failed periodic CA check for namespace %q", namespace)
 		}
 	}, CACheckInterval, stopCh)
