@@ -48,7 +48,6 @@ import (
 
 const (
 	CASecretName        = "submariner-ca"
-	CertValidity        = 365 * 24 * time.Hour // 1 year // 10 years
 	CAKeyFileName       = "ca.key"
 	CACertFileName      = "ca.crt"
 	CAVersionAnnotation = "submariner.io/ca-version"
@@ -72,9 +71,10 @@ type signerImpl struct {
 }
 
 var (
-	CACheckInterval = 24 * time.Hour
-	CACertValidity  = 10 * 365 * 24 * time.Hour // Check CA daily
+	CACheckInterval = 24 * time.Hour            // Check CA daily
+	CACertValidity  = 10 * 365 * 24 * time.Hour // 10 years
 	RotateBefore    = 90 * 24 * time.Hour       // 90 days
+	CertValidity    = 365 * 24 * time.Hour      // 1 year
 )
 
 func NewSigner(config SignerConfig) (Signer, error) {
@@ -267,9 +267,9 @@ func (s *signerImpl) issueCA(ctx context.Context, namespace string) error {
 	}
 
 	if result == util.OperationResultCreated {
-		logger.Infof("Successfully created CA Secret %s in namespace %s", secret.Name, namespace)
+		logger.Infof("Successfully created CA Secret %q in namespace %q", secret.Name, namespace)
 	} else if result == util.OperationResultUpdated {
-		logger.Infof("Successfully rotated CA Secret %s in namespace %s", secret.Name, namespace)
+		logger.Infof("Successfully rotated CA Secret %q in namespace %q", secret.Name, namespace)
 	}
 
 	// Re-sign all existing CSRs with the new CA (handles both creation and rotation cases)
