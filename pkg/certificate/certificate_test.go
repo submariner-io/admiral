@@ -23,6 +23,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -41,7 +42,7 @@ var _ = Describe("CreatePEMEncodedKeyAndCertificateRequest", func() {
 var _ = Describe("ParseCertificateFromPEM", func() {
 	When("the PEM is valid", func() {
 		It("should parse it", func() {
-			cert, err := certificate.ParseCertificateFromPEM(generateTestCertificate())
+			cert, err := certificate.ParseCertificateFromPEM(generateTestCertificate(24 * time.Hour))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cert).NotTo(BeNil())
 		})

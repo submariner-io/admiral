@@ -20,13 +20,13 @@ package certificate_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/certificate"
 	"github.com/submariner-io/admiral/pkg/fake"
 	"github.com/submariner-io/admiral/pkg/resource"
@@ -47,58 +47,82 @@ const (
 	secretName      = "ipsec"
 )
 
+var (
+	ips = []string{"10.253.4.6", "172.19.22.8"}
+	ctx = context.TODO()
+)
+
 var _ = Describe("SigningRequestor", func() {
-	ctx := context.TODO()
-	ips := []string{"10.253.4.6", "172.19.22.8"}
+	t := newSigningRequestorTestDriver()
 
-	t := newTestDriver()
+	Context("Issue", t.testIssue)
+	Context("", t.testSigned)
+	Context("Expiration", t.testExpiration)
+	Context("Remove", t.testRemove)
+	Context("Uninstall", t.testUninstall)
+})
 
-	When("a signing request is issued", func() {
-		It("should create a CSR Secret and sync to the broker", func() {
-			Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
+type signingRequestorTestDriver struct {
+	signingRequestor certificate.SigningRequestor
+	localDynClient   *dynamicfake.FakeDynamicClient
+	brokerDynClient  *dynamicfake.FakeDynamicClient
+	onSigned         certificate.OnSignedFn
+	signedDataCh     chan map[string][]byte
+}
 
-			localSecret := awaitSecret(t.localSecretClient())
-			Expect(localSecret.Labels).To(HaveKeyWithValue(certificate.SigningRequestLabelKey, localClusterID))
-			Expect(localSecret.Data).To(HaveKey(certificate.CSRDataKey))
-			Expect(localSecret.Data).To(HaveKey(certificate.PrivateKeyDataKey))
+func (t *signingRequestorTestDriver) testIssue() {
+	It("should create a CSR Secret and sync to the broker", func() {
+		Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
 
-			brokerSecret := awaitSecret(t.brokerSecretClient())
-			Expect(brokerSecret.Labels).To(HaveKeyWithValue(certificate.SigningRequestLabelKey, localClusterID))
-			Expect(brokerSecret.Data).To(HaveKeyWithValue(certificate.CSRDataKey, localSecret.Data[certificate.CSRDataKey]))
-			Expect(brokerSecret.Data).NotTo(HaveKey(certificate.PrivateKeyDataKey))
+		localSecret := awaitSecret(t.localSecretClient())
+		Expect(localSecret.Labels).To(HaveKeyWithValue(certificate.SigningRequestLabelKey, localClusterID))
+		Expect(localSecret.Data).To(HaveKey(certificate.CSRDataKey))
+		Expect(localSecret.Data).To(HaveKey(certificate.PrivateKeyDataKey))
 
-			assert.EnsureNoActionsForResource(&t.localDynClient.Fake, "secrets", "update")
+		brokerSecret := awaitSecret(t.brokerSecretClient())
+		Expect(brokerSecret.Labels).To(HaveKeyWithValue(certificate.SigningRequestLabelKey, localClusterID))
+		Expect(brokerSecret.Data).To(HaveKeyWithValue(certificate.CSRDataKey, localSecret.Data[certificate.CSRDataKey]))
+		Expect(brokerSecret.Data).NotTo(HaveKey(certificate.PrivateKeyDataKey))
 
-			Consistently(func() map[string][]byte {
-				return awaitSecret(t.localSecretClient()).Data
-			}).Should(HaveKey(certificate.PrivateKeyDataKey))
+		assert.EnsureNoActionsForResource(&t.localDynClient.Fake, "secrets", "update")
 
-			// Re-issuing the same request should be a no-op.
-			Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
-			assert.EnsureNoActionsForResource(&t.brokerDynClient.Fake, "secrets", "update")
+		Consistently(func() map[string][]byte {
+			return awaitSecret(t.localSecretClient()).Data
+		}).Should(HaveKey(certificate.PrivateKeyDataKey))
 
-			// Re-issuing the request with different IPs should-re-sync it.
-			Expect(t.signingRequestor.Issue(ctx, secretName, []string{"120.67.1.2"}, t.onSigned)).To(Succeed())
-			Eventually(func(g Gomega) {
-				s := awaitSecret(t.brokerSecretClient())
-				g.Expect(s.Data[certificate.CSRDataKey]).NotTo(Equal(brokerSecret.Data[certificate.CSRDataKey]))
-			}).To(Succeed())
+		// Re-issuing the same request should be a no-op.
+		Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
+		assert.EnsureNoActionsForResource(&t.brokerDynClient.Fake, "secrets", "update")
+
+		// Re-issuing the request with different IPs should-re-sync it.
+		Expect(t.signingRequestor.Issue(ctx, secretName, []string{"120.67.1.2"}, t.onSigned)).To(Succeed())
+		Eventually(func(g Gomega) {
+			s := awaitSecret(t.brokerSecretClient())
+			g.Expect(s.Data[certificate.CSRDataKey]).NotTo(Equal(brokerSecret.Data[certificate.CSRDataKey]))
+		}).To(Succeed())
+	})
+
+	When("a nil OnSigned function passed", func() {
+		It("should return an error", func() {
+			Expect(t.signingRequestor.Issue(ctx, secretName, ips, nil)).NotTo(Succeed())
 		})
 	})
 
+	When("empty IPs are passed", func() {
+		It("should return an error", func() {
+			Expect(t.signingRequestor.Issue(ctx, secretName, nil, t.onSigned)).NotTo(Succeed())
+		})
+	})
+}
+
+func (t *signingRequestorTestDriver) testSigned() {
 	When("a local Secret is signed on the broker", func() {
 		JustBeforeEach(func() {
 			Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
 		})
 
 		It("should be synced locally", func() {
-			brokerSecret := awaitSecret(t.brokerSecretClient())
-
-			brokerSecret.Annotations = map[string]string{certificate.RequestSignedLabelKey: "true"}
-			brokerSecret.Data[certificate.TLSDataKey] = generateTestCertificate()
-			brokerSecret.Data[certificate.CADataKey] = []byte("ca-data")
-
-			test.UpdateResource(t.brokerSecretClient(), brokerSecret)
+			brokerSecret := t.awaitAndSignBrokerSecret()
 
 			var localSecret *corev1.Secret
 
@@ -151,11 +175,7 @@ var _ = Describe("SigningRequestor", func() {
 
 			By("Re-sign the request on the broker")
 
-			brokerSecret.Annotations = map[string]string{certificate.RequestSignedLabelKey: "true"}
-			brokerSecret.Data[certificate.TLSDataKey] = generateTestCertificate()
-			brokerSecret.Data[certificate.CADataKey] = []byte("ca-data2")
-
-			test.UpdateResource(t.brokerSecretClient(), brokerSecret)
+			t.signBrokerSecret(brokerSecret, 24*time.Hour)
 
 			Eventually(func(g Gomega) {
 				localSecret = awaitSecret(t.localSecretClient())
@@ -166,11 +186,25 @@ var _ = Describe("SigningRequestor", func() {
 
 			Eventually(t.signedDataCh).Should(Receive(Equal(localSecret.Data)))
 		})
+
+		Context("but the signed certificate data is invalid", func() {
+			It("should not invoke the OnSigned callback", func() {
+				brokerSecret := awaitSecret(t.brokerSecretClient())
+
+				brokerSecret.Annotations = map[string]string{certificate.RequestSignedLabelKey: "true"}
+				brokerSecret.Data[certificate.TLSDataKey] = []byte("invalid")
+
+				test.UpdateResource(t.brokerSecretClient(), brokerSecret)
+
+				Consistently(t.signedDataCh).ShouldNot(Receive())
+			})
+		})
 	})
 
 	When("the OnSigned callback fails", func() {
 		It("should retry", func() {
 			var onSignedErr atomic.Value
+
 			onSignedErr.Store("mock OnSigned error")
 
 			Expect(t.signingRequestor.Issue(ctx, secretName, ips, func(secretData map[string][]byte) error {
@@ -182,14 +216,7 @@ var _ = Describe("SigningRequestor", func() {
 				return t.onSigned(secretData)
 			})).To(Succeed())
 
-			brokerSecret := awaitSecret(t.brokerSecretClient())
-			brokerSecret.Annotations = map[string]string{certificate.RequestSignedLabelKey: "true"}
-			if brokerSecret.Data == nil {
-				brokerSecret.Data = make(map[string][]byte)
-			}
-			brokerSecret.Data[certificate.TLSDataKey] = generateTestCertificate()
-			brokerSecret.Data[certificate.CADataKey] = []byte("ca-data")
-			test.UpdateResource(t.brokerSecretClient(), brokerSecret)
+			t.awaitAndSignBrokerSecret()
 
 			Eventually(t.signedDataCh).Should(Receive())
 		})
@@ -204,17 +231,13 @@ var _ = Describe("SigningRequestor", func() {
 						certificate.SigningRequestLabelKey: localClusterID,
 					},
 				},
-				Data: map[string][]byte{certificate.PrivateKeyDataKey: {1}},
+				Data: map[string][]byte{
+					certificate.PrivateKeyDataKey: {1},
+					certificate.CSRDataKey:        generateTestCSR(),
+				},
 			})
 
-			brokerSecret := awaitSecret(t.brokerSecretClient())
-			brokerSecret.Annotations = map[string]string{certificate.RequestSignedLabelKey: "true"}
-			if brokerSecret.Data == nil {
-				brokerSecret.Data = make(map[string][]byte)
-			}
-			brokerSecret.Data[certificate.TLSDataKey] = generateTestCertificate()
-			brokerSecret.Data[certificate.CADataKey] = []byte("ca-data")
-			test.UpdateResource(t.brokerSecretClient(), brokerSecret)
+			t.awaitAndSignBrokerSecret()
 
 			Eventually(func(g Gomega) {
 				g.Expect(awaitSecret(t.localSecretClient()).Annotations).To(HaveKey(certificate.RequestSignedLabelKey))
@@ -245,7 +268,7 @@ var _ = Describe("SigningRequestor", func() {
 				Data: map[string][]byte{
 					certificate.PrivateKeyDataKey: []byte("private-data"),
 					certificate.CSRDataKey:        generateTestCSR(),
-					certificate.TLSDataKey:        generateTestCertificate(),
+					certificate.TLSDataKey:        generateTestCertificate(24 * time.Hour),
 					certificate.CADataKey:         []byte("ca-data"),
 				},
 			}))
@@ -284,81 +307,102 @@ var _ = Describe("SigningRequestor", func() {
 			assert.EnsureNoResource(resource.ForDynamic(t.localSecretClient()), secret.Name)
 		})
 	})
-
-	Specify("a nil OnSigned function passed to Issue should return an error", func() {
-		Expect(t.signingRequestor.Issue(ctx, secretName, ips, nil)).NotTo(Succeed())
-	})
-
-	Specify("empty IPs passed to Issue should return an error", func() {
-		Expect(t.signingRequestor.Issue(ctx, secretName, nil, t.onSigned)).NotTo(Succeed())
-	})
-
-	Context("Remove", func() {
-		It("should remove a previously issued request", func() {
-			Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
-
-			secret := awaitSecret(t.localSecretClient())
-			awaitSecret(t.brokerSecretClient())
-
-			Expect(t.signingRequestor.Remove(ctx, secretName)).To(Succeed())
-
-			test.AwaitNoResource(t.localSecretClient(), secret.Name)
-			test.AwaitNoResource(t.brokerSecretClient(), secret.Name)
-		})
-
-		It("should not return an error if not previously issued", func() {
-			Expect(t.signingRequestor.Remove(ctx, secretName)).To(Succeed())
-		})
-	})
-
-	Context("Uninstall", func() {
-		It("should remove all local Secret requests", func() {
-			Expect(t.signingRequestor.Issue(ctx, "secret1", ips, t.onSigned)).To(Succeed())
-			Expect(t.signingRequestor.Issue(ctx, "secret2", ips, t.onSigned)).To(Succeed())
-
-			Eventually(func(g Gomega) {
-				list, err := t.brokerSecretClient().List(context.TODO(), metav1.ListOptions{})
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(list.Items).To(HaveLen(2))
-			}).To(Succeed())
-
-			otherSecret := test.CreateResource(t.brokerSecretClient(), &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ipsec-west",
-					Labels: map[string]string{
-						certificate.SigningRequestLabelKey: "west",
-					},
-				},
-			})
-
-			Expect(t.signingRequestor.Uninstall(context.TODO())).To(Succeed())
-
-			Eventually(func(g Gomega) {
-				list, err := t.localSecretClient().List(context.TODO(), metav1.ListOptions{})
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(list.Items).To(BeEmpty())
-			}).To(Succeed())
-
-			Eventually(func(g Gomega) {
-				list, err := t.brokerSecretClient().List(context.TODO(), metav1.ListOptions{})
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(list.Items).To(HaveLen(1))
-				g.Expect(list.Items[0].GetName()).To(Equal(otherSecret.Name))
-			}).To(Succeed())
-		})
-	})
-})
-
-type testDriver struct {
-	signingRequestor certificate.SigningRequestor
-	localDynClient   *dynamicfake.FakeDynamicClient
-	brokerDynClient  *dynamicfake.FakeDynamicClient
-	onSigned         certificate.OnSignedFn
-	signedDataCh     chan map[string][]byte
 }
 
-func newTestDriver() *testDriver {
-	t := &testDriver{}
+func (t *signingRequestorTestDriver) testExpiration() {
+	BeforeEach(func() {
+		savedCertCheckInterval := certificate.CertCheckInterval
+		certificate.CertCheckInterval = time.Millisecond * 20
+
+		DeferCleanup(func() {
+			certificate.CertCheckInterval = savedCertCheckInterval
+		})
+	})
+
+	JustBeforeEach(func() {
+		Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
+	})
+
+	When("the signed certificate has not expired", func() {
+		It("should not re-issue the request", func() {
+			t.awaitAndSignBrokerSecret()
+
+			Consistently(func(g Gomega) {
+				s := awaitSecret(t.brokerSecretClient())
+				g.Expect(s.Annotations).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, "true"))
+			}).Should(Succeed())
+		})
+	})
+
+	When("the signed certificate expires", func() {
+		It("should re-issue the request to be re-signed", func() {
+			t.signBrokerSecret(awaitSecret(t.brokerSecretClient()), time.Hour)
+
+			Eventually(func(g Gomega) {
+				s := awaitSecret(t.brokerSecretClient())
+				g.Expect(s.Annotations).NotTo(HaveKey(certificate.RequestSignedLabelKey))
+			}).Within(3 * time.Second).Should(Succeed())
+		})
+	})
+}
+
+func (t *signingRequestorTestDriver) testRemove() {
+	It("should remove a previously issued request", func() {
+		Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
+
+		secret := awaitSecret(t.localSecretClient())
+		awaitSecret(t.brokerSecretClient())
+
+		Expect(t.signingRequestor.Remove(ctx, secretName)).To(Succeed())
+
+		test.AwaitNoResource(t.localSecretClient(), secret.Name)
+		test.AwaitNoResource(t.brokerSecretClient(), secret.Name)
+	})
+
+	It("should not return an error if not previously issued", func() {
+		Expect(t.signingRequestor.Remove(ctx, secretName)).To(Succeed())
+	})
+}
+
+func (t *signingRequestorTestDriver) testUninstall() {
+	It("should remove all local Secret requests", func() {
+		Expect(t.signingRequestor.Issue(ctx, "secret1", ips, t.onSigned)).To(Succeed())
+		Expect(t.signingRequestor.Issue(ctx, "secret2", ips, t.onSigned)).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			list, err := t.brokerSecretClient().List(context.TODO(), metav1.ListOptions{})
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(list.Items).To(HaveLen(2))
+		}).To(Succeed())
+
+		otherSecret := test.CreateResource(t.brokerSecretClient(), &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "ipsec-west",
+				Labels: map[string]string{
+					certificate.SigningRequestLabelKey: "west",
+				},
+			},
+		})
+
+		Expect(t.signingRequestor.Uninstall(context.TODO())).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			list, err := t.localSecretClient().List(context.TODO(), metav1.ListOptions{})
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(list.Items).To(BeEmpty())
+		}).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			list, err := t.brokerSecretClient().List(context.TODO(), metav1.ListOptions{})
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(list.Items).To(HaveLen(1))
+			g.Expect(list.Items[0].GetName()).To(Equal(otherSecret.Name))
+		}).To(Succeed())
+	})
+}
+
+func newSigningRequestorTestDriver() *signingRequestorTestDriver {
+	t := &signingRequestorTestDriver{}
 
 	BeforeEach(func() {
 		t.localDynClient = dynamicfake.NewSimpleDynamicClient(scheme.Scheme)
@@ -397,11 +441,25 @@ func newTestDriver() *testDriver {
 	return t
 }
 
-func (t *testDriver) brokerSecretClient() dynamic.ResourceInterface {
+func (t *signingRequestorTestDriver) awaitAndSignBrokerSecret() *corev1.Secret {
+	return t.signBrokerSecret(awaitSecret(t.brokerSecretClient()), certificate.CertValidity)
+}
+
+func (t *signingRequestorTestDriver) signBrokerSecret(brokerSecret *corev1.Secret, validFor time.Duration) *corev1.Secret {
+	brokerSecret.Annotations = map[string]string{certificate.RequestSignedLabelKey: "true"}
+	brokerSecret.Data[certificate.TLSDataKey] = generateTestCertificate(validFor)
+	brokerSecret.Data[certificate.CADataKey] = []byte("ca-data")
+
+	test.UpdateResource(t.brokerSecretClient(), brokerSecret)
+
+	return brokerSecret
+}
+
+func (t *signingRequestorTestDriver) brokerSecretClient() dynamic.ResourceInterface {
 	return secretClient(t.brokerDynClient, brokerNamespace)
 }
 
-func (t *testDriver) localSecretClient() dynamic.ResourceInterface {
+func (t *signingRequestorTestDriver) localSecretClient() dynamic.ResourceInterface {
 	return secretClient(t.localDynClient, localNamespace)
 }
 
@@ -410,8 +468,8 @@ func awaitSecret(client dynamic.ResourceInterface) *corev1.Secret {
 		&corev1.Secret{})
 }
 
-func generateTestCertificate() []byte {
-	_, certPEM, err := certificate.CreatePEMEncodedKeyAndCertificate("test-cert", 365*24*time.Hour)
+func generateTestCertificate(validFor time.Duration) []byte {
+	_, certPEM, err := certificate.CreatePEMEncodedKeyAndCertificate("test-cert", validFor)
 	Expect(err).NotTo(HaveOccurred())
 
 	return certPEM
