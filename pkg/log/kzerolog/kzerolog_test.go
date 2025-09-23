@@ -21,12 +21,15 @@ package kzerolog_test
 import (
 	"errors"
 	"flag"
+	"strconv"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/submariner-io/admiral/pkg/global"
 	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/log/kzerolog"
+	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -46,7 +49,7 @@ func init() {
 
 // We don't explicitly verify anything in this test. The purpose is to invoke the various log levels and visually inspect the output
 // for correctness.
-var _ = When("When zerolog is configured", func() {
+var _ = When("zerolog is configured", func() {
 	It("should output in the desired format", func() {
 		logger := log.Logger{Logger: logf.Log.WithName("test")}
 
@@ -63,5 +66,23 @@ var _ = When("When zerolog is configured", func() {
 		logger.V(log.TRACE).Info("Trace log")
 
 		logger.Logger.Error(nil, "Fatal log", log.FatalKey, "true")
+	})
+
+	Context("and max-verbosity is globally configured for a logger", func() {
+		It("should limit the output to the desired verbosity level", func() {
+			global.Init(&corev1.ConfigMap{
+				Data: map[string]string{
+					"log.TestModule.max-verbosity": strconv.Itoa(log.DEBUG),
+				},
+			})
+
+			logger := log.Logger{Logger: logf.Log.WithName("TestModule")}
+
+			// Should output at DEBUG level.
+			logger.V(log.DEBUG).Info("DEBUG level")
+
+			// Should not output at TRACE level.
+			logger.V(log.TRACE).Info("TRACE level")
+		})
 	})
 })

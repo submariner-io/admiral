@@ -25,11 +25,13 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/submariner-io/admiral/pkg/global"
 	loga "github.com/submariner-io/admiral/pkg/log"
 	"k8s.io/klog/v2"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -87,17 +89,18 @@ func formatCaller(i any) string {
 }
 
 type zeroLogContext struct {
-	zLogger      *zerolog.Logger
-	prefix       string
-	maxVerbosity int
-	skipFrames   atomic.Int32
+	zLogger              *zerolog.Logger
+	prefix               string
+	maxVerbosity         int
+	skipFrames           atomic.Int32
+	initMaxVerbosityOnce sync.Once
 }
 
 func (ctx *zeroLogContext) clone() zeroLogContext {
 	return zeroLogContext{
 		zLogger:      ctx.zLogger,
 		prefix:       ctx.prefix,
-		maxVerbosity: ctx.maxVerbosity,
+		maxVerbosity: ctx.getMaxVerbosity(),
 	}
 }
 
@@ -158,7 +161,7 @@ func (ctx *zeroLogContext) Init(logr.RuntimeInfo) {
 }
 
 func (ctx *zeroLogContext) Info(level int, msg string, kvList ...any) {
-	if level > ctx.maxVerbosity {
+	if level > ctx.getMaxVerbosity() {
 		return
 	}
 
@@ -209,7 +212,7 @@ func (ctx *zeroLogContext) Error(err error, msg string, kvList ...any) {
 }
 
 func (ctx *zeroLogContext) Enabled(level int) bool {
-	return level <= ctx.maxVerbosity
+	return level <= ctx.getMaxVerbosity()
 }
 
 func (ctx *zeroLogContext) WithName(name string) logr.LogSink {
@@ -233,4 +236,12 @@ func (ctx *zeroLogContext) WithValues(kvList ...any) logr.LogSink {
 
 func (ctx *zeroLogContext) SetMaxVerbosity(v int) {
 	ctx.maxVerbosity = v
+}
+
+func (ctx *zeroLogContext) getMaxVerbosity() int {
+	ctx.initMaxVerbosityOnce.Do(func() {
+		ctx.maxVerbosity = global.Get(fmt.Sprintf("log.%s.max-verbosity", ctx.prefix), ctx.maxVerbosity)
+	})
+
+	return ctx.maxVerbosity
 }
