@@ -35,7 +35,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metaapi "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -313,21 +312,21 @@ func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.G
 	Expect(err).To(Succeed())
 
 	msg := fmt.Sprintf("get %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
-	raw, ok := framework.AwaitUntil(msg, func() (any, error) {
+	raw := framework.AwaitUntil(msg, func() (runtime.Unstructured, error) {
 		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(
 			context.TODO(), meta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil, nil //nolint:nilnil // Returning nil value is intentional
 		}
+
 		return obj, err
-	}, func(result any) (bool, string, error) {
+	}, func(result runtime.Unstructured) (bool, string, error) {
 		if result == nil {
 			return false, fmt.Sprintf("%s %q not found", gvr.Resource, meta.GetName()), nil
 		}
 
 		return true, "", nil
-	}).(*unstructured.Unstructured)
-	Expect(ok).To(BeTrue())
+	})
 
 	result := resource.DeepCopyObject()
 	err = scheme.Scheme.Convert(raw, result, nil)
@@ -343,7 +342,7 @@ func (t *testDriver) awaitNoResource(cluster framework.ClusterIndex, gvr *schema
 	Expect(err).To(Succeed())
 
 	msg := fmt.Sprintf("get %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
-	framework.AwaitUntil(msg, func() (any, error) {
+	framework.AwaitUntil(msg, func() (runtime.Unstructured, error) {
 		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(
 			context.TODO(), meta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
@@ -351,7 +350,7 @@ func (t *testDriver) awaitNoResource(cluster framework.ClusterIndex, gvr *schema
 		}
 
 		return obj, err
-	}, func(result any) (bool, string, error) {
+	}, func(result runtime.Unstructured) (bool, string, error) {
 		if result != nil {
 			return false, fmt.Sprintf("%#v still exists", result), nil
 		}
