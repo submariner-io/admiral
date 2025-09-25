@@ -55,12 +55,9 @@ func DeleteAllOf(dynClient dynamic.Interface, gvr *schema.GroupVersionResource, 
 	Expect(client.DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{})).To(Succeed())
 
 	framework.AwaitUntil(fmt.Sprintf("list %s in namespace %q from %q", gvr.Resource, namespace, clusterName),
-		func() (any, error) {
+		func() (*unstructured.UnstructuredList, error) {
 			return client.List(context.TODO(), metav1.ListOptions{})
-		}, func(result any) (bool, string, error) {
-			list, ok := result.(*unstructured.UnstructuredList)
-			Expect(ok).To(BeTrue())
-
+		}, func(list *unstructured.UnstructuredList) (bool, string, error) {
 			if len(list.Items) != 0 {
 				return false, fmt.Sprintf("%d %s still remain", len(list.Items), gvr.Resource), nil
 			}
