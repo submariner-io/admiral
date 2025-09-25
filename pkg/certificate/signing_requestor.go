@@ -54,6 +54,9 @@ const (
 	CSRDataKey             = "csr.pem"
 	TLSDataKey             = "tls.crt"
 	CADataKey              = "ca.crt"
+	// Certificate renewal constants.
+	CertRenewBefore   = 30 * 24 * time.Hour // Renew 30 days before expiration
+	CertCheckInterval = 12 * time.Hour      // Check certificate expiration every 12 hours
 )
 
 type OnSignedFn func(secretData map[string][]byte) error
@@ -74,6 +77,8 @@ type signingRequestorImpl struct {
 	localClusterID     string
 	localSecretClient  dynamic.ResourceInterface
 	brokerSecretClient dynamic.ResourceInterface
+	certRenewBefore    time.Duration
+	certCheckInterval  time.Duration
 
 	// Certificate management fields
 	issuedCerts sync.Map // map[secretName]certInfo
@@ -81,17 +86,20 @@ type signingRequestorImpl struct {
 
 var logger = log.Logger{Logger: logf.Log.WithName("Certificate")}
 
-var (
-	// Certificate renewal constants.
-	CertRenewBefore   = 30 * 24 * time.Hour // Renew 30 days before expiration
-	CertCheckInterval = 12 * time.Hour      // Check certificate expiration every 12 hours
-)
-
 //nolint:gocritic // Ignore hugeParam - minimal performance hit, we modify our copy
 func StartSigningRequestor(syncerConfig broker.SyncerConfig, stopCh <-chan struct{}) (SigningRequestor, error) {
+	return StartSigningRequestorWithOpts(syncerConfig, stopCh, CertCheckInterval, CertRenewBefore)
+}
+
+//nolint:gocritic // Ignore hugeParam - minimal performance hit, we modify our copy
+func StartSigningRequestorWithOpts(syncerConfig broker.SyncerConfig, stopCh <-chan struct{}, certCheckInterval time.Duration,
+	certRenewBefore time.Duration,
+) (SigningRequestor, error) {
 	sr := &signingRequestorImpl{
-		localNamespace: syncerConfig.LocalNamespace,
-		localClusterID: syncerConfig.LocalClusterID,
+		localNamespace:    syncerConfig.LocalNamespace,
+		localClusterID:    syncerConfig.LocalClusterID,
+		certRenewBefore:   certRenewBefore,
+		certCheckInterval: certCheckInterval,
 	}
 
 	syncerConfig.Name = "CertSR"
@@ -342,9 +350,9 @@ func deleteIfPresent(ctx context.Context, client dynamic.ResourceInterface, name
 func (s *signingRequestorImpl) startCertificateRenewalMonitoring(stopCh <-chan struct{}) {
 	go wait.Until(func() {
 		s.checkCertificateRenewal(wait.ContextForChannel(stopCh))
-	}, CertCheckInterval, stopCh)
+	}, s.certCheckInterval, stopCh)
 
-	logger.Infof("Started certificate renewal monitoring with interval %s", CertCheckInterval)
+	logger.Infof("Started certificate renewal monitoring with interval %s", s.certCheckInterval)
 }
 
 // updateCertificateExpiration extracts and stores the certificate expiration time.
@@ -380,7 +388,7 @@ func (s *signingRequestorImpl) checkCertificateRenewal(ctx context.Context) {
 
 		// Check if certificate needs renewal
 		timeUntilExpiry := time.Until(info.expiresAt)
-		if timeUntilExpiry <= CertRenewBefore {
+		if timeUntilExpiry <= s.certRenewBefore {
 			logger.Infof("Certificate %q expires in %s, renewing", secretName, timeUntilExpiry.String())
 
 			// Renew the certificate by clearing the signed annotation.
