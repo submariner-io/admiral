@@ -22,6 +22,7 @@ import (
 	"context"
 
 	"github.com/submariner-io/admiral/pkg/log"
+	"github.com/submariner-io/admiral/pkg/resource"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,7 +42,7 @@ func NewCreateFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper,
 
 //nolint:wrapcheck // This function is effectively a wrapper so no need to wrap errors.
 func (f *createFederator) Distribute(ctx context.Context, obj runtime.Object) error {
-	logger.V(log.LIBTRACE).Infof("In Distribute for %#v", obj)
+	f.logger.V(log.DEBUG).Infof("In Distribute for %s", resource.JSONStringer{Obj: obj})
 
 	toDistribute, resourceClient, err := f.toUnstructured(obj)
 	if err != nil {
@@ -56,7 +57,7 @@ func (f *createFederator) Distribute(ctx context.Context, obj runtime.Object) er
 	}
 
 	if f.eventLogName != "" && err == nil {
-		logger.Infof("%s: Created %s \"%s/%s\" ", f.eventLogName, toDistribute.GetKind(), toDistribute.GetNamespace(),
+		f.logger.Infof("%s: Created %s \"%s/%s\" ", f.eventLogName, toDistribute.GetKind(), toDistribute.GetNamespace(),
 			toDistribute.GetName())
 	}
 

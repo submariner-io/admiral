@@ -193,7 +193,12 @@ type ResourceSyncerConfig struct {
 	// WorkQueueConfig if specified, configures the underlying work queue
 	WorkQueueConfig *workqueue.Config
 
+	// DrainWorkQueueTimeout configures the maximum amount of time to wait for the work queue to drain on shutdown.
+	// Default is 5 seconds.
 	DrainWorkQueueTimeout time.Duration
+
+	// MaxLogVerbosity configures the maximum verbosity for debug logging. Default is 0 which disables debug logging.
+	MaxLogVerbosity int
 }
 
 type resourceSyncer struct {
@@ -289,6 +294,12 @@ func newResourceSyncer(config *ResourceSyncerConfig) (*resourceSyncer, error) {
 		missingNamespaces: map[string]set.Set[string]{},
 	}
 
+	syncer.log.SetMaxVerbosity(config.MaxLogVerbosity)
+
+	if f, ok := syncer.config.Federator.(federate.FederatorExt); ok {
+		f.SetMaxVerbosity(config.MaxLogVerbosity)
+	}
+
 	if syncer.config.Scheme == nil {
 		syncer.config.Scheme = scheme.Scheme
 	}
@@ -320,7 +331,12 @@ func newResourceSyncer(config *ResourceSyncerConfig) (*resourceSyncer, error) {
 		prometheus.MustRegister(syncer.syncCounter)
 	}
 
-	syncer.workQueue = workqueue.NewWithConfig(config.Name, workqueue.DefaultConfigIfNil(syncer.config.WorkQueueConfig))
+	workqueueConfig := workqueue.DefaultConfigIfNil(syncer.config.WorkQueueConfig)
+	if config.MaxLogVerbosity > workqueueConfig.MaxVerbosity {
+		workqueueConfig.MaxVerbosity = config.MaxLogVerbosity
+	}
+
+	syncer.workQueue = workqueue.NewWithConfig(config.Name, workqueueConfig)
 
 	if config.NamespaceInformer != nil {
 		reg, err := config.NamespaceInformer.AddEventHandler(cache.ResourceEventHandlerDetailedFuncs{
@@ -372,7 +388,7 @@ func NewSharedInformer(config *ResourceSyncerConfig) (cache.SharedInformer, erro
 }
 
 func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
-	r.log.V(log.LIBDEBUG).Infof("Starting syncer %q", r.config.Name)
+	r.log.V(log.DEBUG).Infof("Starting syncer %q", r.config.Name)
 
 	r.stopCh = stopCh
 
@@ -386,7 +402,7 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 				r.unregHandler()
 			}
 
-			r.log.V(log.LIBDEBUG).Infof("Syncer %q stopped", r.config.Name)
+			r.log.V(log.DEBUG).Infof("Syncer %q stopped", r.config.Name)
 		}()
 		defer r.shutDownWorkQueue()
 
@@ -398,14 +414,14 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 	}()
 
 	if *r.config.WaitForCacheSync {
-		r.log.V(log.LIBDEBUG).Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
+		r.log.V(log.DEBUG).Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
 
 		_ = cache.WaitForCacheSync(stopCh, r.cachesSynced...)
 	}
 
 	r.workQueue.Run(r.processNextWorkItem)
 
-	r.log.V(log.LIBDEBUG).Infof("Syncer %q started", r.config.Name)
+	r.log.V(log.DEBUG).Infof("Syncer %q started", r.config.Name)
 
 	return nil
 }
@@ -635,7 +651,8 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 		return false, nil
 	}
 
-	r.log.V(log.LIBTRACE).Infof("Syncer %q retrieved %sd resource %q: %#v", r.config.Name, op, resource.GetName(), resource)
+	r.log.V(log.DEBUG).Infof("Syncer %q retrieved %sd resource %q", r.config.Name, op, resource.GetName())
+	r.log.V(log.TRACE).Infof("Syncer %q resource: %s", r.config.Name, resourceUtil.JSONStringer{Obj: resource})
 
 	if !r.shouldSync(resource) {
 		return false, nil
@@ -649,7 +666,7 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 				util.MetadataField, util.LabelsField, OrigNamespaceLabelKey)
 		}
 
-		r.log.V(log.LIBDEBUG).Infof("Syncer %q syncing resource %q", r.config.Name, resource.GetName())
+		r.log.V(log.DEBUG).Infof("Syncer %q syncing resource %q", r.config.Name, resource.GetName())
 
 		err = r.config.Federator.Distribute(context.Background(), resource)
 		if err != nil || r.onSuccessfulSync(resource, transformed, op) {
@@ -667,7 +684,7 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 
 		r.incOpCounter(op)
 
-		r.log.V(log.LIBDEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, resource.GetName())
+		r.log.V(log.DEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, resource.GetName())
 	}
 
 	if requeue && op == Create && !exists {
@@ -679,7 +696,7 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 }
 
 func (r *resourceSyncer) handleDeleted(key string, deletedResource *unstructured.Unstructured) (bool, error) {
-	r.log.V(log.LIBDEBUG).Infof("Syncer %q informed of deleted resource %q", r.config.Name, key)
+	r.log.V(log.DEBUG).Infof("Syncer %q informed of deleted resource %q", r.config.Name, key)
 
 	if !r.shouldSync(deletedResource) {
 		return false, nil
@@ -687,13 +704,13 @@ func (r *resourceSyncer) handleDeleted(key string, deletedResource *unstructured
 
 	resource, transformed, requeue := r.transform(deletedResource, key, Delete)
 	if resource != nil {
-		r.log.V(log.LIBDEBUG).Infof("Syncer %q deleting resource %q: %#v", r.config.Name, resource.GetName(), resource)
+		r.log.V(log.DEBUG).Infof("Syncer %q deleting resource %q", r.config.Name, resource.GetName())
 
 		deleted := true
 
 		err := r.config.Federator.Delete(context.Background(), resource)
 		if apierrors.IsNotFound(err) {
-			r.log.V(log.LIBDEBUG).Infof("Syncer %q: resource %q not found", r.config.Name, resource.GetName())
+			r.log.V(log.DEBUG).Infof("Syncer %q: resource %q not found", r.config.Name, resource.GetName())
 
 			deleted = false
 			err = nil
@@ -706,7 +723,7 @@ func (r *resourceSyncer) handleDeleted(key string, deletedResource *unstructured
 		if deleted {
 			r.incOpCounter(Delete)
 
-			r.log.V(log.LIBDEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, resource.GetName())
+			r.log.V(log.DEBUG).Infof("Syncer %q successfully deleted %q", r.config.Name, resource.GetName())
 		}
 	}
 
@@ -744,7 +761,7 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 
 	transformed, requeue := r.config.Transform(converted, r.workQueue.NumRequeues(key), op)
 	if transformed == nil || reflect.ValueOf(transformed).IsNil() {
-		r.log.V(log.LIBDEBUG).Infof("Syncer %q: transform function returned nil - not syncing - requeue: %v", r.config.Name, requeue)
+		r.log.V(log.DEBUG).Infof("Syncer %q: transform function returned nil - not syncing - requeue: %v", r.config.Name, requeue)
 		return nil, nil, requeue
 	}
 
@@ -767,7 +784,7 @@ func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op
 		converted = r.mustConvert(resource)
 	}
 
-	r.log.V(log.LIBTRACE).Infof("Syncer %q: invoking OnSuccessfulSync function with: %#v", r.config.Name, converted)
+	r.log.V(log.TRACE).Infof("Syncer %q: invoking OnSuccessfulSync function with: %#v", r.config.Name, converted)
 
 	return r.config.OnSuccessfulSync(converted, op)
 }
@@ -802,7 +819,7 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj any) {
 	newResource := r.assertUnstructured(newObj)
 
 	if r.config.ResourcesEquivalent(oldResource, newResource) {
-		r.log.V(log.LIBTRACE).Infof("Syncer %q: objects equivalent on update - not queueing resource\nOLD: %#v\nNEW: %#v",
+		r.log.V(log.TRACE).Infof("Syncer %q: objects equivalent on update - not queueing resource\nOLD: %#v\nNEW: %#v",
 			r.config.Name, oldResource, newResource)
 		return
 	}
@@ -851,14 +868,14 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 		if found {
 			// This is the local -> remote case - only sync local resources w/o the label, assuming any resource with the
 			// label originated from a remote source.
-			r.log.V(log.LIBDEBUG).Infof("Syncer %q: found cluster ID label %q - not syncing resource %q", r.config.Name,
+			r.log.V(log.DEBUG).Infof("Syncer %q: found cluster ID label %q - not syncing resource %q", r.config.Name,
 				clusterID, resource.GetName())
 			return false
 		}
 	case RemoteToLocal:
 		if r.config.LocalClusterID != "" && (!found || clusterID == r.config.LocalClusterID) {
 			// This is the remote -> local case - do not sync local resources
-			r.log.V(log.LIBDEBUG).Infof("Syncer %q: cluster ID label %q not present or matches local cluster ID %q - not syncing resource %q",
+			r.log.V(log.DEBUG).Infof("Syncer %q: cluster ID label %q not present or matches local cluster ID %q - not syncing resource %q",
 				r.config.Name, clusterID, r.config.LocalClusterID, resource.GetName())
 			return false
 		}
@@ -898,7 +915,7 @@ func (r *resourceSyncer) handleMissingNamespace(key, namespace string) {
 func (r *resourceSyncer) handleNamespaceAdded(namespace string) {
 	keys, ok := r.missingNamespaces[namespace]
 	if ok {
-		r.log.V(log.LIBDEBUG).Infof("Syncer %q: namespace %q created - re-queueing %d resources", r.config.Name, namespace, keys.Len())
+		r.log.V(log.DEBUG).Infof("Syncer %q: namespace %q created - re-queueing %d resources", r.config.Name, namespace, keys.Len())
 
 		for _, k := range keys.UnsortedList() {
 			ns, name, _ := cache.SplitMetaNamespaceKey(k)

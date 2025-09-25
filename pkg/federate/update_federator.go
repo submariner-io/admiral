@@ -53,7 +53,7 @@ func NewUpdateStatusFederator(dynClient dynamic.Interface, restMapper meta.RESTM
 }
 
 func (f *updateFederator) Distribute(ctx context.Context, obj runtime.Object) error {
-	logger.V(log.LIBTRACE).Infof("In Distribute for %#v", obj)
+	f.logger.V(log.DEBUG).Infof("In Distribute for %s", resource.JSONStringer{Obj: obj})
 
 	toUpdate, resourceClient, err := f.toUnstructured(obj)
 	if err != nil {

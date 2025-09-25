@@ -27,9 +27,11 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/federate"
+	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type Federator struct {
@@ -39,6 +41,7 @@ type Federator struct {
 	delegator        federate.Federator
 	failOnDistribute error
 	failOnDelete     error
+	logger           log.Logger
 	ResetOnFailure   atomic.Bool
 }
 
@@ -46,10 +49,18 @@ func New() *Federator {
 	f := &Federator{
 		distribute: make(chan *unstructured.Unstructured, 200),
 		delete:     make(chan *unstructured.Unstructured, 200),
+		logger:     log.Logger{Logger: logf.Log.WithName("FakeFederator")},
 	}
 	f.ResetOnFailure.Store(true)
 
 	return f
+}
+
+func (f *Federator) LogEvents(_ string) {
+}
+
+func (f *Federator) SetMaxVerbosity(v int) {
+	f.logger.SetMaxVerbosity(v)
 }
 
 func (f *Federator) SetDelegator(d federate.Federator) {
@@ -74,6 +85,8 @@ func (f *Federator) FailOnDelete(err error) {
 }
 
 func (f *Federator) Distribute(ctx context.Context, obj runtime.Object) error {
+	f.logger.V(log.DEBUG).Infof("In Distribute for %s", resource.JSONStringer{Obj: obj})
+
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
@@ -98,6 +111,8 @@ func (f *Federator) Distribute(ctx context.Context, obj runtime.Object) error {
 }
 
 func (f *Federator) Delete(ctx context.Context, obj runtime.Object) error {
+	f.logger.V(log.DEBUG).Infof("In Delete for %s", resource.JSONStringer{Obj: obj})
+
 	f.lock.Lock()
 	defer f.lock.Unlock()
 

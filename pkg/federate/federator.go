@@ -48,6 +48,7 @@ type FederatorExt interface {
 	Federator
 
 	LogEvents(withName string)
+	SetMaxVerbosity(v int)
 }
 
 type FederatorFuncs struct {
