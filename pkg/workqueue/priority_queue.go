@@ -73,7 +73,7 @@ func (p *PriorityQueue) Push(item any) {
 	index := len(p.items)
 	priority := p.getPriority(item)
 
-	p.logger.V(log.DEBUG).Infof("%s: Push \"%v\" at index %d, priority %d", p.name, item, index, priority)
+	p.logger.V(log.TRACE).Infof("%s: Push \"%v\" at index %d, priority %d", p.name, item, index, priority)
 
 	p.indices[item] = index
 	p.items = append(p.items, itemType{value: item, priority: priority})
@@ -89,7 +89,7 @@ func (p *PriorityQueue) Pop() any {
 	delete(p.indices, item.value)
 	p.priorities.Delete(item.value)
 
-	p.logger.V(log.DEBUG).Infof("%s: Pop \"%v\", size %d", p.name, item.value, len(p.items))
+	p.logger.V(log.TRACE).Infof("%s: Pop \"%v\", size %d", p.name, item.value, len(p.items))
 
 	return item.value
 }

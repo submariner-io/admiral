@@ -156,6 +156,9 @@ type SyncerConfig struct {
 
 	// NamespaceInformer if specified, used to retry local resources that initially failed due to missing namespace.
 	NamespaceInformer cache.SharedInformer
+
+	// MaxLogVerbosity configures the maximum verbosity for debug logging. Default is 0 which disables debug logging.
+	MaxLogVerbosity int
 }
 
 type Syncer struct {
@@ -251,6 +254,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.LocalResyncPeriod,
 			SyncCounter:         syncCounter,
+			MaxLogVerbosity:     config.MaxLogVerbosity,
 		})
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating local resource syncer")
@@ -291,6 +295,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			ResyncPeriod:        rc.BrokerResyncPeriod,
 			SyncCounter:         syncCounter,
 			NamespaceInformer:   config.NamespaceInformer,
+			MaxLogVerbosity:     config.MaxLogVerbosity,
 		})
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating remote resource syncer")

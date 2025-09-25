@@ -59,7 +59,7 @@ func NewCreateOrUpdateFederator(options CreateOrUpdateOptions) FederatorExt {
 }
 
 func (f *createOrUpdateFederator) Distribute(ctx context.Context, obj runtime.Object) error {
-	logger.V(log.LIBTRACE).Infof("In Distribute for %#v", obj)
+	f.logger.V(log.DEBUG).Infof("In Distribute for %s", resource.JSONStringer{Obj: obj})
 
 	toDistribute, resourceClient, err := f.toUnstructured(obj)
 	if err != nil {
@@ -84,10 +84,10 @@ func (f *createOrUpdateFederator) Distribute(ctx context.Context, obj runtime.Ob
 
 	if f.eventLogName != "" {
 		if result == util.OperationResultCreated {
-			logger.Infof("%s: Created %s \"%s/%s\" ", f.eventLogName, newObj.GetKind(), newObj.GetNamespace(),
+			f.logger.Infof("%s: Created %s \"%s/%s\" ", f.eventLogName, newObj.GetKind(), newObj.GetNamespace(),
 				newObj.GetName())
 		} else if result == util.OperationResultUpdated {
-			logger.Infof("%s: Updated %s \"%s/%s\" ", f.eventLogName, newObj.GetKind(), newObj.GetNamespace(),
+			f.logger.Infof("%s: Updated %s \"%s/%s\" ", f.eventLogName, newObj.GetKind(), newObj.GetNamespace(),
 				newObj.GetName())
 		}
 	}

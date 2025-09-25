@@ -119,6 +119,14 @@ func EnsureValidName(name string) string {
 	return strings.Trim(name, "-")
 }
 
+type JSONStringer struct {
+	Obj any
+}
+
+func (s JSONStringer) String() string {
+	return ToJSON(s.Obj)
+}
+
 func ToJSON(o any) string {
 	out, err := json.MarshalIndent(o, "", "  ")
 	utilruntime.Must(err)
