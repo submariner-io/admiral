@@ -21,6 +21,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -165,4 +166,12 @@ func AwaitUpdateAction(f *testing.Fake, resourceType, name string) runtime.Objec
 	}).Should(BeTrue(), "Expected update action for resource %q of type %q", name, resourceType)
 
 	return retObj
+}
+
+func AwaitWatchAction(f *testing.Fake, resourceType string) {
+	Eventually(func(g Gomega) {
+		g.Expect(slices.IndexFunc(f.Actions(), func(a testing.Action) bool {
+			return a.GetVerb() == "watch" && a.GetResource().Resource == resourceType
+		})).To(BeNumerically(">=", 0))
+	}).Should(Succeed(), "Watch action not received")
 }

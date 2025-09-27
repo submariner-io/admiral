@@ -20,15 +20,27 @@ package configmap
 
 import (
 	"context"
+	"os"
+	"slices"
+	"syscall"
 
 	"github.com/pkg/errors"
+	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/resource"
+	"github.com/submariner-io/admiral/pkg/syncer"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // Global defines the name of the ConfigMap shared by all Submariner components.
 const Global = "submariner-global"
+
+var logger = log.Logger{Logger: logf.Log.WithName("ConfigMap")}
 
 // Get retrieves the ConfigMap for the given name or, if not found, returns an empty ConfigMap.
 func Get(ctx context.Context, client resource.Interface[*corev1.ConfigMap], name string) (*corev1.ConfigMap, error) {
@@ -47,4 +59,56 @@ func Get(ctx context.Context, client resource.Interface[*corev1.ConfigMap], name
 	}
 
 	return nil, errors.Wrapf(err, "error retrieving ConfigMap %q", name)
+}
+
+func WatchAndSignalOnChange(ctx context.Context, k8sClient kubernetes.Interface, namespace string, signal syscall.Signal,
+	configMapNames ...string,
+) {
+	cmClient := k8sClient.CoreV1().ConfigMaps(namespace)
+
+	process := func(obj any, op syncer.Operation) {
+		name := resource.MustToMeta(obj).GetName()
+		if !slices.Contains(configMapNames, name) {
+			return
+		}
+
+		logger.Infof("Received %s event for ConfigMap %q - sending signal to self", op, name)
+
+		pid := os.Getpid()
+
+		err := syscall.Kill(pid, signal)
+		if err != nil {
+			logger.Error(err, "Error sending signal")
+		}
+	}
+
+	_, informer := cache.NewInformerWithOptions(cache.InformerOptions{
+		ListerWatcher: &cache.ListWatch{
+			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+				return cmClient.List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
+				return cmClient.Watch(ctx, options)
+			},
+		},
+		ObjectType: &corev1.ConfigMap{},
+		Handler: cache.ResourceEventHandlerDetailedFuncs{
+			AddFunc: func(obj interface{}, isInInitialList bool) {
+				if !isInInitialList {
+					process(obj, syncer.Create)
+				}
+			},
+			UpdateFunc: func(_, newObj interface{}) {
+				process(newObj, syncer.Update)
+			},
+			DeleteFunc: func(obj interface{}) {
+				process(obj, syncer.Delete)
+			},
+		},
+		Transform: resource.TrimManagedFields,
+	})
+
+	go informer.RunWithContext(ctx)
+
+	logger.Infof("Started watcher for ConfigMaps %v", configMapNames)
 }
