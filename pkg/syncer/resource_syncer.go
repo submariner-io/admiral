@@ -226,15 +226,15 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 
 	syncer.store, syncer.informer = cache.NewInformerWithOptions(cache.InformerOptions{
 		ListerWatcher: &cache.ListWatch{
-			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 				options.LabelSelector = config.SourceLabelSelector
 				options.FieldSelector = config.SourceFieldSelector
-				return resourceClient.List(context.TODO(), options)
+				return resourceClient.List(ctx, options)
 			},
-			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
 				options.LabelSelector = config.SourceLabelSelector
 				options.FieldSelector = config.SourceFieldSelector
-				return resourceClient.Watch(context.TODO(), options)
+				return resourceClient.Watch(ctx, options)
 			},
 		},
 		ObjectType:   rawType,
@@ -357,11 +357,11 @@ func NewSharedInformer(config *ResourceSyncerConfig) (cache.SharedInformer, erro
 	resourceClient := config.SourceClient.Resource(*gvr).Namespace(config.SourceNamespace)
 
 	informer := cache.NewSharedIndexInformerWithOptions(&cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return resourceClient.List(context.TODO(), options)
+		ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+			return resourceClient.List(ctx, options)
 		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			return resourceClient.Watch(context.TODO(), options)
+		WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
+			return resourceClient.Watch(ctx, options)
 		},
 	}, rawType, cache.SharedIndexInformerOptions{
 		ResyncPeriod: config.ResyncPeriod,
