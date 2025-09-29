@@ -63,11 +63,13 @@ var _ = Describe("SigningRequestor", func() {
 })
 
 type signingRequestorTestDriver struct {
-	signingRequestor certificate.SigningRequestor
-	localDynClient   *dynamicfake.FakeDynamicClient
-	brokerDynClient  *dynamicfake.FakeDynamicClient
-	onSigned         certificate.OnSignedFn
-	signedDataCh     chan map[string][]byte
+	signingRequestor  certificate.SigningRequestor
+	localDynClient    *dynamicfake.FakeDynamicClient
+	brokerDynClient   *dynamicfake.FakeDynamicClient
+	onSigned          certificate.OnSignedFn
+	signedDataCh      chan map[string][]byte
+	certRenewBefore   time.Duration
+	certCheckInterval time.Duration
 }
 
 func (t *signingRequestorTestDriver) testIssue() {
@@ -311,12 +313,8 @@ func (t *signingRequestorTestDriver) testSigned() {
 
 func (t *signingRequestorTestDriver) testExpiration() {
 	BeforeEach(func() {
-		savedCertCheckInterval := certificate.CertCheckInterval
-		certificate.CertCheckInterval = time.Millisecond * 20
-
-		DeferCleanup(func() {
-			certificate.CertCheckInterval = savedCertCheckInterval
-		})
+		t.certCheckInterval = time.Millisecond * 20
+		t.certRenewBefore = certificate.CertRenewBefore
 	})
 
 	JustBeforeEach(func() {
@@ -423,14 +421,21 @@ func newSigningRequestorTestDriver() *signingRequestorTestDriver {
 
 		stopCh := make(chan struct{})
 
-		t.signingRequestor, err = certificate.StartSigningRequestor(broker.SyncerConfig{
+		syncerConfig := broker.SyncerConfig{
 			LocalNamespace:  localNamespace,
 			LocalClusterID:  localClusterID,
 			LocalClient:     t.localDynClient,
 			BrokerNamespace: brokerNamespace,
 			BrokerClient:    t.brokerDynClient,
 			RestMapper:      test.GetRESTMapperFor(&corev1.Secret{}),
-		}, stopCh)
+		}
+
+		if t.certCheckInterval > 0 {
+			t.signingRequestor, err = certificate.StartSigningRequestorWithOpts(syncerConfig, stopCh, t.certCheckInterval, t.certRenewBefore)
+		} else {
+			t.signingRequestor, err = certificate.StartSigningRequestor(syncerConfig, stopCh)
+		}
+
 		Expect(err).NotTo(HaveOccurred())
 
 		DeferCleanup(func() {

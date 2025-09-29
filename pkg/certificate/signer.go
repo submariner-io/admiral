@@ -51,12 +51,20 @@ const (
 	CAKeyFileName       = "ca.key"
 	CACertFileName      = "ca.crt"
 	CAVersionAnnotation = "submariner.io/ca-version"
+	CACheckInterval     = 24 * time.Hour            // Check CA daily
+	CACertValidity      = 10 * 365 * 24 * time.Hour // 10 years
+	RotateBefore        = 90 * 24 * time.Hour       // 90 days
+	CertValidity        = 365 * 24 * time.Hour      // 1 year
 )
 
 type SignerConfig struct {
-	RestConfig *rest.Config
-	DynClient  dynamic.Interface
-	RestMapper meta.RESTMapper
+	RestConfig      *rest.Config
+	DynClient       dynamic.Interface
+	RestMapper      meta.RESTMapper
+	CACheckInterval time.Duration
+	CACertValidity  time.Duration
+	RotateBefore    time.Duration
+	CertValidity    time.Duration
 }
 
 type Signer interface {
@@ -65,20 +73,30 @@ type Signer interface {
 }
 
 type signerImpl struct {
+	SignerConfig
 	restMapper meta.RESTMapper
 	dynClient  dynamic.Interface
 	syncerMap  sync.Map
 }
 
-var (
-	CACheckInterval = 24 * time.Hour            // Check CA daily
-	CACertValidity  = 10 * 365 * 24 * time.Hour // 10 years
-	RotateBefore    = 90 * 24 * time.Hour       // 90 days
-	CertValidity    = 365 * 24 * time.Hour      // 1 year
-)
-
 func NewSigner(config SignerConfig) (Signer, error) {
-	s := &signerImpl{}
+	s := &signerImpl{SignerConfig: config}
+
+	if s.CACheckInterval == 0 {
+		s.CACheckInterval = CACheckInterval
+	}
+
+	if s.CACertValidity == 0 {
+		s.CACertValidity = CACertValidity
+	}
+
+	if s.RotateBefore == 0 {
+		s.RotateBefore = RotateBefore
+	}
+
+	if s.CertValidity == 0 {
+		s.CertValidity = CertValidity
+	}
 
 	var (
 		err  error
@@ -207,7 +225,7 @@ func (s *signerImpl) signSecret(ctx context.Context, secret *corev1.Secret) erro
 		SerialNumber: serialNumber,
 		Subject:      csr.Subject,
 		NotBefore:    time.Now().Add(-5 * time.Minute),
-		NotAfter:     time.Now().Add(CertValidity),
+		NotAfter:     time.Now().Add(s.CertValidity),
 		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageDataEncipherment,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		IPAddresses:  csr.IPAddresses, // Copy IP SANs from CSR
@@ -284,7 +302,7 @@ func (s *signerImpl) issueCA(ctx context.Context, namespace string) error {
 // signCASecret generates and signs a CA certificate, storing it in the provided secret.
 func (s *signerImpl) signCASecret(secret *corev1.Secret, version string) error {
 	// Generate new CA certificate
-	keyPEM, certPEM, err := CreatePEMEncodedKeyAndCertificate("submariner-ca", CACertValidity)
+	keyPEM, certPEM, err := CreatePEMEncodedKeyAndCertificate("submariner-ca", s.CACertValidity)
 
 	maps.Ensure(&secret.Data)[CAKeyFileName] = keyPEM
 	secret.Data[CACertFileName] = certPEM
@@ -314,7 +332,7 @@ func (s *signerImpl) shouldReissueCA(secret *corev1.Secret, namespace string) (b
 	logger.V(log.TRACE).Info("Existing CA", "namespace", namespace, "expiresIn", timeRemaining.String(),
 		"notAfter", cert.NotAfter.Format(time.RFC3339), "version", currentVersion)
 
-	if timeRemaining < RotateBefore {
+	if timeRemaining < s.RotateBefore {
 		newVersion := s.incrementVersion(currentVersion)
 		logger.Infof("CA is expiring in %s — rotating it for namespace %s from version %s to %s",
 			timeRemaining, namespace, currentVersion, newVersion)
@@ -348,9 +366,9 @@ func (s *signerImpl) startPeriodicCACheck(namespace string, stopCh <-chan struct
 		if err := s.issueCA(wait.ContextForChannel(stopCh), namespace); err != nil {
 			logger.Errorf(err, "Failed periodic CA check for namespace %q", namespace)
 		}
-	}, CACheckInterval, stopCh)
+	}, s.CACheckInterval, stopCh)
 
-	logger.Infof("Started periodic CA check for namespace %s with interval %s", namespace, CACheckInterval)
+	logger.Infof("Started periodic CA check for namespace %s with interval %s", namespace, s.CACheckInterval)
 }
 
 // resignAllCSRs finds all existing CSR secrets and re-signs them with the new CA.

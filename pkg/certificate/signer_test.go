@@ -46,6 +46,7 @@ var _ = Describe("Signer", func() {
 type signerTestDriver struct {
 	dynClient *dynamicfake.FakeDynamicClient
 	signer    certificate.Signer
+	config    certificate.SignerConfig
 }
 
 func (t *signerTestDriver) testStart() {
@@ -165,12 +166,7 @@ func (t *signerTestDriver) testExpiration() {
 	)
 
 	BeforeEach(func() {
-		savedCACheckInterval := certificate.CACheckInterval
-		certificate.CACheckInterval = time.Millisecond * 20
-
-		DeferCleanup(func() {
-			certificate.CACheckInterval = savedCACheckInterval
-		})
+		t.config.CACheckInterval = time.Millisecond * 20
 	})
 
 	JustBeforeEach(func() {
@@ -200,16 +196,8 @@ func (t *signerTestDriver) testExpiration() {
 
 	When("the CA certificate expires", func() {
 		BeforeEach(func() {
-			savedCACertValidity := certificate.CACertValidity
-			certificate.CACertValidity = time.Second * 2
-
-			savedRotateBefore := certificate.RotateBefore
-			certificate.RotateBefore = time.Second
-
-			DeferCleanup(func() {
-				certificate.CACertValidity = savedCACertValidity
-				certificate.RotateBefore = savedRotateBefore
-			})
+			t.config.CACertValidity = time.Second * 2
+			t.config.RotateBefore = time.Second
 		})
 
 		It("should rotate it and re-sign all CSRs", func() {
@@ -220,7 +208,7 @@ func (t *signerTestDriver) testExpiration() {
 				s = resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), certificate.CASecretName), &corev1.Secret{})
 				g.Expect(s.Annotations).NotTo(Equal(caSecret.Annotations))
 				g.Expect(s.Data).NotTo(Equal(caSecret.Data))
-			}).Within(certificate.CACertValidity + time.Second).To(Succeed())
+			}).Within(t.config.CACertValidity + time.Second).To(Succeed())
 		})
 	})
 }
@@ -233,6 +221,12 @@ func newSignerTestDriver() *signerTestDriver {
 	t := &signerTestDriver{}
 
 	BeforeEach(func() {
+		t.config = certificate.SignerConfig{
+			RestConfig: &rest.Config{
+				Host: "https://local",
+			},
+		}
+
 		t.dynClient = dynamicfake.NewSimpleDynamicClient(scheme.Scheme)
 
 		resource.NewDynamicClient = func(_ *rest.Config) (dynamic.Interface, error) {
@@ -243,11 +237,7 @@ func newSignerTestDriver() *signerTestDriver {
 	JustBeforeEach(func() {
 		var err error
 
-		t.signer, err = certificate.NewSigner(certificate.SignerConfig{
-			RestConfig: &rest.Config{
-				Host: "https://local",
-			},
-		})
+		t.signer, err = certificate.NewSigner(t.config)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(t.signer.Start(ctx, brokerNamespace)).To(Succeed())
