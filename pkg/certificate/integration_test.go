@@ -41,20 +41,10 @@ var _ = Describe("Integration", func() {
 			return tS.dynClient, nil
 		}
 
-		savedCertCheckInterval := certificate.CertCheckInterval
-		certificate.CertCheckInterval = time.Millisecond * 200
+		tS.config.CertValidity = time.Second * 3
 
-		savedCertValidity := certificate.CertValidity
-		certificate.CertValidity = time.Second * 3
-
-		savedCertRenewBefore := certificate.CertRenewBefore
-		certificate.CertRenewBefore = time.Second
-
-		DeferCleanup(func() {
-			certificate.CertCheckInterval = savedCertCheckInterval
-			certificate.CertValidity = savedCertValidity
-			certificate.CertRenewBefore = savedCertRenewBefore
-		})
+		tSR.certCheckInterval = time.Millisecond * 200
+		tSR.certRenewBefore = time.Second
 	})
 
 	Specify("an issued request should get signed", func() {
@@ -74,7 +64,7 @@ var _ = Describe("Integration", func() {
 			s := awaitSecret(tSR.localSecretClient())
 			g.Expect(s.Data[certificate.TLSDataKey]).NotTo(Equal(localSecret.Data[certificate.TLSDataKey]))
 			localSecret = s
-		}).Within(certificate.CACertValidity + time.Second).To(Succeed())
+		}).Within(tS.config.CertValidity + time.Second).To(Succeed())
 
 		Eventually(tSR.signedDataCh).Should(Receive(Equal(localSecret.Data)))
 	})

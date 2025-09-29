@@ -23,9 +23,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/submariner-io/admiral/pkg/global"
 	"github.com/submariner-io/admiral/pkg/workqueue"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var customConfig = workqueue.Config{
@@ -34,6 +34,7 @@ var customConfig = workqueue.Config{
 	OverallRateLimiterMaxDelay:   time.Hour,
 	BucketRateLimiterItemsPerSec: 99,
 	BucketRateLimiterMaxBurst:    9999,
+	MaxVerbosity:                 2,
 }
 
 var _ = Describe("DefaultConfigIfNil", func() {
@@ -46,55 +47,43 @@ var _ = Describe("DefaultConfigIfNil", func() {
 	})
 })
 
-var _ = Describe("ConfigFromConfigMap", func() {
+var _ = Describe("ConfigFromGlobal", func() {
 	const keyPrefix = "pods"
 
-	var configMap *corev1.ConfigMap
-
-	BeforeEach(func() {
-		configMap = &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "workqueue-cm",
-				Namespace: "my-ns",
-			},
-			Data: map[string]string{},
-		}
-	})
-
-	mustConfigFromConfigMap := func(cm *corev1.ConfigMap, kp string, dc *workqueue.Config) workqueue.Config {
-		c := workqueue.ConfigFromConfigMap(cm, kp, dc)
+	mustConfigFromGlobal := func(kp string, dc *workqueue.Config) workqueue.Config {
+		c := workqueue.ConfigFromGlobal(kp, dc)
 		Expect(c).ToNot(BeNil())
 
 		return *c
 	}
 
-	When("the specified ConfigMap is nil", func() {
-		Context("and the specified default Config is nil", func() {
-			It("should return nil", func() {
-				Expect(workqueue.ConfigFromConfigMap(nil, keyPrefix, nil)).To(BeNil())
+	When("there's no global config settings", func() {
+		Context("and the specified custom default Config is nil", func() {
+			It("should return a Config the custom settings", func() {
+				Expect(mustConfigFromGlobal(keyPrefix, nil)).To(Equal(workqueue.DefaultConfig()))
 			})
 		})
 
-		Context("and the specified default Config is non-nil", func() {
-			It("should return the default Config", func() {
-				Expect(mustConfigFromConfigMap(nil, keyPrefix, &customConfig)).To(Equal(customConfig))
+		Context("and the specified custom default Config is non-nil", func() {
+			It("should return a Config with the custom settings", func() {
+				Expect(mustConfigFromGlobal(keyPrefix, &customConfig)).To(Equal(customConfig))
 			})
 		})
 	})
 
-	When("the specified ConfigMap is non-nil", func() {
-		It("should return a Config derived from the Data map", func() {
-			configMap.Data = map[string]string{
-				workqueue.ToConfigMapDataKey(keyPrefix, workqueue.ItemRateLimiterBaseDelayKey):     "20ms",
-				workqueue.ToConfigMapDataKey(keyPrefix, workqueue.ItemRateLimiterMaxDelayKey):      "40s",
-				workqueue.ToConfigMapDataKey(keyPrefix, workqueue.OverallRateLimiterMaxDelayKey):   "2h",
-				workqueue.ToConfigMapDataKey(keyPrefix, workqueue.BucketRateLimiterItemsPerSecKey): "99",
-				workqueue.ToConfigMapDataKey(keyPrefix, workqueue.BucketRateLimiterMaxBurstKey):    "999",
-				workqueue.ToConfigMapDataKey(keyPrefix, workqueue.MaxVerbosityKey):                 "2",
-				workqueue.ToConfigMapDataKey("other", workqueue.BucketRateLimiterMaxBurstKey):      "888",
-			}
-
-			Expect(mustConfigFromConfigMap(configMap, keyPrefix, nil)).To(Equal(workqueue.Config{
+	When("all settings are specified in the global config", func() {
+		It("should return a Config with the global settings", func() {
+			global.Init(&corev1.ConfigMap{
+				Data: map[string]string{
+					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.ItemRateLimiterBaseDelayKey):     "20ms",
+					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.ItemRateLimiterMaxDelayKey):      "40s",
+					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.OverallRateLimiterMaxDelayKey):   "2h",
+					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.BucketRateLimiterItemsPerSecKey): "99",
+					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.BucketRateLimiterMaxBurstKey):    "999",
+					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.MaxVerbosityKey):                 "2",
+				},
+			})
+			Expect(mustConfigFromGlobal(keyPrefix, nil)).To(Equal(workqueue.Config{
 				ItemRateLimiterBaseDelay:     time.Millisecond * 20,
 				ItemRateLimiterMaxDelay:      time.Second * 40,
 				OverallRateLimiterMaxDelay:   time.Hour * 2,
@@ -103,69 +92,42 @@ var _ = Describe("ConfigFromConfigMap", func() {
 				MaxVerbosity:                 2,
 			}))
 		})
+	})
 
-		Context("and contains only some settings in the Data map", func() {
-			It("should return a Config with ConfigMap settings merged with the defaults", func() {
-				configMap.Data = map[string]string{
-					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.ItemRateLimiterMaxDelayKey):      "40s",
-					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.OverallRateLimiterMaxDelayKey):   "2h",
+	When("some settings are specified in the global config", func() {
+		BeforeEach(func() {
+			global.Init(&corev1.ConfigMap{
+				Data: map[string]string{
+					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.ItemRateLimiterBaseDelayKey):     "20ms",
 					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.BucketRateLimiterItemsPerSecKey): "99",
-				}
+					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.MaxVerbosityKey):                 "2",
+				},
+			})
+		})
 
-				Expect(mustConfigFromConfigMap(configMap, keyPrefix, &workqueue.Config{
-					ItemRateLimiterBaseDelay:  time.Millisecond * 33,
-					ItemRateLimiterMaxDelay:   time.Minute,
-					BucketRateLimiterMaxBurst: 888,
-				})).To(Equal(workqueue.Config{
-					ItemRateLimiterBaseDelay:     time.Millisecond * 33,
-					ItemRateLimiterMaxDelay:      time.Second * 40,
-					OverallRateLimiterMaxDelay:   time.Hour * 2,
-					BucketRateLimiterItemsPerSec: 99,
-					BucketRateLimiterMaxBurst:    888,
-				}))
-
-				Expect(mustConfigFromConfigMap(configMap, keyPrefix, nil)).To(Equal(workqueue.Config{
-					ItemRateLimiterBaseDelay:     workqueue.DefaultConfig().ItemRateLimiterBaseDelay,
-					ItemRateLimiterMaxDelay:      time.Second * 40,
-					OverallRateLimiterMaxDelay:   time.Hour * 2,
+		Context("and the specified custom default Config is nil", func() {
+			It("should return a Config with the default settings merged with the global settings", func() {
+				Expect(mustConfigFromGlobal(keyPrefix, nil)).To(Equal(workqueue.Config{
+					ItemRateLimiterBaseDelay:     time.Millisecond * 20,
+					ItemRateLimiterMaxDelay:      workqueue.DefaultConfig().ItemRateLimiterMaxDelay,
+					OverallRateLimiterMaxDelay:   workqueue.DefaultConfig().OverallRateLimiterMaxDelay,
 					BucketRateLimiterItemsPerSec: 99,
 					BucketRateLimiterMaxBurst:    workqueue.DefaultConfig().BucketRateLimiterMaxBurst,
-					MaxVerbosity:                 0,
+					MaxVerbosity:                 2,
 				}))
 			})
 		})
 
-		Context("and there's no settings in the Data map", func() {
-			It("should return a Config with the defaults", func() {
-				Expect(mustConfigFromConfigMap(configMap, keyPrefix, nil)).To(Equal(workqueue.DefaultConfig()))
-			})
-		})
-
-		Context("and there's invalid values in the Data map", func() {
-			It("should panic", func() {
-				configMap.Data = map[string]string{
-					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.ItemRateLimiterBaseDelayKey): "2oms",
-				}
-
-				Expect(func() {
-					mustConfigFromConfigMap(configMap, keyPrefix, nil)
-				}).To(Panic())
-
-				configMap.Data = map[string]string{
-					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.OverallRateLimiterMaxDelayKey): "2j",
-				}
-
-				Expect(func() {
-					mustConfigFromConfigMap(configMap, keyPrefix, nil)
-				}).To(Panic())
-
-				configMap.Data = map[string]string{
-					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.BucketRateLimiterItemsPerSecKey): "invalid",
-				}
-
-				Expect(func() {
-					mustConfigFromConfigMap(configMap, keyPrefix, nil)
-				}).To(Panic())
+		Context("and the specified custom default Config is non-nil", func() {
+			It("should return a Config with the custom settings merged with the global settings", func() {
+				Expect(mustConfigFromGlobal(keyPrefix, &customConfig)).To(Equal(workqueue.Config{
+					ItemRateLimiterBaseDelay:     time.Millisecond * 20,
+					ItemRateLimiterMaxDelay:      customConfig.ItemRateLimiterMaxDelay,
+					OverallRateLimiterMaxDelay:   customConfig.OverallRateLimiterMaxDelay,
+					BucketRateLimiterItemsPerSec: 99,
+					BucketRateLimiterMaxBurst:    customConfig.BucketRateLimiterMaxBurst,
+					MaxVerbosity:                 2,
+				}))
 			})
 		})
 	})

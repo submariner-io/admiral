@@ -20,12 +20,9 @@ package workqueue
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"github.com/submariner-io/admiral/pkg/global"
 )
 
 const (
@@ -64,43 +61,19 @@ func DefaultConfigIfNil(c *Config) Config {
 	return *c
 }
 
-func ConfigFromConfigMap(configMap *corev1.ConfigMap, keyPrefix string, defaultConfig *Config) *Config {
-	if configMap == nil {
-		return defaultConfig
-	}
-
+func ConfigFromGlobal(keyPrefix string, defaultConfig *Config) *Config {
 	config := DefaultConfigIfNil(defaultConfig)
-
-	keyPrefix = ToConfigMapDataKey(keyPrefix, "")
-
-	var err error
-
-	for k, v := range configMap.Data {
-		if !strings.HasPrefix(k, keyPrefix) {
-			continue
-		}
-
-		switch strings.Split(k, keyPrefix)[1] {
-		case ItemRateLimiterBaseDelayKey:
-			config.ItemRateLimiterBaseDelay, err = time.ParseDuration(v)
-			utilruntime.Must(err)
-		case ItemRateLimiterMaxDelayKey:
-			config.ItemRateLimiterMaxDelay, err = time.ParseDuration(v)
-			utilruntime.Must(err)
-		case OverallRateLimiterMaxDelayKey:
-			config.OverallRateLimiterMaxDelay, err = time.ParseDuration(v)
-			utilruntime.Must(err)
-		case BucketRateLimiterItemsPerSecKey:
-			config.BucketRateLimiterItemsPerSec, err = strconv.Atoi(v)
-			utilruntime.Must(err)
-		case BucketRateLimiterMaxBurstKey:
-			config.BucketRateLimiterMaxBurst, err = strconv.Atoi(v)
-			utilruntime.Must(err)
-		case MaxVerbosityKey:
-			config.MaxVerbosity, err = strconv.Atoi(v)
-			utilruntime.Must(err)
-		}
-	}
+	config.ItemRateLimiterBaseDelay = global.Get(ToConfigMapDataKey(keyPrefix, ItemRateLimiterBaseDelayKey),
+		config.ItemRateLimiterBaseDelay)
+	config.ItemRateLimiterMaxDelay = global.Get(ToConfigMapDataKey(keyPrefix, ItemRateLimiterMaxDelayKey),
+		config.ItemRateLimiterMaxDelay)
+	config.OverallRateLimiterMaxDelay = global.Get(ToConfigMapDataKey(keyPrefix, OverallRateLimiterMaxDelayKey),
+		config.OverallRateLimiterMaxDelay)
+	config.BucketRateLimiterItemsPerSec = global.Get(ToConfigMapDataKey(keyPrefix, BucketRateLimiterItemsPerSecKey),
+		config.BucketRateLimiterItemsPerSec)
+	config.BucketRateLimiterMaxBurst = global.Get(ToConfigMapDataKey(keyPrefix, BucketRateLimiterMaxBurstKey),
+		config.BucketRateLimiterMaxBurst)
+	config.MaxVerbosity = global.Get(ToConfigMapDataKey(keyPrefix, MaxVerbosityKey), config.MaxVerbosity)
 
 	return &config
 }
