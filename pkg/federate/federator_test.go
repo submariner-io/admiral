@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/fake"
 	"github.com/submariner-io/admiral/pkg/federate"
+	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	assert "github.com/submariner-io/admiral/pkg/test"
@@ -77,6 +78,7 @@ func testCreateOrUpdateFederator() {
 		})
 
 		f.LogEvents("test")
+		f.SetMaxVerbosity(log.TRACE)
 	})
 
 	When("the resource does not already exist in the datastore", func() {

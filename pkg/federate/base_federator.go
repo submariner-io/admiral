@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/submariner-io/admiral/pkg/log"
+	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -39,14 +40,15 @@ type baseFederator struct {
 	targetNamespace    string
 	keepMetadataFields map[string]bool
 	eventLogName       string
+	logger             log.Logger
+	maxVerbosity       int
 }
-
-var logger = log.Logger{Logger: logf.Log.WithName("Federator")}
 
 func newBaseFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, targetNamespace string,
 	keepMetadataField []string,
 ) *baseFederator {
 	b := &baseFederator{
+		logger:          log.Logger{Logger: logf.Log.WithName("Federator")},
 		dynClient:       dynClient,
 		restMapper:      restMapper,
 		targetNamespace: targetNamespace,
@@ -55,6 +57,8 @@ func newBaseFederator(dynClient dynamic.Interface, restMapper meta.RESTMapper, t
 			util.LabelsField: true, util.AnnotationsField: true,
 		},
 	}
+
+	b.logger.SetMaxVerbosity(0)
 
 	for _, field := range keepMetadataField {
 		b.keepMetadataFields[field] = true
@@ -69,12 +73,12 @@ func (f *baseFederator) Delete(ctx context.Context, obj runtime.Object) error {
 		return err
 	}
 
-	logger.V(log.LIBTRACE).Infof("Deleting resource: %#v", toDelete)
+	f.logger.V(log.DEBUG).Infof("Deleting resource: %s", resource.JSONStringer{Obj: toDelete})
 
 	err = resourceClient.Delete(ctx, toDelete.GetName(), metav1.DeleteOptions{})
 
 	if f.eventLogName != "" && err == nil {
-		logger.Infof("%s: Deleted %s \"%s/%s\" ", f.eventLogName, toDelete.GetKind(), toDelete.GetNamespace(), toDelete.GetName())
+		f.logger.Infof("%s: Deleted %s \"%s/%s\" ", f.eventLogName, toDelete.GetKind(), toDelete.GetNamespace(), toDelete.GetName())
 	}
 
 	return err
@@ -82,6 +86,13 @@ func (f *baseFederator) Delete(ctx context.Context, obj runtime.Object) error {
 
 func (f *baseFederator) LogEvents(withName string) {
 	f.eventLogName = withName
+}
+
+func (f *baseFederator) SetMaxVerbosity(v int) {
+	if v > f.maxVerbosity {
+		f.maxVerbosity = v
+		f.logger.SetMaxVerbosity(v)
+	}
 }
 
 func (f *baseFederator) toUnstructured(from runtime.Object) (*unstructured.Unstructured, dynamic.ResourceInterface, error) {

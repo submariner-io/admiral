@@ -235,14 +235,26 @@ func testLocalToRemote() {
 	})
 
 	When("a resource without a cluster ID label is created in the local datastore", func() {
+		BeforeEach(func() {
+			d.config.MaxLogVerbosity = 2
+		})
+
 		d.verifyDistributeOnCreateTest("")
 	})
 
 	When("a resource without a cluster ID label is updated in the local datastore", func() {
+		BeforeEach(func() {
+			d.config.MaxLogVerbosity = 2
+		})
+
 		d.verifyDistributeOnUpdateTest("")
 	})
 
 	When("a resource without a cluster ID label is deleted from the local datastore", func() {
+		BeforeEach(func() {
+			d.config.MaxLogVerbosity = 2
+		})
+
 		d.verifyDistributeOnDeleteTest("")
 	})
 
