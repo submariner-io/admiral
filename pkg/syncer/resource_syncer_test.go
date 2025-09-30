@@ -1303,11 +1303,11 @@ func testWithMissingNamespace() {
 		}
 
 		d.config.NamespaceInformer = cache.NewSharedInformer(&cache.ListWatch{
-			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return namespaceClient().List(context.TODO(), options)
+			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+				return namespaceClient().List(ctx, options)
 			},
-			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return namespaceClient().Watch(context.TODO(), options)
+			WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
+				return namespaceClient().Watch(ctx, options)
 			},
 		}, resourceutils.MustToUnstructured(&corev1.Namespace{}), 0)
 	})
