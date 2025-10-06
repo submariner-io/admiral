@@ -29,6 +29,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/util"
+	"github.com/submariner-io/admiral/pkg/workqueue"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -84,6 +85,12 @@ type ResourceConfig struct {
 
 	// SourceFieldSelector optional selector to restrict the resources to watch by their fields.
 	SourceFieldSelector string
+
+	// WorkQueueConfig if specified, configures the underlying work queue
+	WorkQueueConfig *workqueue.Config
+
+	// MaxLogVerbosity configures the maximum verbosity for debug logging. Default is 0 which disables debug logging.
+	MaxLogVerbosity int
 }
 
 type Config struct {
@@ -138,7 +145,8 @@ func New(config *Config) (Interface, error) {
 
 	watcher := &resourceWatcher{syncers: make(map[reflect.Type]syncer.Interface)}
 
-	for _, rc := range config.ResourceConfigs {
+	for i := range config.ResourceConfigs {
+		rc := &config.ResourceConfigs[i]
 		handler := rc.Handler
 		s, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
 			Name:                rc.Name,
@@ -167,6 +175,8 @@ func New(config *Config) (Interface, error) {
 			WaitForCacheSync:    config.WaitForCacheSync,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        config.ResyncPeriod,
+			WorkQueueConfig:     rc.WorkQueueConfig,
+			MaxLogVerbosity:     rc.MaxLogVerbosity,
 		})
 		if err != nil {
 			return nil, errors.Wrapf(err, "error creating resource syncer %q", rc.Name)
