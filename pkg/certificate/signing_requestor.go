@@ -143,10 +143,14 @@ func StartSigningRequestorWithOpts(syncerConfig broker.SyncerConfig, stopCh <-ch
 		},
 	}
 
+	logger.Info("****Creating broker syncer: local %q", syncerConfig.LocalNamespace)
+
 	brokerSyncer, err := broker.NewSyncer(syncerConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating broker syncer")
 	}
+
+	logger.Info("****Starting broker syncer")
 
 	if err := brokerSyncer.Start(stopCh); err != nil {
 		return nil, errors.Wrap(err, "error starting broker syncer")
@@ -183,12 +187,16 @@ func StartSigningRequestorWithOpts(syncerConfig broker.SyncerConfig, stopCh <-ch
 		return nil, errors.Wrap(err, "error creating secret watcher")
 	}
 
+	logger.Info("****Starting localSecretWatcher")
+
 	if err := localSecretWatcher.Start(stopCh); err != nil {
 		return nil, errors.Wrap(err, "error starting secret watcher")
 	}
 
 	// Start certificate renewal monitoring
 	sr.startCertificateRenewalMonitoring(stopCh)
+
+	logger.Info("****Started SigningRequestor")
 
 	return sr, nil
 }

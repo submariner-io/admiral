@@ -187,6 +187,8 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 		config.Name = "BrokerSyncer"
 	}
 
+	logger.Infof("***%q BrokerNamespace: %s", config.Name, config.BrokerNamespace)
+
 	brokerSyncer := &Syncer{
 		syncers:         []syncer.Interface{},
 		localSyncers:    make(map[reflect.Type]syncer.Interface),
@@ -308,6 +310,8 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 }
 
 func (c *SyncerConfig) createBrokerClient() error {
+	logger.Infof("***%q createBrokerClient", c.Name)
+
 	_, gvr, e := util.ToUnstructuredResource(c.ResourceConfigs[0].BrokerResourceType, c.RestMapper)
 	if e != nil {
 		return e //nolint:wrapcheck // OK to return the error as is.
@@ -325,10 +329,14 @@ func (c *SyncerConfig) createBrokerClient() error {
 			return e
 		}
 
+		logger.Infof("***BrokerSpecification: %s", resource.ToJSON(spec))
+
 		c.BrokerNamespace = spec.RemoteNamespace
 
 		// If we have a secret, try to use it
 		if spec.Secret != "" {
+			logger.Infof("***GetAuthorizedRestConfigFromFiles with Secrte: %s", resource.ToJSON(spec.Secret))
+
 			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromFiles(spec.APIServer,
 				filepath.Join(SecretPath(spec.Secret), "token"), filepath.Join(SecretPath(spec.Secret), "ca.crt"),
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
@@ -339,6 +347,8 @@ func (c *SyncerConfig) createBrokerClient() error {
 
 		// If we encountered an error, or we don't have a secret, use the values in the spec
 		if spec.Secret == "" || err != nil {
+			logger.Infof("***Else GetAuthorizedRestConfigFromData ")
+
 			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(spec.APIServer, spec.APIServerToken, spec.Ca,
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 		}
@@ -379,6 +389,8 @@ func (c *SyncerConfig) ensureClients() error {
 			return err
 		}
 	}
+
+	logger.Infof("***%q ensureClients success", c.Name)
 
 	return nil
 }

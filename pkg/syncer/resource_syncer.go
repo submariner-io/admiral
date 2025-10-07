@@ -388,7 +388,7 @@ func NewSharedInformer(config *ResourceSyncerConfig) (cache.SharedInformer, erro
 }
 
 func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
-	r.log.V(log.DEBUG).Infof("Starting syncer %q", r.config.Name)
+	r.log.Infof("Starting syncer %q: NS %q", r.config.Name, r.config.SourceNamespace)
 
 	r.stopCh = stopCh
 
@@ -402,7 +402,7 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 				r.unregHandler()
 			}
 
-			r.log.V(log.DEBUG).Infof("Syncer %q stopped", r.config.Name)
+			r.log.Infof("Syncer %q stopped", r.config.Name)
 		}()
 		defer r.shutDownWorkQueue()
 
@@ -414,14 +414,14 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 	}()
 
 	if *r.config.WaitForCacheSync {
-		r.log.V(log.DEBUG).Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
+		r.log.Infof("Syncer %q waiting for informer cache to sync", r.config.Name)
 
 		_ = cache.WaitForCacheSync(stopCh, r.cachesSynced...)
 	}
 
 	r.workQueue.Run(r.processNextWorkItem)
 
-	r.log.V(log.DEBUG).Infof("Syncer %q started", r.config.Name)
+	r.log.Infof("Syncer %q started", r.config.Name)
 
 	return nil
 }
