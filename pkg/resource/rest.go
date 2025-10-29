@@ -29,12 +29,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/remotecommand"
 )
 
 var NewDynamicClient = func(config *rest.Config) (dynamic.Interface, error) {
 	c, err := dynamic.NewForConfig(config)
 	return c, err //nolint:wrapcheck // No need to wrap
 }
+
+var NewSPDYExecutor = remotecommand.NewSPDYExecutor
 
 func GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig,
 	gvr schema.GroupVersionResource, namespace string,
