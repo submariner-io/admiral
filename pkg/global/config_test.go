@@ -29,17 +29,26 @@ import (
 )
 
 const (
-	stringKey            = "string-key"
-	intKey               = "int-key"
-	boolKey              = "bool-key"
-	durationKey          = "duration-key"
-	nonExistent          = "non-existent"
-	stringValue          = "string-value"
-	defaultStringValue   = "default"
-	intValue             = 10
-	defaultIntValue      = 99
-	durationValue        = time.Hour * 2
-	defaultDurationValue = time.Minute * 30
+	stringKey                   = "string-key"
+	intKey                      = "int-key"
+	uint16Key                   = "uint16-key"
+	uint32Key                   = "uint32-key"
+	uint64Key                   = "uint64-key"
+	boolKey                     = "bool-key"
+	durationKey                 = "duration-key"
+	nonExistent                 = "non-existent"
+	stringValue                 = "string-value"
+	defaultStringValue          = "default"
+	intValue                    = 10
+	defaultIntValue             = 99
+	uint16Value          uint16 = 11
+	defaultUint16Value   uint16 = 98
+	uint32Value          uint32 = 4294967295
+	defaultUint32Value   uint32 = 4294967290
+	uint64Value          uint64 = 18446744073709551615
+	defaultUint64Value   uint64 = 18446744073709551610
+	durationValue               = time.Hour * 2
+	defaultDurationValue        = time.Minute * 30
 )
 
 var _ = Describe("Global", func() {
@@ -47,6 +56,9 @@ var _ = Describe("Global", func() {
 		Data: map[string]string{
 			stringKey:   stringValue,
 			intKey:      strconv.Itoa(intValue),
+			uint16Key:   strconv.FormatUint(uint64(uint16Value), 10),
+			uint32Key:   strconv.FormatUint(uint64(uint32Value), 10),
+			uint64Key:   strconv.FormatUint(uint64Value, 10),
 			boolKey:     strconv.FormatBool(true),
 			durationKey: durationValue.String(),
 		},
@@ -58,6 +70,7 @@ var _ = Describe("Global", func() {
 				global.Init(configMaps...)
 			})
 
+			//nolint:dupl // Not actual duplicate
 			Context("Get should return the value for an existing", func() {
 				Specify("string", func() {
 					v := global.Get(stringKey, defaultStringValue)
@@ -67,6 +80,21 @@ var _ = Describe("Global", func() {
 				Specify("int", func() {
 					v := global.Get(intKey, defaultIntValue)
 					Expect(v).To(Equal(intValue))
+				})
+
+				Specify("uint16", func() {
+					v := global.Get(uint16Key, defaultUint16Value)
+					Expect(v).To(Equal(uint16Value))
+				})
+
+				Specify("uint32", func() {
+					v := global.Get(uint32Key, defaultUint32Value)
+					Expect(v).To(Equal(uint32Value))
+				})
+
+				Specify("uint64", func() {
+					v := global.Get(uint64Key, defaultUint64Value)
+					Expect(v).To(Equal(uint64Value))
 				})
 
 				Specify("bool", func() {
@@ -80,6 +108,7 @@ var _ = Describe("Global", func() {
 				})
 			})
 
+			//nolint:dupl // Not actual duplicate
 			Context("Get should return the default for a non-existent", func() {
 				Specify("string", func() {
 					v := global.Get(nonExistent, defaultStringValue)
@@ -89,6 +118,21 @@ var _ = Describe("Global", func() {
 				Specify("int", func() {
 					v := global.Get(nonExistent, defaultIntValue)
 					Expect(v).To(Equal(defaultIntValue))
+				})
+
+				Specify("uint16", func() {
+					v := global.Get(nonExistent, defaultUint16Value)
+					Expect(v).To(Equal(defaultUint16Value))
+				})
+
+				Specify("uint32", func() {
+					v := global.Get(nonExistent, defaultUint32Value)
+					Expect(v).To(Equal(defaultUint32Value))
+				})
+
+				Specify("uint64", func() {
+					v := global.Get(nonExistent, defaultUint64Value)
+					Expect(v).To(Equal(defaultUint64Value))
 				})
 
 				Specify("bool", func() {
