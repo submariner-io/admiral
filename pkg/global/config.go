@@ -29,7 +29,7 @@ import (
 )
 
 type ValueType interface {
-	string | int | bool | time.Duration
+	string | int | uint16 | uint32 | uint64 | bool | time.Duration
 }
 
 var (
@@ -69,6 +69,16 @@ func Get[T ValueType](name string, defaultValue T) T {
 		returnValue = v
 	case int:
 		returnValue, err = strconv.Atoi(existing)
+	case uint16:
+		var u64 uint64
+		u64, err = strconv.ParseUint(existing, 10, 16)
+		returnValue = uint16(u64)
+	case uint32:
+		var u64 uint64
+		u64, err = strconv.ParseUint(existing, 10, 32)
+		returnValue = uint32(u64)
+	case uint64:
+		returnValue, err = strconv.ParseUint(existing, 10, 64)
 	case bool:
 		returnValue, err = strconv.ParseBool(existing)
 	case time.Duration:
