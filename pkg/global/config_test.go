@@ -29,13 +29,13 @@ import (
 )
 
 const (
-	stringKey                   = "string-key"
-	intKey                      = "int-key"
-	uint16Key                   = "uint16-key"
-	uint32Key                   = "uint32-key"
-	uint64Key                   = "uint64-key"
-	boolKey                     = "bool-key"
-	durationKey                 = "duration-key"
+	stringKey                   = "string"
+	intKey                      = "int"
+	uint16Key                   = "uint16"
+	uint32Key                   = "uint32"
+	uint64Key                   = "uint64"
+	boolKey                     = "bool"
+	durationKey                 = "duration"
 	nonExistent                 = "non-existent"
 	stringValue                 = "string-value"
 	defaultStringValue          = "default"
@@ -47,9 +47,18 @@ const (
 	defaultUint32Value   uint32 = 4294967290
 	uint64Value          uint64 = 18446744073709551615
 	defaultUint64Value   uint64 = 18446744073709551610
+	boolValue                   = true
+	defaultBoolValue            = false
 	durationValue               = time.Hour * 2
 	defaultDurationValue        = time.Minute * 30
 )
+
+func runTestCase[T global.ValueType](name, key string, defaultValue, expectedValue T) {
+	Specify(name, func() {
+		v := global.Get(key, defaultValue)
+		Expect(v).To(Equal(expectedValue))
+	})
+}
 
 var _ = Describe("Global", func() {
 	configMap := &corev1.ConfigMap{
@@ -59,7 +68,7 @@ var _ = Describe("Global", func() {
 			uint16Key:   strconv.FormatUint(uint64(uint16Value), 10),
 			uint32Key:   strconv.FormatUint(uint64(uint32Value), 10),
 			uint64Key:   strconv.FormatUint(uint64Value, 10),
-			boolKey:     strconv.FormatBool(true),
+			boolKey:     strconv.FormatBool(boolValue),
 			durationKey: durationValue.String(),
 		},
 	}
@@ -70,110 +79,49 @@ var _ = Describe("Global", func() {
 				global.Init(configMaps...)
 			})
 
-			//nolint:dupl // Not actual duplicate
 			Context("Get should return the value for an existing", func() {
-				Specify("string", func() {
-					v := global.Get(stringKey, defaultStringValue)
-					Expect(v).To(Equal(stringValue))
-				})
-
-				Specify("int", func() {
-					v := global.Get(intKey, defaultIntValue)
-					Expect(v).To(Equal(intValue))
-				})
-
-				Specify("uint16", func() {
-					v := global.Get(uint16Key, defaultUint16Value)
-					Expect(v).To(Equal(uint16Value))
-				})
-
-				Specify("uint32", func() {
-					v := global.Get(uint32Key, defaultUint32Value)
-					Expect(v).To(Equal(uint32Value))
-				})
-
-				Specify("uint64", func() {
-					v := global.Get(uint64Key, defaultUint64Value)
-					Expect(v).To(Equal(uint64Value))
-				})
-
-				Specify("bool", func() {
-					v := global.Get(boolKey, false)
-					Expect(v).To(BeTrue())
-				})
-
-				Specify("time.Duration", func() {
-					v := global.Get(durationKey, defaultDurationValue)
-					Expect(v).To(Equal(durationValue))
-				})
+				runTestCase(stringKey, stringKey, defaultStringValue, stringValue)
+				runTestCase(intKey, intKey, defaultIntValue, intValue)
+				runTestCase(uint16Key, uint16Key, defaultUint16Value, uint16Value)
+				runTestCase(uint32Key, uint32Key, defaultUint32Value, uint32Value)
+				runTestCase(uint64Key, uint64Key, defaultUint64Value, uint64Value)
+				runTestCase(boolKey, boolKey, defaultBoolValue, boolValue)
+				runTestCase(durationKey, durationKey, defaultDurationValue, durationValue)
 			})
 
-			//nolint:dupl // Not actual duplicate
 			Context("Get should return the default for a non-existent", func() {
-				Specify("string", func() {
-					v := global.Get(nonExistent, defaultStringValue)
-					Expect(v).To(Equal(defaultStringValue))
-				})
-
-				Specify("int", func() {
-					v := global.Get(nonExistent, defaultIntValue)
-					Expect(v).To(Equal(defaultIntValue))
-				})
-
-				Specify("uint16", func() {
-					v := global.Get(nonExistent, defaultUint16Value)
-					Expect(v).To(Equal(defaultUint16Value))
-				})
-
-				Specify("uint32", func() {
-					v := global.Get(nonExistent, defaultUint32Value)
-					Expect(v).To(Equal(defaultUint32Value))
-				})
-
-				Specify("uint64", func() {
-					v := global.Get(nonExistent, defaultUint64Value)
-					Expect(v).To(Equal(defaultUint64Value))
-				})
-
-				Specify("bool", func() {
-					v := global.Get(nonExistent, true)
-					Expect(v).To(BeTrue())
-				})
-
-				Specify("time.Duration", func() {
-					v := global.Get(nonExistent, defaultDurationValue)
-					Expect(v).To(Equal(defaultDurationValue))
-				})
+				runTestCase(stringKey, nonExistent, defaultStringValue, defaultStringValue)
+				runTestCase(intKey, nonExistent, defaultIntValue, defaultIntValue)
+				runTestCase(uint16Key, nonExistent, defaultUint16Value, defaultUint16Value)
+				runTestCase(uint32Key, nonExistent, defaultUint32Value, defaultUint32Value)
+				runTestCase(uint64Key, nonExistent, defaultUint64Value, defaultUint64Value)
+				runTestCase(boolKey, nonExistent, defaultBoolValue, defaultBoolValue)
+				runTestCase(durationKey, nonExistent, defaultDurationValue, defaultDurationValue)
 			})
 		},
 		Entry("initialized with first ConfigMap nil", nil, configMap),
 		Entry("initialized with last ConfigMap nil", configMap, nil),
 	)
 
-	Context("Get should return the default for an invalid", func() {
+	Context("Get should return the default for an invalid value", func() {
 		BeforeEach(func() {
 			global.Init(&corev1.ConfigMap{
 				Data: map[string]string{
 					intKey:      "invalid",
+					uint16Key:   "invalid",
+					uint32Key:   "invalid",
+					uint64Key:   "invalid",
 					boolKey:     "invalid",
 					durationKey: "invalid",
 				},
 			})
 		})
 
-		Specify("int", func() {
-			v := global.Get(intKey, defaultIntValue)
-			Expect(v).To(Equal(defaultIntValue))
-		})
-
-		Specify("bool", func() {
-			v := global.Get(boolKey, true)
-			Expect(v).To(BeTrue())
-		})
-
-		Specify("time.Duration", func() {
-			v := global.Get(durationKey, defaultDurationValue)
-			Expect(v).To(Equal(defaultDurationValue))
-		})
+		runTestCase(intKey, intKey, defaultIntValue, defaultIntValue)
+		runTestCase(uint16Key, uint16Key, defaultUint16Value, defaultUint16Value)
+		runTestCase(uint32Key, uint32Key, defaultUint32Value, defaultUint32Value)
+		runTestCase(uint64Key, uint64Key, defaultUint64Value, defaultUint64Value)
+		runTestCase(boolKey, boolKey, defaultBoolValue, defaultBoolValue)
+		runTestCase(durationKey, durationKey, defaultDurationValue, defaultDurationValue)
 	})
 })
