@@ -186,6 +186,7 @@ func (s *signerImpl) Stop(namespace string) {
 func (s *signerImpl) signSecret(ctx context.Context, secret *corev1.Secret) error {
 	// Get CA secret using dynamic client
 	caSecretClient := s.dynClient.Resource(corev1.SchemeGroupVersion.WithResource("secrets")).Namespace(secret.Namespace)
+
 	caSecretUnstructured, err := caSecretClient.Get(ctx, CASecretName, metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrapf(err, "failed to get CA secret for signing secret %q", secret.Name)
@@ -265,6 +266,7 @@ func (s *signerImpl) issueCA(ctx context.Context, namespace string) error {
 		MutateOnCreate: func(obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 			secret := resource.MustFromUnstructured(obj, &corev1.Secret{})
 			err := s.signCASecret(secret, secret.Annotations[CAVersionAnnotation])
+
 			return resource.MustToUnstructured(secret), err
 		},
 		MutateOnUpdate: func(obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
@@ -277,6 +279,7 @@ func (s *signerImpl) issueCA(ctx context.Context, namespace string) error {
 			}
 
 			err := s.signCASecret(existing, newVersion)
+
 			return resource.MustToUnstructured(existing), err
 		},
 	})
@@ -394,7 +397,6 @@ func (s *signerImpl) resignAllCSRs(ctx context.Context, namespace string) error 
 
 				return existing, nil
 			})
-
 		if err != nil {
 			logger.Errorf(err, "Failed to mark CSR secret \"%s/%s\" for re-signing", namespace, item.GetName())
 		} else {

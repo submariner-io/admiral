@@ -85,35 +85,41 @@ func (f *FailingReactor) react(action testing.Action) (bool, runtime.Object, err
 func (f *FailingReactor) SetResetOnFailure(v bool) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
+
 	f.resetOnFailure = v
 }
 
 func (f *FailingReactor) SetFailOnCreate(err error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
+
 	f.failOnCreate = err
 }
 
 func (f *FailingReactor) SetFailOnUpdate(err error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
+
 	f.failOnUpdate = err
 }
 
 func (f *FailingReactor) SetFailOnDelete(err error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
+
 	f.failOnDelete = err
 }
 
 func (f *FailingReactor) SetFailOnGet(err error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
+
 	f.failOnGet = err
 }
 
 func (f *FailingReactor) SetFailOnList(err error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
+
 	f.failOnList = err
 }

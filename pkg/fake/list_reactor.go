@@ -57,6 +57,7 @@ func (r *filteringListReactor) react(action testing.Action) (bool, runtime.Objec
 
 		for i := range objs {
 			objMeta := resource.MustToMeta(objs[i])
+
 			fieldSet := fields.Set{"metadata.namespace": objMeta.GetNamespace(), "metadata.name": objMeta.GetName()}
 			if listAction.ListRestrictions.Fields.Matches(fieldSet) {
 				filtered = append(filtered, objs[i])

@@ -70,8 +70,11 @@ linters:
         - -QF1003
         # Allow unnecessary embedded field selectors
         - -QF1008
-    wsl:
-      allow-trailing-comment: true
+    wsl_v5:
+      disable:
+        - decl
+        - expr
+        - send
   enable:
     - asasalint
     - asciicheck
@@ -179,7 +182,7 @@ linters:
     - wastedassign
     - whitespace
     - wrapcheck
-    - wsl
+    - wsl_v5
     # - zerologlint # We use zerolog indirectly so this isn't needed
   exclusions:
     generated: lax
@@ -189,15 +192,6 @@ linters:
       - legacy
       - std-error-handling
     rules:
-      # Separating explicit var declarations by blank lines seems excessive.
-      - linters:
-          - wsl
-        text: declarations should never be cuddled
-      # This rule incorrectly flags code where two logically-related lines are
-      # followed by an if conditional to check their err return.
-      - linters:
-          - wsl
-        text: only one cuddle assignment allowed before if statement
       # Ignore pointer bytes in struct alignment tests (this is a very
       # minor optimisation)
       - linters:

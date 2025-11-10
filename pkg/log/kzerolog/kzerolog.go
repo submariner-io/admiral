@@ -121,7 +121,8 @@ func (ctx *zeroLogContext) calculateSkipFrames() int {
 		return int(skipFrames)
 	}
 
-	pc := make([]uintptr, 10)   // this should be enough frames to collect
+	pc := make([]uintptr, 10) // this should be enough frames to collect
+
 	n := runtime.Callers(2, pc) // skip runtime.Callers and this function
 	if n == 0 {
 		return 0

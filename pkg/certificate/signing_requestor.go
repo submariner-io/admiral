@@ -235,6 +235,7 @@ func (s *signingRequestorImpl) Issue(ctx context.Context, name string, ips []str
 			existingIPs, err := ExtractIPsFromCertificateRequestPEM(existing.Data[CSRDataKey])
 			if err != nil {
 				logger.Warningf("Failed to parse existing CSR for secret %q: %v", existing.Name, err)
+
 				needsNewCSR = true
 			} else {
 				// Compare IP lists

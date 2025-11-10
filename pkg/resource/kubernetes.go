@@ -135,21 +135,25 @@ func ForControllerClient[T controllerClient.Object](client controllerClient.Clie
 		GetFunc: func(ctx context.Context, name string, _ metav1.GetOptions) (T, error) {
 			obj := objType.DeepCopyObject().(T)
 			err := client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, obj)
+
 			return obj, err
 		},
 		CreateFunc: func(ctx context.Context, obj T, _ metav1.CreateOptions) (T, error) {
 			obj = obj.DeepCopyObject().(T)
 			err := client.Create(ctx, obj)
+
 			return obj, err
 		},
 		UpdateFunc: func(ctx context.Context, obj T, _ metav1.UpdateOptions) (T, error) {
 			obj = obj.DeepCopyObject().(T)
 			err := client.Update(ctx, obj)
+
 			return obj, err
 		},
 		UpdateStatusFunc: func(ctx context.Context, obj T, _ metav1.UpdateOptions) (T, error) {
 			obj = obj.DeepCopyObject().(T)
 			err := client.Status().Update(ctx, obj)
+
 			return obj, err
 		},
 		DeleteFunc: func(ctx context.Context, name string, _ metav1.DeleteOptions) error {
