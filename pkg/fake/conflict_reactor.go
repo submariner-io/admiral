@@ -44,6 +44,7 @@ func ConflictOnUpdateReactor(f *testing.Fake, resource string) {
 			obj, err := propagate(action, reactors)
 			if obj != nil {
 				m, _ := meta.Accessor(obj)
+
 				_, ok := state.Load(m.GetName())
 				if ok {
 					m.SetResourceVersion(resourceVersion)

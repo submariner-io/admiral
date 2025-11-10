@@ -42,6 +42,7 @@ func ToUnstructuredUsingScheme(from runtime.Object, usingScheme *runtime.Scheme)
 		return f.DeepCopy(), nil
 	default:
 		to := &unstructured.Unstructured{}
+
 		err := usingScheme.Convert(from, to, nil)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error converting %#v to unstructured.Unstructured", from)

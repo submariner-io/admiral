@@ -212,6 +212,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 
 	for i := range config.ResourceConfigs {
 		rc := &config.ResourceConfigs[i]
+
 		var syncCounter *prometheus.GaugeVec
 		if rc.SyncCounterOpts != nil {
 			syncCounter = prometheus.NewGaugeVec(

@@ -148,6 +148,7 @@ func New(config *Config) (Interface, error) {
 	for i := range config.ResourceConfigs {
 		rc := &config.ResourceConfigs[i]
 		handler := rc.Handler
+
 		s, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
 			Name:                rc.Name,
 			SourceClient:        client,

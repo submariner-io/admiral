@@ -234,11 +234,13 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 				options.LabelSelector = config.SourceLabelSelector
 				options.FieldSelector = config.SourceFieldSelector
+
 				return resourceClient.List(ctx, options)
 			},
 			WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
 				options.LabelSelector = config.SourceLabelSelector
 				options.FieldSelector = config.SourceFieldSelector
+
 				return resourceClient.Watch(ctx, options)
 			},
 		},
@@ -559,6 +561,7 @@ func (r *resourceSyncer) doReconcile(resourceLister func() []runtime.Object) {
 		if ns == "" {
 			r.log.Warningf("Unable to reconcile resource %s/%s - cannot determine originating namespace",
 				metaObj.GetNamespace(), metaObj.GetName())
+
 			continue
 		}
 
@@ -821,6 +824,7 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj any) {
 	if r.config.ResourcesEquivalent(oldResource, newResource) {
 		r.log.V(log.TRACE).Infof("Syncer %q: objects equivalent on update - not queueing resource\nOLD: %#v\nNEW: %#v",
 			r.config.Name, oldResource, newResource)
+
 		return
 	}
 
@@ -870,6 +874,7 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 			// label originated from a remote source.
 			r.log.V(log.DEBUG).Infof("Syncer %q: found cluster ID label %q - not syncing resource %q", r.config.Name,
 				clusterID, resource.GetName())
+
 			return false
 		}
 	case RemoteToLocal:
@@ -877,6 +882,7 @@ func (r *resourceSyncer) shouldSync(resource *unstructured.Unstructured) bool {
 			// This is the remote -> local case - do not sync local resources
 			r.log.V(log.DEBUG).Infof("Syncer %q: cluster ID label %q not present or matches local cluster ID %q - not syncing resource %q",
 				r.config.Name, clusterID, r.config.LocalClusterID, resource.GetName())
+
 			return false
 		}
 	case None:

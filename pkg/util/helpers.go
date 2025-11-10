@@ -75,6 +75,7 @@ func ToUnstructuredResource(from runtime.Object, restMapper meta.RESTMapper,
 
 func FindGroupVersionResource(from *unstructured.Unstructured, restMapper meta.RESTMapper) (*schema.GroupVersionResource, error) {
 	gvk := from.GroupVersionKind()
+
 	mapping, err := restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error getting REST mapper for %#v", gvk)
@@ -157,14 +158,15 @@ func AddCertificateErrorHandler(fatal bool) {
 
 	utilruntime.ErrorHandlers = append(utilruntime.ErrorHandlers,
 		func(_ context.Context, err error, _ string, _ ...any) {
+			// The generic handler has already logged the error, no need to repeat if we don't want extra detail
 			var unknownAuthorityError x509.UnknownAuthorityError
 			if errors.As(err, &unknownAuthorityError) && lastBadCertificate.Swap(unknownAuthorityError.Cert) != unknownAuthorityError.Cert {
 				logCertificateError(err, "Certificate error: %s", resource.ToJSON(err))
 			}
+
 			var certificateInvalidError x509.CertificateInvalidError
 			if errors.As(err, &certificateInvalidError) && lastBadCertificate.Swap(certificateInvalidError.Cert) != certificateInvalidError.Cert {
 				logCertificateError(err, "Certificate error: %s", resource.ToJSON(err))
 			}
-			// The generic handler has already logged the error, no need to repeat if we don't want extra detail
 		})
 }
