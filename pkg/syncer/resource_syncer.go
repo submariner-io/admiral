@@ -56,10 +56,10 @@ type SyncDirection int
 const (
 	None SyncDirection = iota
 
-	// Resources are synced from a local source to a remote source.
+	// LocalToRemote resources are synced from a local source to a remote source.
 	LocalToRemote
 
-	// Resources are synced from a remote source to a local source.
+	// RemoteToLocal resources are synced from a remote source to a local source.
 	RemoteToLocal
 )
 
