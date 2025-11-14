@@ -214,7 +214,7 @@ func (t *testDriver) newSyncer(cluster framework.ClusterIndex) *broker.Syncer {
 	localResourceType := &testV1.Toaster{}
 
 	localClusterID := ""
-	if reflect.TypeOf(localResourceType) == reflect.TypeOf(t.brokerResourceType) {
+	if reflect.TypeOf(t.brokerResourceType) == reflect.TypeFor[*testV1.Toaster]() {
 		localClusterID = framework.TestContext.ClusterIDs[cluster]
 	}
 
