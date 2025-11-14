@@ -220,6 +220,11 @@ linters:
           - gochecknoinits
           - wrapcheck
         path: _test\.go|test/|fake/|gomega/
+      # Specifying "omitempty" for CRD structs (eg ObjectMeta, Status) is the norm so allow it.
+      - linter:
+          - modernize
+        path: test/apis/
+        text: "Omitempty has no effect on nested struct fields"
     paths:
       - third_party$
       - builtin$
