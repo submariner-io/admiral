@@ -93,15 +93,15 @@ func WatchAndSignalOnChange(ctx context.Context, k8sClient kubernetes.Interface,
 		},
 		ObjectType: &corev1.ConfigMap{},
 		Handler: cache.ResourceEventHandlerDetailedFuncs{
-			AddFunc: func(obj interface{}, isInInitialList bool) {
+			AddFunc: func(obj any, isInInitialList bool) {
 				if !isInInitialList {
 					process(obj, syncer.Create)
 				}
 			},
-			UpdateFunc: func(_, newObj interface{}) {
+			UpdateFunc: func(_, newObj any) {
 				process(newObj, syncer.Update)
 			},
-			DeleteFunc: func(obj interface{}) {
+			DeleteFunc: func(obj any) {
 				process(obj, syncer.Delete)
 			},
 		},

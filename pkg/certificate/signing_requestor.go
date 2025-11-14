@@ -280,7 +280,7 @@ func (s *signingRequestorImpl) Remove(ctx context.Context, name string) error {
 
 func (s *signingRequestorImpl) Uninstall(ctx context.Context) error {
 	// Clear certificate tracking
-	s.issuedCerts.Range(func(key, value interface{}) bool {
+	s.issuedCerts.Range(func(key, value any) bool {
 		s.issuedCerts.Delete(key)
 		return true
 	})
@@ -377,7 +377,7 @@ func (s *signingRequestorImpl) updateCertificateExpiration(secret *corev1.Secret
 
 // checkCertificateRenewal checks all tracked certificates and renews those close to expiration.
 func (s *signingRequestorImpl) checkCertificateRenewal(ctx context.Context) {
-	s.issuedCerts.Range(func(key, value interface{}) bool {
+	s.issuedCerts.Range(func(key, value any) bool {
 		secretName := key.(string)
 		info := value.(certInfo)
 
