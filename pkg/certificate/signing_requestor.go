@@ -54,9 +54,8 @@ const (
 	CSRDataKey             = "csr.pem"
 	TLSDataKey             = "tls.crt"
 	CADataKey              = "ca.crt"
-	// Certificate renewal constants.
-	CertRenewBefore   = 30 * 24 * time.Hour // Renew 30 days before expiration
-	CertCheckInterval = 12 * time.Hour      // Check certificate expiration every 12 hours
+	CertRenewBefore        = 30 * 24 * time.Hour // Renew 30 days before expiration
+	CertCheckInterval      = 12 * time.Hour      // Check certificate expiration every 12 hours
 )
 
 type OnSignedFn func(secretData map[string][]byte) error

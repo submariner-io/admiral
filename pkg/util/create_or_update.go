@@ -109,7 +109,7 @@ func Update[T runtime.Object](ctx context.Context, client resource.Interface[T],
 	return err
 }
 
-// Update tries to obtain an existing resource and, if found, updates it. If not found, a NotFound error is returned.
+// MustUpdate tries to obtain an existing resource and, if found, updates it. If not found, a NotFound error is returned.
 func MustUpdate[T runtime.Object](ctx context.Context, client resource.Interface[T], obj T, mutate MutateFn[T]) error {
 	_, _, err := maybeCreateOrUpdate(ctx, CreateOrUpdateOptions[T]{
 		Client:         client,

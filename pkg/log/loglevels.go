@@ -29,7 +29,7 @@ const (
 	//          * ...
 	//        This level is not specifically defined as you would use the
 	//        klog.Info helpers
-	//
+
 	// DEBUG : used to provide logs for often occurring events that could be helpful
 	//        for debugging errors.
 	DEBUG = 2
