@@ -75,6 +75,10 @@ type CreateOrUpdateOptions[T runtime.Object] struct {
 	IdentifyingLabels map[string]string
 }
 
+func init() {
+	logger.SetMaxVerbosity(0)
+}
+
 func CreateOrUpdateWithOptions[T runtime.Object](ctx context.Context, options CreateOrUpdateOptions[T]) (OperationResult, T, error) {
 	return maybeCreateOrUpdate(ctx, options, opCreate)
 }
@@ -127,7 +131,7 @@ func maybeCreateOrUpdate[T runtime.Object](ctx context.Context, options CreateOr
 		existing, err := getResource(ctx, &options)
 		if apierrors.IsNotFound(err) {
 			if op != opCreate {
-				logger.V(log.LIBTRACE).Infof("Resource %q does not exist - not updating", objMeta.GetName())
+				logger.V(log.DEBUG).Infof("Resource %q does not exist - not updating", objMeta.GetName())
 
 				if op == opMustUpdate {
 					return err
@@ -172,7 +176,7 @@ func maybeCreateOrUpdate[T runtime.Object](ctx context.Context, options CreateOr
 			unstructured.RemoveNestedField(origObj.Object, StatusField)
 			unstructured.RemoveNestedField(newObj.Object, StatusField)
 		} else if !equality.Semantic.DeepEqual(origStatus, newStatus) {
-			logger.V(log.LIBTRACE).Infof("Updating resource status: %s", resource.ToJSON(newStatus))
+			logger.V(log.DEBUG).Infof("Updating resource status: %s", resource.ToJSON(newStatus))
 
 			result = OperationResultUpdated
 
@@ -192,7 +196,7 @@ func maybeCreateOrUpdate[T runtime.Object](ctx context.Context, options CreateOr
 			return nil
 		}
 
-		logger.V(log.LIBTRACE).Infof("Updating resource: %s", resource.ToJSON(options.Obj))
+		logger.V(log.DEBUG).Infof("Updating resource: %s", resource.ToJSON(options.Obj))
 
 		result = OperationResultUpdated
 		returnObj, err = options.Client.Update(ctx, toUpdate, metav1.UpdateOptions{})
@@ -259,13 +263,13 @@ func createResource[T runtime.Object](ctx context.Context, client resource.Inter
 		obj = mutated
 	}
 
-	logger.V(log.LIBTRACE).Infof("Creating resource: %#v", obj)
+	logger.V(log.DEBUG).Infof("Creating resource: %#v", obj)
 
 	objMeta := resource.MustToMeta(obj)
 
 	created, err := client.Create(ctx, obj, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
-		logger.V(log.LIBDEBUG).Infof("Resource %q already exists - retrying", objMeta.GetName())
+		logger.V(log.TRACE).Infof("Resource %q already exists - retrying", objMeta.GetName())
 		return *new(T), apierrors.NewConflict(schema.GroupResource{}, objMeta.GetName(), err)
 	}
 

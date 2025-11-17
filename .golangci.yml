@@ -115,7 +115,7 @@ linters:
     - ginkgolinter
     - gocheckcompilerdirectives
     # - gochecknoglobals # We don't want to forbid global variable constants
-    - gochecknoinits
+    # - gochecknoinits # We use init functions for valid reasons
     # - gochecksumtype # The usefulness is very narrow
     - gocognit
     - goconst
