@@ -58,6 +58,25 @@ func (t *Tracker) AssertContainsFailure(matcher types.GomegaMatcher) {
 	Expect(t.failures).To(ContainElement(matcher))
 }
 
+// AssertFailureContainsStrings checks if any failure message contains all the given strings. This a
+// convenience function equivalent to
+//
+//	AssertContainsFailure(And(ContainSubstring("1"), ContainSubstring("2"), ...))
+//
+// If no string is provided, it checks if there are any failure messages.
+func (t *Tracker) AssertFailureContainsStrings(s ...string) {
+	if len(s) == 0 {
+		t.AssertHasFailure()
+	} else {
+		matchers := make([]types.GomegaMatcher, len(s))
+		for i := range s {
+			matchers[i] = ContainSubstring(s[i])
+		}
+
+		t.AssertContainsFailure(And(matchers...))
+	}
+}
+
 func (t *Tracker) AssertHasWarning() {
 	Expect(t.warnings).NotTo(BeEmpty())
 }
@@ -68,4 +87,23 @@ func (t *Tracker) AssertWarningCount(count int) {
 
 func (t *Tracker) AssertContainsWarning(matcher types.GomegaMatcher) {
 	Expect(t.warnings).To(ContainElement(matcher))
+}
+
+// AssertWarningContainsStrings checks if any warning message contains all the given strings. This a
+// convenience function equivalent to
+//
+//	AssertContainsWarning(And(ContainSubstring("1"), ContainSubstring("2"), ...))
+//
+// If no string is provided, it checks if there are any warning messages.
+func (t *Tracker) AssertWarningContainsStrings(s ...string) {
+	if len(s) == 0 {
+		t.AssertHasWarning()
+	} else {
+		matchers := make([]types.GomegaMatcher, len(s))
+		for i := range s {
+			matchers[i] = ContainSubstring(s[i])
+		}
+
+		t.AssertContainsWarning(And(matchers...))
+	}
 }
