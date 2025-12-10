@@ -123,8 +123,6 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 			return true, errors.Wrapf(err, "error distributing resource %q", key)
 		}
 
-		r.recordNamespaceSeen(resource.GetNamespace())
-
 		r.incOpCounter(op)
 
 		r.log.V(log.DEBUG).Infof("Syncer %q successfully synced %q", r.config.Name, resource.GetName())
