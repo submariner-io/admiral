@@ -44,20 +44,25 @@ func (r *resourceSyncer) handleMissingNamespace(key, namespace string) {
 
 func (r *resourceSyncer) handleNamespaceAdded(namespace string) {
 	keys, ok := r.missingNamespaces[namespace]
-	if ok {
-		r.log.V(log.DEBUG).Infof("Syncer %q: namespace %q created - re-queueing %d resources", r.config.Name, namespace, keys.Len())
+	if !ok || keys.Len() == 0 {
+		return
+	}
 
-		for _, k := range keys.UnsortedList() {
-			ns, name, _ := cache.SplitMetaNamespaceKey(k)
-			r.RequeueResource(name, ns)
-		}
+	r.log.V(log.DEBUG).Infof("Syncer %q: namespace %q created - re-queueing %d resources",
+		r.config.Name, namespace, keys.Len())
+
+	delete(r.missingNamespaces, namespace)
+
+	for _, k := range keys.UnsortedList() {
+		ns, name, _ := cache.SplitMetaNamespaceKey(k)
+		r.RequeueResource(name, ns)
 	}
 }
 
 func (r *resourceSyncer) handleNamespaceDeleted(namespace string) {
 	keys, ok := r.missingNamespaces[namespace]
 	if !ok {
-		return
+		keys = set.New[string]()
 	}
 
 	for _, key := range r.store.ListKeys() {
@@ -77,6 +82,7 @@ func (r *resourceSyncer) handleNamespaceDeleted(namespace string) {
 	}
 
 	if keys.Len() > 0 {
+		r.missingNamespaces[namespace] = keys
 		r.log.Infof("Syncer %q: namespace %q deleted - recorded %d missing resources", r.config.Name, namespace, keys.Len())
 	}
 }
