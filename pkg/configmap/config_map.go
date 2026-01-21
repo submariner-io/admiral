@@ -83,14 +83,14 @@ func WatchAndSignalOnChange(ctx context.Context, k8sClient kubernetes.Interface,
 	}
 
 	_, informer := cache.NewInformerWithOptions(cache.InformerOptions{
-		ListerWatcher: &cache.ListWatch{
+		ListerWatcher: cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 				return cmClient.List(ctx, options)
 			},
 			WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
 				return cmClient.Watch(ctx, options)
 			},
-		},
+		}, k8sClient),
 		ObjectType: &corev1.ConfigMap{},
 		Handler: cache.ResourceEventHandlerDetailedFuncs{
 			AddFunc: func(obj any, isInInitialList bool) {

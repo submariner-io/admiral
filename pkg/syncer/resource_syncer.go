@@ -56,7 +56,7 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 	resourceClient := config.SourceClient.Resource(*gvr).Namespace(config.SourceNamespace)
 
 	syncer.store, syncer.informer = cache.NewInformerWithOptions(cache.InformerOptions{
-		ListerWatcher: &cache.ListWatch{
+		ListerWatcher: cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 				options.LabelSelector = config.SourceLabelSelector
 				options.FieldSelector = config.SourceFieldSelector
@@ -69,7 +69,7 @@ func NewResourceSyncer(config *ResourceSyncerConfig) (Interface, error) {
 
 				return resourceClient.Watch(ctx, options)
 			},
-		},
+		}, config.SourceClient),
 		ObjectType:   rawType,
 		ResyncPeriod: config.ResyncPeriod,
 		Handler: cache.ResourceEventHandlerDetailedFuncs{
@@ -200,14 +200,14 @@ func NewSharedInformer(config *ResourceSyncerConfig) (cache.SharedInformer, erro
 
 	resourceClient := config.SourceClient.Resource(*gvr).Namespace(config.SourceNamespace)
 
-	informer := cache.NewSharedIndexInformerWithOptions(&cache.ListWatch{
+	informer := cache.NewSharedIndexInformerWithOptions(cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 		ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 			return resourceClient.List(ctx, options)
 		},
 		WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
 			return resourceClient.Watch(ctx, options)
 		},
-	}, rawType, cache.SharedIndexInformerOptions{
+	}, config.SourceClient), rawType, cache.SharedIndexInformerOptions{
 		ResyncPeriod: config.ResyncPeriod,
 	})
 

@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	fakeClient "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -69,14 +70,14 @@ func testWithMissingNamespace() {
 			return obj, false
 		}
 
-		t.config.NamespaceInformer = cache.NewSharedInformer(&cache.ListWatch{
+		t.config.NamespaceInformer = cache.NewSharedInformer(cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 				return namespaceClient().List(ctx, options)
 			},
 			WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
 				return namespaceClient().Watch(ctx, options)
 			},
-		}, resourceutils.MustToUnstructured(&corev1.Namespace{}), 0)
+		}, fakeClient.NewSimpleDynamicClient(scheme.Scheme)), resourceutils.MustToUnstructured(&corev1.Namespace{}), 0)
 	})
 
 	JustBeforeEach(func() {
