@@ -31,7 +31,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func CreatePEMEncodedKeyAndCertificate(commonName string, validFor time.Duration) ([]byte, []byte, error) {
+func CreateCAKeyAndCertificate(commonName string, validFor time.Duration) (*rsa.PrivateKey, *x509.Certificate, error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, RSABitSize)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to generate RSA key")
@@ -42,7 +42,7 @@ func CreatePEMEncodedKeyAndCertificate(commonName string, validFor time.Duration
 		return nil, nil, errors.Wrapf(err, "failed to generate serial number")
 	}
 
-	certTemplate := x509.Certificate{
+	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			CommonName:   commonName,
@@ -55,7 +55,16 @@ func CreatePEMEncodedKeyAndCertificate(commonName string, validFor time.Duration
 		IsCA:                  true,
 	}
 
-	certDER, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &privateKey.PublicKey, privateKey)
+	return privateKey, cert, nil
+}
+
+func CreatePEMEncodedKeyAndCertificate(commonName string, validFor time.Duration) ([]byte, []byte, error) {
+	privateKey, certTemplate, err := CreateCAKeyAndCertificate(commonName, validFor)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, certTemplate, certTemplate, &privateKey.PublicKey, privateKey)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to create CA certificate")
 	}
