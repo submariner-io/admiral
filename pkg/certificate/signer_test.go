@@ -51,7 +51,7 @@ type signerTestDriver struct {
 
 func (t *signerTestDriver) testStart() {
 	When("a CSR Secret is created and updated", func() {
-		It("should sign it", func() {
+		It("should sign it", func(ctx SpecContext) {
 			secret := newCSR()
 			test.CreateResource(t.secretClient(), secret)
 
@@ -94,7 +94,7 @@ func (t *signerTestDriver) testStart() {
 	Context("with multiple namespaces", func() {
 		const namespace2 = "broker2"
 
-		It("should not interfere with each other", func() {
+		It("should not interfere with each other", func(ctx SpecContext) {
 			client1 := secretClient(t.dynClient, brokerNamespace)
 			client2 := secretClient(t.dynClient, namespace2)
 
@@ -234,7 +234,7 @@ func newSignerTestDriver() *signerTestDriver {
 		}
 	})
 
-	JustBeforeEach(func() {
+	JustBeforeEach(func(ctx SpecContext) {
 		var err error
 
 		t.signer, err = certificate.NewSigner(t.config)

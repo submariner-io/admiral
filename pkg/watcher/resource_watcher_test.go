@@ -19,7 +19,6 @@ limitations under the License.
 package watcher_test
 
 import (
-	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -124,7 +123,7 @@ var _ = Describe("Resource Watcher", func() {
 	})
 
 	When("a Pod is created, updated and deleted", func() {
-		It("should notify the appropriate handler of each event", func() {
+		It("should notify the appropriate handler of each event", func(ctx SpecContext) {
 			pod := test.CreateResource(pods, pod)
 
 			Eventually(createdPods).Should(Receive(Equal(pod)))
@@ -136,7 +135,7 @@ var _ = Describe("Resource Watcher", func() {
 			Eventually(updatedPods).Should(Receive(Equal(pod)))
 			Consistently(updatedPods).ShouldNot(Receive())
 
-			Expect(pods.Delete(context.TODO(), pod.GetName(), metav1.DeleteOptions{})).To(Succeed())
+			Expect(pods.Delete(ctx, pod.GetName(), metav1.DeleteOptions{})).To(Succeed())
 
 			Eventually(deletedPods).Should(Receive(Equal(pod)))
 			Consistently(deletedPods).ShouldNot(Receive())

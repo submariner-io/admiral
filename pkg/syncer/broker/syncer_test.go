@@ -19,7 +19,6 @@ limitations under the License.
 package broker_test
 
 import (
-	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"errors"
@@ -68,8 +67,6 @@ var _ = Describe("Broker Syncer", func() {
 		actualBrokerRestConfig *rest.Config
 		expectInitError        bool
 	)
-
-	ctx := context.TODO()
 
 	BeforeEach(func() {
 		os.Unsetenv("BROKER_K8S_APISERVER")
@@ -193,7 +190,7 @@ var _ = Describe("Broker Syncer", func() {
 		})
 
 		Context("and then deleted", func() {
-			It("should be deleted from the broker datastore", func() {
+			It("should be deleted from the broker datastore", func(ctx SpecContext) {
 				Expect(localClient.Delete(ctx, resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				test.AwaitNoResource(brokerClient, resource.GetName())
 
@@ -226,7 +223,7 @@ var _ = Describe("Broker Syncer", func() {
 		})
 
 		Context("and then deleted", func() {
-			It("should be deleted from the broker datastore", func() {
+			It("should be deleted from the broker datastore", func(ctx SpecContext) {
 				Expect(brokerClient.Delete(ctx, resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				test.AwaitNoResource(localClient, resource.GetName())
 
@@ -524,12 +521,12 @@ var _ = Describe("Broker Syncer", func() {
 		})
 	})
 
-	Specify("GetBrokerFederator should return the correct instance", func() {
+	Specify("GetBrokerFederator should return the correct instance", func(ctx SpecContext) {
 		f := syncer.GetBrokerFederator()
 		Expect(f).ToNot(BeNil())
 
 		name := string(uuid.NewUUID())
-		Expect(f.Distribute(context.Background(), &corev1.Pod{
+		Expect(f.Distribute(ctx, &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
@@ -546,12 +543,12 @@ var _ = Describe("Broker Syncer", func() {
 		Expect(syncer.GetBrokerNamespace()).To(Equal(test.RemoteNamespace))
 	})
 
-	Specify("GetLocalFederator should return the correct instance", func() {
+	Specify("GetLocalFederator should return the correct instance", func(ctx SpecContext) {
 		f := syncer.GetLocalFederator()
 		Expect(f).ToNot(BeNil())
 
 		name := string(uuid.NewUUID())
-		Expect(f.Distribute(context.Background(), &corev1.Pod{
+		Expect(f.Distribute(ctx, &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},

@@ -48,13 +48,13 @@ import (
 var _ = Describe("CreateAnew function", func() {
 	t := newCreateOrUpdateTestDiver()
 
-	createAnew := func() (runtime.Object, error) {
-		return util.CreateAnew[*unstructured.Unstructured](context.TODO(), resource.ForDynamic(t.client),
+	createAnew := func(ctx context.Context) (runtime.Object, error) {
+		return util.CreateAnew(ctx, resource.ForDynamic(t.client),
 			resource.MustToUnstructured(t.pod), metav1.CreateOptions{}, metav1.DeleteOptions{})
 	}
 
-	createAnewSuccess := func() *corev1.Pod {
-		o, err := createAnew()
+	createAnewSuccess := func(ctx context.Context) *corev1.Pod {
+		o, err := createAnew(ctx)
 		Expect(err).To(Succeed())
 		Expect(o).ToNot(BeNil())
 
@@ -64,14 +64,14 @@ var _ = Describe("CreateAnew function", func() {
 		return actual
 	}
 
-	createAnewError := func() error {
-		_, err := createAnew()
+	createAnewError := func(ctx context.Context) error {
+		_, err := createAnew(ctx)
 		return err
 	}
 
 	When("the resource doesn't exist", func() {
-		It("should successfully create the resource", func() {
-			t.compareWithPod(createAnewSuccess())
+		It("should successfully create the resource", func(ctx SpecContext) {
+			t.compareWithPod(createAnewSuccess(ctx))
 		})
 	})
 
@@ -85,8 +85,8 @@ var _ = Describe("CreateAnew function", func() {
 				t.pod.Spec.Containers[0].Image = "updated"
 			})
 
-			It("should delete the existing resource and create a new one", func() {
-				t.compareWithPod(createAnewSuccess())
+			It("should delete the existing resource and create a new one", func(ctx SpecContext) {
+				t.compareWithPod(createAnewSuccess(ctx))
 			})
 
 			Context("and Delete returns not found", func() {
@@ -94,8 +94,8 @@ var _ = Describe("CreateAnew function", func() {
 					fake.FailOnAction(t.testingFake, "pods", "delete", apierrors.NewNotFound(schema.GroupResource{}, t.pod.Name), true)
 				})
 
-				It("should successfully create the resource", func() {
-					t.compareWithPod(createAnewSuccess())
+				It("should successfully create the resource", func(ctx SpecContext) {
+					t.compareWithPod(createAnewSuccess(ctx))
 				})
 			})
 
@@ -105,8 +105,8 @@ var _ = Describe("CreateAnew function", func() {
 					fake.FailOnAction(t.testingFake, "pods", "delete", t.expectedErr, false)
 				})
 
-				It("should return an error", func() {
-					Expect(createAnewError()).To(ContainErrorSubstring(t.expectedErr))
+				It("should return an error", func(ctx SpecContext) {
+					Expect(createAnewError(ctx)).To(ContainErrorSubstring(t.expectedErr))
 				})
 			})
 
@@ -116,8 +116,8 @@ var _ = Describe("CreateAnew function", func() {
 						t.pod.Name), false)
 				})
 
-				It("should return an error", func() {
-					Expect(createAnewError()).ToNot(Succeed())
+				It("should return an error", func(ctx SpecContext) {
+					Expect(createAnewError(ctx)).ToNot(Succeed())
 				})
 			})
 		})
@@ -127,8 +127,8 @@ var _ = Describe("CreateAnew function", func() {
 				t.pod.Status.Phase = corev1.PodRunning
 			})
 
-			It("should not recreate it", func() {
-				createAnewSuccess()
+			It("should not recreate it", func(ctx SpecContext) {
+				createAnewSuccess(ctx)
 				tests.EnsureNoActionsForResource(t.testingFake, "pods", "delete")
 			})
 		})
@@ -140,8 +140,8 @@ var _ = Describe("CreateAnew function", func() {
 			fake.FailOnAction(t.testingFake, "pods", "create", t.expectedErr, false)
 		})
 
-		It("should return an error", func() {
-			Expect(createAnewError()).To(ContainErrorSubstring(t.expectedErr))
+		It("should return an error", func(ctx SpecContext) {
+			Expect(createAnewError(ctx)).To(ContainErrorSubstring(t.expectedErr))
 		})
 	})
 })
@@ -149,7 +149,7 @@ var _ = Describe("CreateAnew function", func() {
 var _ = Describe("CreateOrUpdate function", func() {
 	t := newCreateOrUpdateTestDiver()
 
-	createOrUpdate := func(expResult util.OperationResult) error {
+	createOrUpdate := func(ctx context.Context, expResult util.OperationResult) error {
 		options := util.CreateOrUpdateOptions[*unstructured.Unstructured]{
 			Client:         resource.ForDynamic(t.client),
 			MutateOnUpdate: t.mutateFn,
@@ -164,7 +164,7 @@ var _ = Describe("CreateOrUpdate function", func() {
 
 		options.Obj = resource.MustToUnstructured(t.pod)
 
-		result, retObj, err := util.CreateOrUpdateWithOptions[*unstructured.Unstructured](context.TODO(), options)
+		result, retObj, err := util.CreateOrUpdateWithOptions(ctx, options)
 		if err != nil && expResult != util.OperationResultNone {
 			return err
 		}
@@ -180,15 +180,15 @@ var _ = Describe("CreateOrUpdate function", func() {
 	}
 
 	When("the resource doesn't exist", func() {
-		It("should successfully create the resource", func() {
-			Expect(createOrUpdate(util.OperationResultCreated)).To(Succeed())
-			t.verifyPod()
+		It("should successfully create the resource", func(ctx SpecContext) {
+			Expect(createOrUpdate(ctx, util.OperationResultCreated)).To(Succeed())
+			t.verifyPod(ctx)
 			tests.EnsureNoActionsForResource(t.testingFake, "pods/status", "update")
 		})
 
 		Context("and a mutation function specified", func() {
-			It("should invoke the function on create", func() {
-				result, created, err := util.CreateOrUpdateWithOptions[*unstructured.Unstructured](context.TODO(),
+			It("should invoke the function on create", func(ctx SpecContext) {
+				result, created, err := util.CreateOrUpdateWithOptions(ctx,
 					util.CreateOrUpdateOptions[*unstructured.Unstructured]{
 						Client: resource.ForDynamic(t.client),
 						Obj:    resource.MustToUnstructured(t.pod),
@@ -200,15 +200,15 @@ var _ = Describe("CreateOrUpdate function", func() {
 				Expect(err).To(Succeed())
 				Expect(result).To(Equal(util.OperationResultCreated))
 
-				actual := t.verifyPod()
+				actual := t.verifyPod(ctx)
 				Expect(actual.Annotations).To(HaveKeyWithValue("on-create-invoked", "true"))
 
 				Expect(resource.MustFromUnstructured(created, &corev1.Pod{})).To(Equal(actual))
 			})
 
 			Context("which returns an error", func() {
-				It("should return an error", func() {
-					_, _, err := util.CreateOrUpdateWithOptions[*unstructured.Unstructured](context.TODO(),
+				It("should return an error", func(ctx SpecContext) {
+					_, _, err := util.CreateOrUpdateWithOptions(ctx,
 						util.CreateOrUpdateOptions[*unstructured.Unstructured]{
 							Client: resource.ForDynamic(t.client),
 							Obj:    resource.MustToUnstructured(t.pod),
@@ -228,9 +228,9 @@ var _ = Describe("CreateOrUpdate function", func() {
 				t.pod.Labels = map[string]string{"label1": "value1", "label2": "value2"}
 			})
 
-			It("should successfully create the resource", func() {
-				Expect(createOrUpdate(util.OperationResultCreated)).To(Succeed())
-				actual := t.verifyPod()
+			It("should successfully create the resource", func(ctx SpecContext) {
+				Expect(createOrUpdate(ctx, util.OperationResultCreated)).To(Succeed())
+				actual := t.verifyPod(ctx)
 				Expect(actual.Name).To(HavePrefix("name-prefix-"))
 			})
 		})
@@ -240,9 +240,9 @@ var _ = Describe("CreateOrUpdate function", func() {
 				t.pod.Status = corev1.PodStatus{Phase: corev1.PodRunning}
 			})
 
-			It("should create the resource with the status field set via UpdateStatus", func() {
-				Expect(createOrUpdate(util.OperationResultCreated)).To(Succeed())
-				t.verifyPod()
+			It("should create the resource with the status field set via UpdateStatus", func(ctx SpecContext) {
+				Expect(createOrUpdate(ctx, util.OperationResultCreated)).To(Succeed())
+				t.verifyPod(ctx)
 				tests.EnsureActionsForResource(t.testingFake, "pods/status", "update")
 			})
 
@@ -251,9 +251,9 @@ var _ = Describe("CreateOrUpdate function", func() {
 					fake.FailOnAction(t.testingFake, "pods/status", "update", apierrors.NewNotFound(schema.GroupResource{}, ""), false)
 				})
 
-				It("should successfully create the resource", func() {
-					Expect(createOrUpdate(util.OperationResultCreated)).To(Succeed())
-					t.verifyPod()
+				It("should successfully create the resource", func(ctx SpecContext) {
+					Expect(createOrUpdate(ctx, util.OperationResultCreated)).To(Succeed())
+					t.verifyPod(ctx)
 				})
 			})
 
@@ -262,8 +262,8 @@ var _ = Describe("CreateOrUpdate function", func() {
 					fake.FailOnAction(t.testingFake, "pods/status", "update", apierrors.NewServiceUnavailable("fake"), false)
 				})
 
-				It("should return an error", func() {
-					Expect(createOrUpdate(util.OperationResultNone)).ToNot(Succeed())
+				It("should return an error", func(ctx SpecContext) {
+					Expect(createOrUpdate(ctx, util.OperationResultNone)).ToNot(Succeed())
 				})
 			})
 		})
@@ -274,8 +274,8 @@ var _ = Describe("CreateOrUpdate function", func() {
 				fake.FailOnAction(t.testingFake, "pods", "create", t.expectedErr, false)
 			})
 
-			It("should return an error", func() {
-				Expect(createOrUpdate(util.OperationResultNone)).To(ContainErrorSubstring(t.expectedErr))
+			It("should return an error", func(ctx SpecContext) {
+				Expect(createOrUpdate(ctx, util.OperationResultNone)).To(ContainErrorSubstring(t.expectedErr))
 			})
 		})
 
@@ -292,9 +292,9 @@ var _ = Describe("CreateOrUpdate function", func() {
 					t.pod.GetName()), true)
 			})
 
-			It("should eventually update the resource", func() {
-				Expect(createOrUpdate(util.OperationResultUpdated)).To(Succeed())
-				t.verifyPod()
+			It("should eventually update the resource", func(ctx SpecContext) {
+				Expect(createOrUpdate(ctx, util.OperationResultUpdated)).To(Succeed())
+				t.verifyPod(ctx)
 			})
 		})
 	})
@@ -307,46 +307,46 @@ var _ = Describe("CreateOrUpdate function", func() {
 var _ = Describe("Update function", func() {
 	t := newCreateOrUpdateTestDiver()
 
-	update := func() error {
-		return util.Update[*unstructured.Unstructured](context.TODO(), resource.ForDynamic(t.client), resource.MustToUnstructured(t.pod),
+	update := func(ctx context.Context) error {
+		return util.Update(ctx, resource.ForDynamic(t.client), resource.MustToUnstructured(t.pod),
 			t.mutateFn)
 	}
 
 	When("the resource doesn't exist", func() {
-		It("shouldn't return an error", func() {
-			Expect(update()).To(Succeed())
+		It("shouldn't return an error", func(ctx SpecContext) {
+			Expect(update(ctx)).To(Succeed())
 		})
 	})
 
-	t.testUpdate(func(_ util.OperationResult) error {
-		return update()
+	t.testUpdate(func(ctx context.Context, _ util.OperationResult) error {
+		return update(ctx)
 	})
 
-	t.testGetFailure(func(_ util.OperationResult) error {
-		return update()
+	t.testGetFailure(func(ctx context.Context, _ util.OperationResult) error {
+		return update(ctx)
 	})
 })
 
 var _ = Describe("MustUpdate function", func() {
 	t := newCreateOrUpdateTestDiver()
 
-	mustUpdate := func() error {
-		return util.MustUpdate[*unstructured.Unstructured](context.TODO(), resource.ForDynamic(t.client),
+	mustUpdate := func(ctx context.Context) error {
+		return util.MustUpdate(ctx, resource.ForDynamic(t.client),
 			resource.MustToUnstructured(t.pod), t.mutateFn)
 	}
 
 	When("the resource doesn't exist", func() {
-		It("should return an error", func() {
-			Expect(mustUpdate()).ToNot(Succeed())
+		It("should return an error", func(ctx SpecContext) {
+			Expect(mustUpdate(ctx)).ToNot(Succeed())
 		})
 	})
 
-	t.testUpdate(func(_ util.OperationResult) error {
-		return mustUpdate()
+	t.testUpdate(func(ctx context.Context, _ util.OperationResult) error {
+		return mustUpdate(ctx)
 	})
 
-	t.testGetFailure(func(_ util.OperationResult) error {
-		return mustUpdate()
+	t.testGetFailure(func(ctx context.Context, _ util.OperationResult) error {
+		return mustUpdate(ctx)
 	})
 })
 
@@ -395,20 +395,20 @@ func newCreateOrUpdateTestDiver() *createOrUpdateTestDriver {
 	return t
 }
 
-func (t *createOrUpdateTestDriver) testGetFailure(doOper func(util.OperationResult) error) {
+func (t *createOrUpdateTestDriver) testGetFailure(doOper func(context.Context, util.OperationResult) error) {
 	When("resource retrieval fails", func() {
 		JustBeforeEach(func() {
 			t.expectedErr = apierrors.NewServiceUnavailable("fake")
 			fake.FailOnAction(t.testingFake, "pods", "get", t.expectedErr, false)
 		})
 
-		It("should return an error", func() {
-			Expect(doOper(util.OperationResultNone)).To(ContainErrorSubstring(t.expectedErr))
+		It("should return an error", func(ctx SpecContext) {
+			Expect(doOper(ctx, util.OperationResultNone)).To(ContainErrorSubstring(t.expectedErr))
 		})
 	})
 }
 
-func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult) error) {
+func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(context.Context, util.OperationResult) error) {
 	When("the resource already exists", func() {
 		JustBeforeEach(func() {
 			labels := t.pod.Labels
@@ -420,9 +420,9 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 			t.pod.Labels = labels
 		})
 
-		It("should update the resource", func() {
-			Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
-			t.verifyPod()
+		It("should update the resource", func(ctx SpecContext) {
+			Expect(doUpdate(ctx, util.OperationResultUpdated)).To(Succeed())
+			t.verifyPod(ctx)
 			tests.EnsureNoActionsForResource(t.testingFake, "pods/status", "update")
 		})
 
@@ -437,7 +437,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 				t.pod.Name = ""
 			})
 
-			It("should update the resource", func() {
+			It("should update the resource", func(ctx SpecContext) {
 				test.CreateResource(t.client, &corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						GenerateName: "other-prefix",
@@ -445,19 +445,19 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 					},
 				})
 
-				Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
-				t.verifyPod()
+				Expect(doUpdate(ctx, util.OperationResultUpdated)).To(Succeed())
+				t.verifyPod(ctx)
 			})
 
 			Context("but more than one matching resources exist", func() {
-				It("should return an error", func() {
+				It("should return an error", func(ctx SpecContext) {
 					test.CreateResource(t.client, &corev1.Pod{
 						ObjectMeta: metav1.ObjectMeta{
 							GenerateName: t.pod.GenerateName,
 							Labels:       t.pod.Labels,
 						},
 					})
-					Expect(doUpdate(util.OperationResultNone)).ToNot(Succeed())
+					Expect(doUpdate(ctx, util.OperationResultNone)).ToNot(Succeed())
 				})
 			})
 		})
@@ -467,9 +467,9 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 				t.pod.Status = corev1.PodStatus{Phase: corev1.PodRunning}
 			})
 
-			It("should update the resource", func() {
-				Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
-				t.verifyPod()
+			It("should update the resource", func(ctx SpecContext) {
+				Expect(doUpdate(ctx, util.OperationResultUpdated)).To(Succeed())
+				t.verifyPod(ctx)
 			})
 
 			Context("and UpdateStatus fails", func() {
@@ -477,8 +477,8 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 					fake.FailOnAction(t.testingFake, "pods/status", "update", apierrors.NewServiceUnavailable("fake"), false)
 				})
 
-				It("should return an error", func() {
-					Expect(doUpdate(util.OperationResultNone)).ToNot(Succeed())
+				It("should return an error", func(ctx SpecContext) {
+					Expect(doUpdate(ctx, util.OperationResultNone)).ToNot(Succeed())
 				})
 			})
 		})
@@ -493,8 +493,8 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 				t.pod.Status = corev1.PodStatus{Phase: corev1.PodRunning}
 			})
 
-			It("should only update the status", func() {
-				Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
+			It("should only update the status", func(ctx SpecContext) {
+				Expect(doUpdate(ctx, util.OperationResultUpdated)).To(Succeed())
 				Expect(test.GetResource(t.client, t.pod).Status).To(Equal(t.pod.Status))
 				tests.EnsureNoActionsForResource(t.testingFake, "pods", "update")
 			})
@@ -504,8 +504,8 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 					fake.FailOnAction(t.testingFake, "pods/status", "update", apierrors.NewNotFound(schema.GroupResource{}, ""), false)
 				})
 
-				It("should update the status", func() {
-					Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
+				It("should update the status", func(ctx SpecContext) {
+					Expect(doUpdate(ctx, util.OperationResultUpdated)).To(Succeed())
 					Expect(test.GetResource(t.client, t.pod).Status).To(Equal(t.pod.Status))
 				})
 			})
@@ -521,8 +521,8 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 				t.pod.Status = corev1.PodStatus{}
 			})
 
-			It("should not update the resource", func() {
-				Expect(doUpdate(util.OperationResultNone)).To(Succeed())
+			It("should not update the resource", func(ctx SpecContext) {
+				Expect(doUpdate(ctx, util.OperationResultNone)).To(Succeed())
 				tests.EnsureNoActionsForResource(t.testingFake, "pods", "update")
 				tests.EnsureNoActionsForResource(t.testingFake, "pods/status", "update")
 			})
@@ -534,9 +534,9 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 					errors.New("conflict")), true)
 			})
 
-			It("should eventually update the resource", func() {
-				Expect(doUpdate(util.OperationResultUpdated)).To(Succeed())
-				t.verifyPod()
+			It("should eventually update the resource", func(ctx SpecContext) {
+				Expect(doUpdate(ctx, util.OperationResultUpdated)).To(Succeed())
+				t.verifyPod(ctx)
 			})
 		})
 
@@ -545,8 +545,8 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 				fake.FailOnAction(t.testingFake, "pods", "update", t.expectedErr, false)
 			})
 
-			It("should return an error", func() {
-				Expect(doUpdate(util.OperationResultNone)).To(ContainErrorSubstring(t.expectedErr))
+			It("should return an error", func(ctx SpecContext) {
+				Expect(doUpdate(ctx, util.OperationResultNone)).To(ContainErrorSubstring(t.expectedErr))
 			})
 		})
 
@@ -557,8 +557,8 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 				}
 			})
 
-			It("should not update the resource", func() {
-				Expect(doUpdate(util.OperationResultNone)).To(Succeed())
+			It("should not update the resource", func(ctx SpecContext) {
+				Expect(doUpdate(ctx, util.OperationResultNone)).To(Succeed())
 				tests.EnsureNoActionsForResource(t.testingFake, "pods", "update")
 				tests.EnsureNoActionsForResource(t.testingFake, "pods/status", "update")
 			})
@@ -572,8 +572,8 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(util.OperationResult
 				}
 			})
 
-			It("should return an error", func() {
-				Expect(doUpdate(util.OperationResultNone)).ToNot(Succeed())
+			It("should return an error", func(ctx SpecContext) {
+				Expect(doUpdate(ctx, util.OperationResultNone)).ToNot(Succeed())
 			})
 		})
 	})
@@ -583,11 +583,11 @@ func (t *createOrUpdateTestDriver) createPod() {
 	test.CreateResource(t.client, t.pod)
 }
 
-func (t *createOrUpdateTestDriver) verifyPod() *corev1.Pod {
+func (t *createOrUpdateTestDriver) verifyPod(ctx context.Context) *corev1.Pod {
 	pod := t.pod.DeepCopy()
 
 	if pod.Name == "" {
-		list, err := t.client.List(context.Background(), metav1.ListOptions{})
+		list, err := t.client.List(ctx, metav1.ListOptions{})
 		Expect(err).To(Succeed())
 		Expect(scheme.Scheme.Convert(&list.Items[0], pod, nil)).To(Succeed())
 	}

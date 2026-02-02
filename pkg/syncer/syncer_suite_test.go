@@ -66,8 +66,6 @@ func init() {
 	prometheus.DefaultRegisterer = &EmptyRegisterer{}
 }
 
-var ctx = context.TODO()
-
 var _ = Describe("", func() {
 	kzerolog.InitK8sLogging()
 })
@@ -168,7 +166,7 @@ func newTestDriver(sourceNamespace, localClusterID string, syncDirection syncer.
 		Expect(d.syncer.Start(d.stopCh)).To(Succeed())
 	})
 
-	JustAfterEach(func() {
+	JustAfterEach(func(ctx SpecContext) {
 		if d.stopCh != nil {
 			close(d.stopCh)
 		}
@@ -231,7 +229,7 @@ func (t *testDriver) verifyDistributeOnDeleteTest(clusterID string) {
 		t.addInitialResource(test.SetClusterIDLabel(t.resource, clusterID))
 	})
 
-	It("should delete it", func() {
+	It("should delete it", func(ctx SpecContext) {
 		expected := test.GetResource(t.sourceClient, t.resource)
 		t.federator.VerifyDistribute(expected)
 
@@ -245,7 +243,7 @@ func (t *testDriver) verifyNoDistributeOnDeleteTest(clusterID string) {
 		t.addInitialResource(test.SetClusterIDLabel(t.resource, clusterID))
 	})
 
-	It("should not delete it", func() {
+	It("should not delete it", func(ctx SpecContext) {
 		t.federator.VerifyNoDistribute()
 
 		Expect(t.sourceClient.Delete(ctx, t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())

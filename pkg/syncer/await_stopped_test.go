@@ -42,7 +42,7 @@ func testAwaitStopped() {
 		t.config.DrainWorkQueueTimeout = time.Millisecond * 80
 	})
 
-	It("should time out if the work queue is delayed stopping", func() {
+	It("should time out if the work queue is delayed stopping", func(ctx SpecContext) {
 		defer func() {
 			t.stopCh = nil
 		}()
@@ -52,18 +52,18 @@ func testAwaitStopped() {
 
 		close(t.stopCh)
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*300)
+		timeoutContext, cancel := context.WithTimeout(ctx, time.Millisecond*300)
 		defer cancel()
 
-		Expect(t.syncer.AwaitStopped(ctx)).NotTo(Succeed())
+		Expect(t.syncer.AwaitStopped(timeoutContext)).NotTo(Succeed())
 
 		t.config.Federator.(*blockingFederator).distributeContinue <- true
 
-		ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+		timeoutContext, cancel = context.WithTimeout(ctx, time.Second)
 		defer cancel()
 
-		Expect(t.syncer.AwaitStopped(ctx)).To(Succeed())
-		Expect(t.syncer.AwaitStopped(ctx)).To(Succeed())
+		Expect(t.syncer.AwaitStopped(timeoutContext)).To(Succeed())
+		Expect(t.syncer.AwaitStopped(timeoutContext)).To(Succeed())
 	})
 }
 

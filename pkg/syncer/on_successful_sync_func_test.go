@@ -66,7 +66,7 @@ func testOnSuccessfulSyncFunction() {
 			t.addInitialResource(t.resource)
 		})
 
-		It("should invoke the OnSuccessfulSync function", func() {
+		It("should invoke the OnSuccessfulSync function", func(ctx SpecContext) {
 			expected := test.GetResource(t.sourceClient, t.resource)
 			t.federator.VerifyDistribute(expected)
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
@@ -119,7 +119,7 @@ func testOnSuccessfulSyncFunction() {
 				t.federator.ResetOnFailure.Store(false)
 			})
 
-			It("should not invoke the OnSuccessfulSync function", func() {
+			It("should not invoke the OnSuccessfulSync function", func(ctx SpecContext) {
 				Expect(t.sourceClient.Delete(ctx, t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				Consistently(t.expOperation, 300*time.Millisecond).ShouldNot(Receive())
 			})
@@ -130,7 +130,7 @@ func testOnSuccessfulSyncFunction() {
 				t.federator.FailOnDelete(apierrors.NewNotFound(schema.GroupResource{}, ""))
 			})
 
-			It("should invoke the OnSuccessfulSync function", func() {
+			It("should invoke the OnSuccessfulSync function", func(ctx SpecContext) {
 				Expect(t.sourceClient.Delete(ctx, t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Delete)))
 			})
@@ -142,7 +142,7 @@ func testOnSuccessfulSyncFunction() {
 			t.onSuccessfulSyncReturn.Store(true)
 		})
 
-		It("should retry", func() {
+		It("should retry", func(ctx SpecContext) {
 			t.federator.VerifyDistribute(test.CreateResource(t.sourceClient, t.resource))
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))

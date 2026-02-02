@@ -88,7 +88,7 @@ func testTransformFunction() {
 			atomic.StoreInt32(&t.invocationCount, 0)
 		})
 
-		It("should delete the transformed resource", func() {
+		It("should delete the transformed resource", func(ctx SpecContext) {
 			Expect(t.sourceClient.Delete(ctx, t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 			t.verifyDelete()
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Delete)))
@@ -102,7 +102,7 @@ func testTransformFunction() {
 				t.requeueOnOp = ptr.To(syncer.Delete)
 			})
 
-			It("should eventually retry", func() {
+			It("should eventually retry", func(ctx SpecContext) {
 				Expect(t.sourceClient.Delete(ctx, t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				Eventually(func() int {
 					return int(atomic.LoadInt32(&t.invocationCount))
@@ -115,7 +115,7 @@ func testTransformFunction() {
 				t.requeueOnOp = ptr.To(syncer.Create)
 			})
 
-			It("should not retry the create operation", func() {
+			It("should not retry the create operation", func(ctx SpecContext) {
 				Expect(t.sourceClient.Delete(ctx, t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Delete)))
 				Consistently(t.expOperation).ShouldNot(Receive(Equal(syncer.Create)))
@@ -129,7 +129,7 @@ func testTransformFunction() {
 			t.addInitialResource(t.resource)
 		})
 
-		It("should retry until it succeeds", func() {
+		It("should retry until it succeeds", func(ctx SpecContext) {
 			t.verifyDistribute()
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 
@@ -177,7 +177,7 @@ func testTransformFunction() {
 				t.addInitialResource(t.resource)
 			})
 
-			It("should not delete the resource", func() {
+			It("should not delete the resource", func(ctx SpecContext) {
 				t.federator.VerifyNoDistribute()
 				atomic.StoreInt32(&t.invocationCount, 0)
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
@@ -221,7 +221,7 @@ func testTransformFunction() {
 				t.addInitialResource(t.resource)
 			})
 
-			It("should eventually delete the resource", func() {
+			It("should eventually delete the resource", func(ctx SpecContext) {
 				t.verifyDistribute()
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 				returnNil.Store(true)

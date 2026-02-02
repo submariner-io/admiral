@@ -47,7 +47,7 @@ var _ = Describe("Integration", func() {
 		tSR.certRenewBefore = time.Second
 	})
 
-	Specify("an issued request should get signed", func() {
+	Specify("an issued request should get signed", func(ctx SpecContext) {
 		Expect(tSR.signingRequestor.Issue(ctx, secretName, ips, tSR.onSigned)).To(Succeed())
 
 		var localSecret *corev1.Secret
