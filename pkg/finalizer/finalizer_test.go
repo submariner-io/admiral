@@ -51,9 +51,9 @@ var _ = Describe("Add", func() {
 		t = newTestDriver()
 	})
 
-	JustBeforeEach(func() {
-		t.justBeforeEach()
-		added, err = finalizer.Add(context.TODO(), t.client, t.pod, finalizerName)
+	JustBeforeEach(func(ctx SpecContext) {
+		t.justBeforeEach(ctx)
+		added, err = finalizer.Add(ctx, t.client, t.pod, finalizerName)
 	})
 
 	When("the resource has no Finalizers", func() {
@@ -137,9 +137,9 @@ var _ = Describe("Remove", func() {
 		t.pod.Finalizers = []string{finalizerName}
 	})
 
-	JustBeforeEach(func() {
-		t.justBeforeEach()
-		err = finalizer.Remove(context.TODO(), t.client, t.pod, finalizerName)
+	JustBeforeEach(func(ctx SpecContext) {
+		t.justBeforeEach(ctx)
+		err = finalizer.Remove(ctx, t.client, t.pod, finalizerName)
 	})
 
 	When("the Finalizer is present", func() {
@@ -215,10 +215,10 @@ func newTestDriver() *testDriver {
 	return t
 }
 
-func (t *testDriver) justBeforeEach() {
+func (t *testDriver) justBeforeEach(ctx context.Context) {
 	t.client = resource.ForPod(t.kubeClient, t.pod.Namespace)
 
-	_, err := t.client.Create(context.TODO(), t.pod, metav1.CreateOptions{})
+	_, err := t.client.Create(ctx, t.pod, metav1.CreateOptions{})
 	Expect(err).To(Succeed())
 
 	t.kubeClient.Fake.ClearActions()

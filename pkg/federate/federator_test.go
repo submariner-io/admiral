@@ -46,8 +46,6 @@ import (
 const GenerateNamePrefix = "prefix-"
 
 var (
-	ctx = context.Background()
-
 	_ = Describe("CreateOrUpdate Federator", testCreateOrUpdateFederator)
 	_ = Describe("Create Federator", testCreateFederator)
 	_ = Describe("Update Federator", testUpdateFederator)
@@ -84,7 +82,7 @@ func testCreateOrUpdateFederator() {
 
 	When("the resource does not already exist in the datastore", func() {
 		Context("and a local cluster ID is specified", func() {
-			It("should create the resource with the cluster ID label", func() {
+			It("should create the resource with the cluster ID label", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
@@ -95,7 +93,7 @@ func testCreateOrUpdateFederator() {
 				t.localClusterID = ""
 			})
 
-			It("should create the resource without the cluster ID label", func() {
+			It("should create the resource without the cluster ID label", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
@@ -109,7 +107,7 @@ func testCreateOrUpdateFederator() {
 				}
 			})
 
-			It("should create the resource with the Status data", func() {
+			It("should create the resource with the Status data", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
@@ -126,7 +124,7 @@ func testCreateOrUpdateFederator() {
 				}
 			})
 
-			It("should create the resource with the OwnerReferences", func() {
+			It("should create the resource with the OwnerReferences", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
@@ -137,7 +135,7 @@ func testCreateOrUpdateFederator() {
 				fake.FailOnAction(&t.dynClient.Fake, "pods", "create", apierrors.NewServiceUnavailable("fake"), false)
 			})
 
-			It("should return an error", func() {
+			It("should return an error", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 			})
 		})
@@ -154,7 +152,7 @@ func testCreateOrUpdateFederator() {
 					t.resource.GetName()), true)
 			})
 
-			It("should update the resource", func() {
+			It("should update the resource", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
@@ -168,7 +166,7 @@ func testCreateOrUpdateFederator() {
 			t.resource = test.NewPodWithImage(test.LocalNamespace, "apache")
 		})
 
-		It("should update the resource", func() {
+		It("should update the resource", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 			t.verifyResource()
 		})
@@ -179,7 +177,7 @@ func testCreateOrUpdateFederator() {
 					apierrors.NewConflict(schema.GroupResource{}, "", errors.New("fake")), true)
 			})
 
-			It("should retry until it succeeds", func() {
+			It("should retry until it succeeds", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
@@ -190,7 +188,7 @@ func testCreateOrUpdateFederator() {
 				fake.FailOnAction(&t.dynClient.Fake, "pods", "update", apierrors.NewServiceUnavailable("fake"), false)
 			})
 
-			It("should return an error", func() {
+			It("should return an error", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 			})
 		})
@@ -204,17 +202,17 @@ func testCreateOrUpdateFederator() {
 			t.resource.GenerateName = GenerateNamePrefix
 		})
 
-		It("should create and update the resource", func() {
+		It("should create and update the resource", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 
-			list, err := t.resourceClient.List(context.TODO(), metav1.ListOptions{})
+			list, err := t.resourceClient.List(ctx, metav1.ListOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(list.Items).To(HaveLen(1))
 
 			t.resource.Name = list.Items[0].GetName()
 			t.verifyResource()
 
-			_, err = t.resourceClient.Create(context.TODO(), resource.MustToUnstructured(&corev1.Pod{
+			_, err = t.resourceClient.Create(ctx, resource.MustToUnstructured(&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "another-pod",
 				},
@@ -239,7 +237,7 @@ func testCreateOrUpdateFederator() {
 			fake.FailOnAction(&t.dynClient.Fake, "pods", "get", apierrors.NewServiceUnavailable("fake"), false)
 		})
 
-		It("should return an error", func() {
+		It("should return an error", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 		})
 	})
@@ -250,7 +248,7 @@ func testCreateOrUpdateFederator() {
 			t.resource.SetNamespace(t.targetNamespace)
 		})
 
-		It("should create the resource in the source namespace", func() {
+		It("should create the resource in the source namespace", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 			t.verifyResource()
 		})
@@ -274,7 +272,7 @@ func testCreateFederator() {
 	})
 
 	When("the resource does not already exist in the datastore", func() {
-		It("create the resource", func() {
+		It("create the resource", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 			t.verifyResource()
 		})
@@ -284,7 +282,7 @@ func testCreateFederator() {
 				fake.FailOnAction(&t.dynClient.Fake, "pods", "create", apierrors.NewServiceUnavailable("fake"), false)
 			})
 
-			It("should return an error", func() {
+			It("should return an error", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 			})
 		})
@@ -296,7 +294,7 @@ func testCreateFederator() {
 			test.CreateResource(t.resourceClient, t.resource)
 		})
 
-		It("should succeed and not update the resource", func() {
+		It("should succeed and not update the resource", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, test.NewPodWithImage(test.LocalNamespace, "apache"))).To(Succeed())
 			assert.EnsureNoActionsForResource(&t.dynClient.Fake, "pods", "update")
 		})
@@ -327,7 +325,7 @@ func testUpdateFederator() {
 			t.resource.Annotations["newAnnotation"] = "abc"
 		})
 
-		It("should update the resource", func() {
+		It("should update the resource", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 			t.verifyResource()
 		})
@@ -338,7 +336,7 @@ func testUpdateFederator() {
 					errors.New("fake")), true)
 			})
 
-			It("should retry until it succeeds", func() {
+			It("should retry until it succeeds", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 				t.verifyResource()
 			})
@@ -348,7 +346,7 @@ func testUpdateFederator() {
 					fake.FailOnAction(&t.dynClient.Fake, "pods", "get", apierrors.NewServiceUnavailable("fake"), false)
 				})
 
-				It("should return an error", func() {
+				It("should return an error", func(ctx SpecContext) {
 					Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 				})
 			})
@@ -359,14 +357,14 @@ func testUpdateFederator() {
 				fake.FailOnAction(&t.dynClient.Fake, "pods", "update", apierrors.NewServiceUnavailable("fake"), false)
 			})
 
-			It("should return an error", func() {
+			It("should return an error", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).ToNot(Succeed())
 			})
 		})
 	})
 
 	When("the resource does not exist in the datastore", func() {
-		It("should succeed", func() {
+		It("should succeed", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 		})
 	})
@@ -391,7 +389,7 @@ func testUpdateStatusFederator() {
 	})
 
 	When("no previous status is present", func() {
-		It("should add the new status", func() {
+		It("should add the new status", func(ctx SpecContext) {
 			t.resource.Status = corev1.PodStatus{
 				Phase: corev1.PodRunning,
 				PodIP: "1.2.3.4",
@@ -415,7 +413,7 @@ func testUpdateStatusFederator() {
 			}
 		})
 
-		It("should replace it", func() {
+		It("should replace it", func(ctx SpecContext) {
 			t.resource.Status = corev1.PodStatus{
 				Phase: corev1.PodRunning,
 				PodIP: "1.2.3.4",
@@ -431,7 +429,7 @@ func testUpdateStatusFederator() {
 			t.resource.Spec.NodeName = "raiders"
 		})
 
-		It("should not update them", func() {
+		It("should not update them", func(ctx SpecContext) {
 			t.resource.Status = corev1.PodStatus{
 				Phase: corev1.PodRunning,
 			}
@@ -479,7 +477,7 @@ func testDelete() {
 			test.CreateResource(t.resourceClient, existing)
 		})
 
-		It("should delete the resource", func() {
+		It("should delete the resource", func(ctx SpecContext) {
 			Expect(f.Delete(ctx, t.resource)).To(Succeed())
 
 			_, err := test.GetResourceAndError(t.resourceClient, t.resource)
@@ -491,7 +489,7 @@ func testDelete() {
 				fake.FailOnAction(&t.dynClient.Fake, "pods", "delete", apierrors.NewServiceUnavailable("fake"), false)
 			})
 
-			It("should return an error", func() {
+			It("should return an error", func(ctx SpecContext) {
 				Expect(f.Delete(ctx, t.resource)).ToNot(Succeed())
 			})
 		})
@@ -502,7 +500,7 @@ func testDelete() {
 				t.resource.SetNamespace(t.targetNamespace)
 			})
 
-			It("should delete the resource from the source namespace", func() {
+			It("should delete the resource from the source namespace", func(ctx SpecContext) {
 				Expect(f.Delete(ctx, t.resource)).To(Succeed())
 
 				_, err := test.GetResourceAndError(t.resourceClient, t.resource)
@@ -528,7 +526,7 @@ func testDelete() {
 				t.resource.Name = ""
 			})
 
-			It("should delete the resource", func() {
+			It("should delete the resource", func(ctx SpecContext) {
 				Expect(f.Delete(ctx, t.resource)).To(Succeed())
 
 				_, err := test.GetResourceAndError(t.resourceClient, t.resource)
@@ -545,7 +543,7 @@ func testDelete() {
 					})
 				})
 
-				It("should fail", func() {
+				It("should fail", func(ctx SpecContext) {
 					err := f.Delete(ctx, t.resource)
 					Expect(err).NotTo(Succeed())
 					Expect(apierrors.IsNotFound(f.Delete(ctx, t.resource))).To(BeFalse())
@@ -555,7 +553,7 @@ func testDelete() {
 	})
 
 	When("the resource does not exist in the datastore", func() {
-		It("should return NotFound error", func() {
+		It("should return NotFound error", func(ctx SpecContext) {
 			Expect(apierrors.IsNotFound(f.Delete(ctx, t.resource))).To(BeTrue())
 		})
 
@@ -564,7 +562,7 @@ func testDelete() {
 				t.setIdentifyingLabels()
 			})
 
-			It("should return NotFound error", func() {
+			It("should return NotFound error", func(ctx SpecContext) {
 				t.resource.Name = ""
 
 				Expect(apierrors.IsNotFound(f.Delete(ctx, t.resource))).To(BeTrue())
@@ -580,7 +578,7 @@ func testFederatorFuncs() {
 		t = newTestDriver()
 	})
 
-	It("should invoke the proxied functions", func() {
+	It("should invoke the proxied functions", func(ctx SpecContext) {
 		f := federate.NewCreateOrUpdateFederator(federate.CreateOrUpdateOptions{
 			Client:          t.dynClient,
 			RestMapper:      t.restMapper,
@@ -609,7 +607,7 @@ func testNoopFederator() {
 		t = newTestDriver()
 	})
 
-	It("should not fail", func() {
+	It("should not fail", func(ctx SpecContext) {
 		f := federate.NewNoopFederator()
 
 		Expect(f.Distribute(ctx, t.resource)).To(Succeed())
@@ -662,7 +660,7 @@ func testCompositeFederator() {
 		composite = federate.NewCompositeFederator(federator1, federator2)
 	})
 
-	It("should invoke all the functions", func() {
+	It("should invoke all the functions", func(ctx SpecContext) {
 		Expect(composite.Distribute(ctx, t.resource)).To(Succeed())
 		Expect(federator1Distribute).To(Receive())
 		Expect(federator1Distribute).NotTo(Receive())
@@ -677,7 +675,7 @@ func testCompositeFederator() {
 	})
 
 	When("the first Federator fails", func() {
-		It("should fail fast and not invoke the second", func() {
+		It("should fail fast and not invoke the second", func(ctx SpecContext) {
 			federator1.DistributeFunc = func(_ context.Context, _ runtime.Object) error {
 				return errors.New("mock error")
 			}

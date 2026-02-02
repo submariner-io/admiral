@@ -119,7 +119,7 @@ func testWithMissingNamespace() {
 			createNamespace(otherNS)
 		})
 
-		It("should eventually redistribute when the namespace is recreated", func() {
+		It("should eventually redistribute when the namespace is recreated", func(ctx SpecContext) {
 			resource := test.CreateResource(t.sourceClient, t.resource)
 			resource.SetNamespace(transformedNamespace)
 			t.federator.VerifyDistribute(resource)

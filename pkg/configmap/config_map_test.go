@@ -54,8 +54,8 @@ func testGet() {
 	})
 
 	When("the ConfigMap exists", func() {
-		It("should return it", func() {
-			expected, err := client.Create(context.TODO(), &corev1.ConfigMap{
+		It("should return it", func(ctx SpecContext) {
+			expected, err := client.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-cm",
 				},
@@ -63,15 +63,15 @@ func testGet() {
 			}, metav1.CreateOptions{})
 			Expect(err).ToNot(HaveOccurred())
 
-			actual, err := configmap.Get(context.TODO(), client, expected.Name)
+			actual, err := configmap.Get(ctx, client, expected.Name)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal(expected))
 		})
 	})
 
 	When("the ConfigMap does not exist", func() {
-		It("should return an empty ConfigMap", func() {
-			cm, err := configmap.Get(context.TODO(), client, "test-cm")
+		It("should return an empty ConfigMap", func(ctx SpecContext) {
+			cm, err := configmap.Get(ctx, client, "test-cm")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cm.Name).To(Equal("test-cm"))
 			Expect(cm.Data).To(BeEmpty())
@@ -79,10 +79,10 @@ func testGet() {
 	})
 
 	When("ConfigMap retrieval fails", func() {
-		It("should return an error", func() {
+		It("should return an error", func(ctx SpecContext) {
 			fake.FailOnAction(&k8sClient.Fake, "configmaps", "get", nil, false)
 
-			_, err := configmap.Get(context.TODO(), client, "test-cm")
+			_, err := configmap.Get(ctx, client, "test-cm")
 			Expect(err).To(HaveOccurred())
 		})
 	})

@@ -92,7 +92,7 @@ func testShouldProcessFunction() {
 		})
 
 		When("the ShouldProcess function returns true", func() {
-			It("should delete it", func() {
+			It("should delete it", func(ctx SpecContext) {
 				expected := test.GetResource(t.sourceClient, t.resource)
 				t.federator.VerifyDistribute(expected)
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
@@ -108,7 +108,7 @@ func testShouldProcessFunction() {
 				t.shouldProcess = false
 			})
 
-			It("should not delete it", func() {
+			It("should not delete it", func(ctx SpecContext) {
 				t.federator.VerifyNoDistribute()
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 

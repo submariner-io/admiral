@@ -31,7 +31,7 @@ func testEventOrdering() {
 	t := newEventOrderingTestDriver()
 
 	When("a create occurs immediately following a delete", func() {
-		It("should process both events in order", func() {
+		It("should process both events in order", func(ctx SpecContext) {
 			first := test.CreateResource(t.sourceClient, t.resource)
 			t.federator.VerifyDistribute(first)
 			Eventually(t.opChan).Should(Receive(Equal(syncer.Create)))
@@ -50,7 +50,7 @@ func testEventOrdering() {
 	})
 
 	When("a delete occurs immediately following a create", func() {
-		It("should process both events in order", func() {
+		It("should process both events in order", func(ctx SpecContext) {
 			r := test.CreateResource(t.sourceClient, t.resource)
 			Expect(t.sourceClient.Delete(ctx, r.GetName(), metav1.DeleteOptions{})).To(Succeed())
 
@@ -64,7 +64,7 @@ func testEventOrdering() {
 	})
 
 	When("a delete occurs immediately following an update", func() {
-		It("should process both events in order", func() {
+		It("should process both events in order", func(ctx SpecContext) {
 			t.federator.VerifyDistribute(test.CreateResource(t.sourceClient, t.resource))
 			Eventually(t.opChan).Should(Receive(Equal(syncer.Create)))
 

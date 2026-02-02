@@ -47,10 +47,7 @@ const (
 	secretName      = "ipsec"
 )
 
-var (
-	ips = []string{"10.253.4.6", "172.19.22.8"}
-	ctx = context.TODO()
-)
+var ips = []string{"10.253.4.6", "172.19.22.8"}
 
 var _ = Describe("SigningRequestor", func() {
 	t := newSigningRequestorTestDriver()
@@ -73,7 +70,7 @@ type signingRequestorTestDriver struct {
 }
 
 func (t *signingRequestorTestDriver) testIssue() {
-	It("should create a CSR Secret and sync to the broker", func() {
+	It("should create a CSR Secret and sync to the broker", func(ctx SpecContext) {
 		Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
 
 		localSecret := awaitSecret(t.localSecretClient())
@@ -105,13 +102,13 @@ func (t *signingRequestorTestDriver) testIssue() {
 	})
 
 	When("a nil OnSigned function passed", func() {
-		It("should return an error", func() {
+		It("should return an error", func(ctx SpecContext) {
 			Expect(t.signingRequestor.Issue(ctx, secretName, ips, nil)).NotTo(Succeed())
 		})
 	})
 
 	When("empty IPs are passed", func() {
-		It("should return an error", func() {
+		It("should return an error", func(ctx SpecContext) {
 			Expect(t.signingRequestor.Issue(ctx, secretName, nil, t.onSigned)).NotTo(Succeed())
 		})
 	})
@@ -119,11 +116,11 @@ func (t *signingRequestorTestDriver) testIssue() {
 
 func (t *signingRequestorTestDriver) testSigned() {
 	When("a local Secret is signed on the broker", func() {
-		JustBeforeEach(func() {
+		JustBeforeEach(func(ctx SpecContext) {
 			Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
 		})
 
-		It("should be synced locally", func() {
+		It("should be synced locally", func(ctx SpecContext) {
 			brokerSecret := t.awaitAndSignBrokerSecret()
 
 			var localSecret *corev1.Secret
@@ -204,7 +201,7 @@ func (t *signingRequestorTestDriver) testSigned() {
 	})
 
 	When("the OnSigned callback fails", func() {
-		It("should retry", func() {
+		It("should retry", func(ctx SpecContext) {
 			var onSignedErr atomic.Value
 
 			onSignedErr.Store("mock OnSigned error")
@@ -225,7 +222,7 @@ func (t *signingRequestorTestDriver) testSigned() {
 	})
 
 	When("a existing request is signed just prior to re-issuing the request", func() {
-		It("should notify the OnSigned function", func() {
+		It("should notify the OnSigned function", func(ctx SpecContext) {
 			test.CreateResource(t.localSecretClient(), &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: fmt.Sprintf("%s-%s", secretName, localClusterID),
@@ -276,7 +273,7 @@ func (t *signingRequestorTestDriver) testSigned() {
 			}))
 		})
 
-		It("should notify the OnSigned function", func() {
+		It("should notify the OnSigned function", func(ctx SpecContext) {
 			time.Sleep(500 * time.Millisecond)
 			Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
 			Eventually(t.signedDataCh).Within(5 * time.Second).Should(Receive())
@@ -317,7 +314,7 @@ func (t *signingRequestorTestDriver) testExpiration() {
 		t.certRenewBefore = certificate.CertRenewBefore
 	})
 
-	JustBeforeEach(func() {
+	JustBeforeEach(func(ctx SpecContext) {
 		Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
 	})
 
@@ -345,7 +342,7 @@ func (t *signingRequestorTestDriver) testExpiration() {
 }
 
 func (t *signingRequestorTestDriver) testRemove() {
-	It("should remove a previously issued request", func() {
+	It("should remove a previously issued request", func(ctx SpecContext) {
 		Expect(t.signingRequestor.Issue(ctx, secretName, ips, t.onSigned)).To(Succeed())
 
 		secret := awaitSecret(t.localSecretClient())
@@ -357,18 +354,18 @@ func (t *signingRequestorTestDriver) testRemove() {
 		test.AwaitNoResource(t.brokerSecretClient(), secret.Name)
 	})
 
-	It("should not return an error if not previously issued", func() {
+	It("should not return an error if not previously issued", func(ctx SpecContext) {
 		Expect(t.signingRequestor.Remove(ctx, secretName)).To(Succeed())
 	})
 }
 
 func (t *signingRequestorTestDriver) testUninstall() {
-	It("should remove all local Secret requests", func() {
+	It("should remove all local Secret requests", func(ctx SpecContext) {
 		Expect(t.signingRequestor.Issue(ctx, "secret1", ips, t.onSigned)).To(Succeed())
 		Expect(t.signingRequestor.Issue(ctx, "secret2", ips, t.onSigned)).To(Succeed())
 
-		Eventually(func(g Gomega) {
-			list, err := t.brokerSecretClient().List(context.TODO(), metav1.ListOptions{})
+		Eventually(ctx, func(g Gomega, ctx context.Context) {
+			list, err := t.brokerSecretClient().List(ctx, metav1.ListOptions{})
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(list.Items).To(HaveLen(2))
 		}).To(Succeed())
@@ -382,16 +379,16 @@ func (t *signingRequestorTestDriver) testUninstall() {
 			},
 		})
 
-		Expect(t.signingRequestor.Uninstall(context.TODO())).To(Succeed())
+		Expect(t.signingRequestor.Uninstall(ctx)).To(Succeed())
 
-		Eventually(func(g Gomega) {
-			list, err := t.localSecretClient().List(context.TODO(), metav1.ListOptions{})
+		Eventually(ctx, func(g Gomega, ctx context.Context) {
+			list, err := t.localSecretClient().List(ctx, metav1.ListOptions{})
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(list.Items).To(BeEmpty())
 		}).To(Succeed())
 
-		Eventually(func(g Gomega) {
-			list, err := t.brokerSecretClient().List(context.TODO(), metav1.ListOptions{})
+		Eventually(ctx, func(g Gomega, ctx context.Context) {
+			list, err := t.brokerSecretClient().List(ctx, metav1.ListOptions{})
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(list.Items).To(HaveLen(1))
 			g.Expect(list.Items[0].GetName()).To(Equal(otherSecret.Name))

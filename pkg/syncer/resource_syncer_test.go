@@ -220,7 +220,7 @@ func testSyncErrors() {
 			d.addInitialResource(d.resource)
 		})
 
-		It("should log the error and retry until it succeeds", func() {
+		It("should log the error and retry until it succeeds", func(ctx SpecContext) {
 			expected := test.GetResource(d.sourceClient, d.resource)
 			d.federator.VerifyDistribute(expected)
 
@@ -236,7 +236,7 @@ func testSyncErrors() {
 			d.addInitialResource(d.resource)
 		})
 
-		It("should not log the error nor retry", func() {
+		It("should not log the error nor retry", func(ctx SpecContext) {
 			expected := test.GetResource(d.sourceClient, d.resource)
 			d.federator.VerifyDistribute(expected)
 

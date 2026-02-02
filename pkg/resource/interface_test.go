@@ -19,8 +19,6 @@ limitations under the License.
 package resource_test
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/resource"
@@ -257,7 +255,7 @@ var _ = Describe("MustExtractList", func() {
 })
 
 func testInterfaceFuncs[T runtime.Object](newInterface func() resource.Interface[T], initialObj T, updateStatus func(T) T) {
-	Specify("verify functions", func() {
+	Specify("verify functions", func(ctx SpecContext) {
 		sanitize := func(o T) T {
 			m := resource.MustToMeta(o)
 			m.SetResourceVersion("")
@@ -279,7 +277,7 @@ func testInterfaceFuncs[T runtime.Object](newInterface func() resource.Interface
 		resource.MustToMeta(another).SetName(resource.MustToMeta(initialObj).GetName() + "-2")
 
 		// Create
-		actual, err := i.Create(context.Background(), initialObj, metav1.CreateOptions{})
+		actual, err := i.Create(ctx, initialObj, metav1.CreateOptions{})
 		Expect(err).To(Succeed())
 
 		objMeta := resource.MustToMeta(actual)
@@ -287,38 +285,38 @@ func testInterfaceFuncs[T runtime.Object](newInterface func() resource.Interface
 		Expect(actual).To(Equal(initialObj))
 
 		// Get
-		obj, err := i.Get(context.Background(), objMeta.GetName(), metav1.GetOptions{})
+		obj, err := i.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
 		Expect(err).To(Succeed())
 		Expect(sanitize(obj)).To(Equal(actual))
 
 		// Update
 		objMeta.SetLabels(map[string]string{"foo": "bar"})
 
-		obj, err = i.Update(context.Background(), actual, metav1.UpdateOptions{})
+		obj, err = i.Update(ctx, actual, metav1.UpdateOptions{})
 		Expect(err).To(Succeed())
 		Expect(sanitize(obj)).To(Equal(actual))
 
 		if updateStatus != nil {
 			actual = updateStatus(actual)
-			obj, err = i.UpdateStatus(context.Background(), actual, metav1.UpdateOptions{})
+			obj, err = i.UpdateStatus(ctx, actual, metav1.UpdateOptions{})
 			Expect(err).To(Succeed())
 			Expect(sanitize(obj)).To(Equal(actual))
 		} else {
-			_, err = i.UpdateStatus(context.Background(), actual, metav1.UpdateOptions{})
+			_, err = i.UpdateStatus(ctx, actual, metav1.UpdateOptions{})
 			Expect(err).To(HaveOccurred())
 		}
 
 		// List
-		list, err := i.List(context.Background(), metav1.ListOptions{})
+		list, err := i.List(ctx, metav1.ListOptions{})
 		Expect(err).To(Succeed())
 		Expect(list).To(HaveLen(1))
 		Expect(sanitize(list[0])).To(Equal(actual))
 
 		// List with label selector
-		_, err = i.Create(context.Background(), another, metav1.CreateOptions{})
+		_, err = i.Create(ctx, another, metav1.CreateOptions{})
 		Expect(err).To(Succeed())
 
-		list, err = i.List(context.Background(), metav1.ListOptions{
+		list, err = i.List(ctx, metav1.ListOptions{
 			LabelSelector: labels.SelectorFromSet(objMeta.GetLabels()).String(),
 		})
 		Expect(err).To(Succeed())
@@ -326,9 +324,9 @@ func testInterfaceFuncs[T runtime.Object](newInterface func() resource.Interface
 		Expect(sanitize(list[0])).To(Equal(actual))
 
 		// Delete
-		err = i.Delete(context.Background(), objMeta.GetName(), metav1.DeleteOptions{})
+		err = i.Delete(ctx, objMeta.GetName(), metav1.DeleteOptions{})
 		Expect(err).To(Succeed())
-		_, err = i.Get(context.Background(), objMeta.GetName(), metav1.GetOptions{})
+		_, err = i.Get(ctx, objMeta.GetName(), metav1.GetOptions{})
 		Expect(apierrors.IsNotFound(err)).To(BeTrue())
 	})
 }

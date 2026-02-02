@@ -317,7 +317,7 @@ var _ = Describe("Work Queue", func() {
 			}
 		})
 
-		It("should process all previously queued items", func() {
+		It("should process all previously queued items", func(ctx SpecContext) {
 			count := 10
 
 			var keys []string
@@ -333,7 +333,7 @@ var _ = Describe("Work Queue", func() {
 			Eventually(processStart).Should(Receive())
 
 			processContinue <- true
-			Expect(wq.ShutDownWithDrain(context.TODO())).To(Succeed())
+			Expect(wq.ShutDownWithDrain(ctx)).To(Succeed())
 
 			for _, key := range keys {
 				_, ok := processed.Load(key)
@@ -341,7 +341,7 @@ var _ = Describe("Work Queue", func() {
 			}
 		})
 
-		It("should time out if the current item processing is delayed", func() {
+		It("should time out if the current item processing is delayed", func(ctx SpecContext) {
 			itemKey := "item"
 
 			wq.EnqueueWithOpts(cache.ExplicitKey(itemKey),
@@ -349,17 +349,17 @@ var _ = Describe("Work Queue", func() {
 
 			Eventually(processStart).Should(Receive())
 
-			ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond*100)
+			timeoutContext, cancel := context.WithTimeout(ctx, time.Millisecond*100)
 			defer cancel()
 
-			Expect(wq.ShutDownWithDrain(ctx)).NotTo(Succeed())
+			Expect(wq.ShutDownWithDrain(timeoutContext)).NotTo(Succeed())
 
 			processContinue <- true
 
-			ctx, cancel = context.WithTimeout(context.TODO(), time.Second*3)
+			timeoutContext, cancel = context.WithTimeout(ctx, time.Second*3)
 			defer cancel()
 
-			Expect(wq.ShutDownWithDrain(ctx)).To(Succeed())
+			Expect(wq.ShutDownWithDrain(timeoutContext)).To(Succeed())
 
 			_, ok := processed.Load(itemKey)
 			Expect(ok).To(BeTrue(), "Item was not processed")

@@ -42,47 +42,47 @@ var _ = Describe("Create", func() {
 	t := newBasicReactorsTestDriver()
 
 	When("the GenerateName field is set", func() {
-		It("should set Name field", func() {
-			actual := t.assertCreateSuccess(t.pod)
+		It("should set Name field", func(ctx SpecContext) {
+			actual := t.assertCreateSuccess(ctx, t.pod)
 			Expect(actual.Name).To(HavePrefix(t.pod.GenerateName))
 		})
 	})
 
-	It("should set the ResourceVersion field", func() {
-		actual := t.assertCreateSuccess(t.pod)
+	It("should set the ResourceVersion field", func(ctx SpecContext) {
+		actual := t.assertCreateSuccess(ctx, t.pod)
 		Expect(actual.ResourceVersion).To(Equal("1"))
 	})
 
-	It("should set the UID field", func() {
-		actual := t.assertCreateSuccess(t.pod)
+	It("should set the UID field", func(ctx SpecContext) {
+		actual := t.assertCreateSuccess(ctx, t.pod)
 		Expect(actual.UID).ToNot(BeEmpty())
 	})
 
-	Specify("should set the CreationTimestamp field if not specified", func() {
+	Specify("should set the CreationTimestamp field if not specified", func(ctx SpecContext) {
 		now := metav1.Now()
-		actual := t.assertCreateSuccess(t.pod)
+		actual := t.assertCreateSuccess(ctx, t.pod)
 		Expect(actual.CreationTimestamp.After(now.Add(-time.Second * 5))).To(BeTrue())
 	})
 
-	Specify("should not set the CreationTimestamp field if specified", func() {
+	Specify("should not set the CreationTimestamp field if specified", func(ctx SpecContext) {
 		cst := metav1.Time{Time: metav1.Now().Add(time.Hour)}
 		t.pod.CreationTimestamp = cst
-		actual := t.assertCreateSuccess(t.pod)
+		actual := t.assertCreateSuccess(ctx, t.pod)
 		Expect(actual.CreationTimestamp).To(Equal(cst))
 	})
 
 	When("the Name and GenerateName fields are empty", func() {
-		It("should return an error", func() {
+		It("should return an error", func(ctx SpecContext) {
 			t.pod.GenerateName = ""
-			_, err := t.doCreate(t.pod)
+			_, err := t.doCreate(ctx, t.pod)
 			Expect(err).To(HaveOccurred())
 		})
 	})
 
 	When("the ResourceVersion field is set", func() {
-		It("should return an error", func() {
+		It("should return an error", func(ctx SpecContext) {
 			t.pod.ResourceVersion = "2"
-			_, err := t.doCreate(t.pod)
+			_, err := t.doCreate(ctx, t.pod)
 			Expect(err).To(HaveOccurred())
 		})
 	})
@@ -91,8 +91,8 @@ var _ = Describe("Create", func() {
 var _ = Describe("Update", func() {
 	t := newBasicReactorsTestDriver()
 
-	JustBeforeEach(func() {
-		t.pod = t.assertCreateSuccess(t.pod)
+	JustBeforeEach(func(ctx SpecContext) {
+		t.pod = t.assertCreateSuccess(ctx, t.pod)
 		t.pod.Namespace = ""
 		t.pod.Spec = corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -104,24 +104,24 @@ var _ = Describe("Update", func() {
 		}
 	})
 
-	It("should update the resource", func() {
-		actual := t.doUpdateSuccess()
+	It("should update the resource", func(ctx SpecContext) {
+		actual := t.doUpdateSuccess(ctx)
 		Expect(actual.Spec).To(Equal(t.pod.Spec))
 		Expect(actual.ResourceVersion > t.pod.ResourceVersion).To(BeTrue())
 	})
 
 	When("the Name field is empty", func() {
-		It("should return an Invalid error", func() {
+		It("should return an Invalid error", func(ctx SpecContext) {
 			t.pod.Name = ""
-			_, err := t.doUpdate()
+			_, err := t.doUpdate(ctx)
 			Expect(apierrors.IsInvalid(err)).To(BeTrue())
 		})
 	})
 
 	When("the ResourceVersion field doesn't match", func() {
-		It("should return a Conflict error", func() {
+		It("should return a Conflict error", func(ctx SpecContext) {
 			t.pod.ResourceVersion = "111"
-			_, err := t.doUpdate()
+			_, err := t.doUpdate(ctx)
 			Expect(apierrors.IsConflict(err)).To(BeTrue())
 		})
 	})
@@ -131,15 +131,15 @@ var _ = Describe("Update", func() {
 			t.pod.Finalizers = []string{"some-finalizer"}
 		})
 
-		It("should delete the resource", func() {
+		It("should delete the resource", func(ctx SpecContext) {
 			t.pod.SetDeletionTimestamp(ptr.To(metav1.Now()))
-			t.pod = t.doUpdateSuccess()
+			t.pod = t.doUpdateSuccess(ctx)
 
 			t.pod.Finalizers = nil
-			_, err := t.doUpdate()
+			_, err := t.doUpdate(ctx)
 			Expect(err).To(Succeed())
 
-			_, err = t.doGet(t.pod.Name)
+			_, err = t.doGet(ctx, t.pod.Name)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 		})
 	})
@@ -148,32 +148,32 @@ var _ = Describe("Update", func() {
 var _ = Describe("Delete", func() {
 	t := newBasicReactorsTestDriver()
 
-	JustBeforeEach(func() {
-		t.pod = t.assertCreateSuccess(t.pod)
+	JustBeforeEach(func(ctx SpecContext) {
+		t.pod = t.assertCreateSuccess(ctx, t.pod)
 	})
 
-	It("should delete the resource", func() {
-		Expect(t.doDelete(metav1.DeleteOptions{})).To(Succeed())
-		_, err := t.doGet(t.pod.Name)
+	It("should delete the resource", func(ctx SpecContext) {
+		Expect(t.doDelete(ctx, metav1.DeleteOptions{})).To(Succeed())
+		_, err := t.doGet(ctx, t.pod.Name)
 		Expect(apierrors.IsNotFound(err)).To(BeTrue())
 	})
 
 	When("a specific ResourceVersion is requested", func() {
 		Context("and it matches", func() {
-			It("should delete the resource", func() {
-				Expect(t.doDelete(metav1.DeleteOptions{
+			It("should delete the resource", func(ctx SpecContext) {
+				Expect(t.doDelete(ctx, metav1.DeleteOptions{
 					Preconditions: &metav1.Preconditions{
 						ResourceVersion: &t.pod.ResourceVersion,
 					},
 				})).To(Succeed())
-				_, err := t.doGet(t.pod.Name)
+				_, err := t.doGet(ctx, t.pod.Name)
 				Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			})
 		})
 
 		Context("and it doesn't match", func() {
-			It("should return a Conflict error", func() {
-				err := t.doDelete(metav1.DeleteOptions{
+			It("should return a Conflict error", func(ctx SpecContext) {
+				err := t.doDelete(ctx, metav1.DeleteOptions{
 					Preconditions: &metav1.Preconditions{
 						ResourceVersion: ptr.To("111"),
 					},
@@ -188,14 +188,14 @@ var _ = Describe("Delete", func() {
 			t.pod.Finalizers = []string{"some-finalizer"}
 		})
 
-		It("should set the DeletionTimestamp field", func() {
-			Expect(t.doDelete(metav1.DeleteOptions{})).To(Succeed())
-			actual, err := t.doGet(t.pod.Name)
+		It("should set the DeletionTimestamp field", func(ctx SpecContext) {
+			Expect(t.doDelete(ctx, metav1.DeleteOptions{})).To(Succeed())
+			actual, err := t.doGet(ctx, t.pod.Name)
 			Expect(err).To(Succeed())
 			Expect(actual.GetDeletionTimestamp()).ToNot(BeNil())
 
-			Expect(t.doDelete(metav1.DeleteOptions{})).To(Succeed())
-			unchanged, err := t.doGet(t.pod.Name)
+			Expect(t.doDelete(ctx, metav1.DeleteOptions{})).To(Succeed())
+			unchanged, err := t.doGet(ctx, t.pod.Name)
 			Expect(err).To(Succeed())
 			Expect(unchanged.GetResourceVersion()).To(Equal(actual.GetResourceVersion()))
 		})
@@ -205,9 +205,9 @@ var _ = Describe("Delete", func() {
 var _ = Describe("List", func() {
 	t := newBasicReactorsTestDriver()
 
-	JustBeforeEach(func() {
-		t.pod = t.assertCreateSuccess(t.pod)
-		t.assertCreateSuccess(&corev1.Pod{
+	JustBeforeEach(func(ctx SpecContext) {
+		t.pod = t.assertCreateSuccess(ctx, t.pod)
+		t.assertCreateSuccess(ctx, &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "other-pod",
 			},
@@ -215,8 +215,8 @@ var _ = Describe("List", func() {
 	})
 
 	When("a field selector is specified", func() {
-		It("should return the correct resources", func() {
-			list, err := t.client.CoreV1().Pods(testNamespace).List(context.Background(), metav1.ListOptions{
+		It("should return the correct resources", func(ctx SpecContext) {
+			list, err := t.client.CoreV1().Pods(testNamespace).List(ctx, metav1.ListOptions{
 				FieldSelector: fields.OneTermEqualSelector("metadata.name", t.pod.Name).String(),
 			})
 
@@ -232,10 +232,10 @@ var _ = Describe("Watch", func() {
 
 	var watcher watch.Interface
 
-	JustBeforeEach(func() {
+	JustBeforeEach(func(ctx SpecContext) {
 		var err error
 
-		watcher, err = t.client.CoreV1().Pods(testNamespace).Watch(context.Background(), metav1.ListOptions{
+		watcher, err = t.client.CoreV1().Pods(testNamespace).Watch(ctx, metav1.ListOptions{
 			LabelSelector: k8slabels.SelectorFromSet(t.pod.Labels).String(),
 		})
 		Expect(err).To(Succeed())
@@ -246,8 +246,8 @@ var _ = Describe("Watch", func() {
 	})
 
 	When("a label selector is specified", func() {
-		It("should correctly filter the resources", func() {
-			t.pod = t.assertCreateSuccess(t.pod)
+		It("should correctly filter the resources", func(ctx SpecContext) {
+			t.pod = t.assertCreateSuccess(ctx, t.pod)
 
 			select {
 			case event, ok := <-watcher.ResultChan():
@@ -264,7 +264,7 @@ var _ = Describe("Watch", func() {
 				Fail("Did not receive expected watch event")
 			}
 
-			t.assertCreateSuccess(&corev1.Pod{
+			t.assertCreateSuccess(ctx, &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "other-pod",
 				},
@@ -282,28 +282,28 @@ var _ = Describe("Watch", func() {
 var _ = Describe("DeleteCollection", func() {
 	t := newBasicReactorsTestDriver()
 
-	JustBeforeEach(func() {
-		t.pod = t.assertCreateSuccess(t.pod)
+	JustBeforeEach(func(ctx SpecContext) {
+		t.pod = t.assertCreateSuccess(ctx, t.pod)
 	})
 
-	It("should delete the correct resources", func() {
-		otherPod := t.assertCreateSuccess(&corev1.Pod{
+	It("should delete the correct resources", func(ctx SpecContext) {
+		otherPod := t.assertCreateSuccess(ctx, &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "other-pod",
 			},
 		})
 
-		err := t.client.CoreV1().Pods(testNamespace).DeleteCollection(context.Background(), metav1.DeleteOptions{},
+		err := t.client.CoreV1().Pods(testNamespace).DeleteCollection(ctx, metav1.DeleteOptions{},
 			metav1.ListOptions{
 				LabelSelector: k8slabels.SelectorFromSet(t.pod.Labels).String(),
 			})
 
 		Expect(err).To(Succeed())
 
-		_, err = t.doGet(t.pod.Name)
+		_, err = t.doGet(ctx, t.pod.Name)
 		Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
-		t.assertGetSuccess(otherPod)
+		t.assertGetSuccess(ctx, otherPod)
 	})
 })
 
@@ -319,70 +319,70 @@ var _ = Describe("Namespace verification", func() {
 		Expect(resource.ExtractMissingNamespaceFromErr(err)).To(Equal(testNamespace))
 	}
 
-	createNamespace := func(name string) {
-		_, err := t.client.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{
+	createNamespace := func(ctx context.Context, name string) {
+		_, err := t.client.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: name},
 		}, metav1.CreateOptions{})
 		Expect(err).To(Succeed())
 	}
 
 	When("a namespace does not exist", func() {
-		Specify("requests should return the appropriate error", func() {
-			_, err := t.doCreate(t.pod)
+		Specify("requests should return the appropriate error", func(ctx SpecContext) {
+			_, err := t.doCreate(ctx, t.pod)
 			assertMissingNamespaceErr(err)
 
-			_, err = t.doGet(t.pod.Name)
+			_, err = t.doGet(ctx, t.pod.Name)
 			assertMissingNamespaceErr(err)
 
-			_, err = t.doUpdate()
+			_, err = t.doUpdate(ctx)
 			assertMissingNamespaceErr(err)
 
-			assertMissingNamespaceErr(t.doDelete(metav1.DeleteOptions{}))
+			assertMissingNamespaceErr(t.doDelete(ctx, metav1.DeleteOptions{}))
 
-			_, err = t.client.CoreV1().Pods(testNamespace).List(context.Background(), metav1.ListOptions{})
+			_, err = t.client.CoreV1().Pods(testNamespace).List(ctx, metav1.ListOptions{})
 			assertMissingNamespaceErr(err)
 		})
 	})
 
 	When("a request has no namespace", func() {
-		It("should succeed", func() {
-			_, err := t.client.CoreV1().Pods("").Create(context.Background(), t.pod, metav1.CreateOptions{})
+		It("should succeed", func(ctx SpecContext) {
+			_, err := t.client.CoreV1().Pods("").Create(ctx, t.pod, metav1.CreateOptions{})
 			Expect(err).To(Succeed())
 		})
 	})
 
 	When("a namespace does exist", func() {
-		Specify("requests should succeed", func() {
-			createNamespace(testNamespace)
+		Specify("requests should succeed", func(ctx SpecContext) {
+			createNamespace(ctx, testNamespace)
 
 			t.pod.Name = "test-pod"
-			t.assertCreateSuccess(t.pod)
+			t.assertCreateSuccess(ctx, t.pod)
 
-			_, err := t.client.CoreV1().Pods(testNamespace).List(context.Background(), metav1.ListOptions{})
+			_, err := t.client.CoreV1().Pods(testNamespace).List(ctx, metav1.ListOptions{})
 			Expect(err).To(Succeed())
 
-			Expect(t.doDelete(metav1.DeleteOptions{})).To(Succeed())
+			Expect(t.doDelete(ctx, metav1.DeleteOptions{})).To(Succeed())
 		})
 	})
 
 	When("a namespace is deleted", func() {
 		const noDeleteNS = "no-delete"
 
-		It("should delete all contained resources", func() {
-			createNamespace(testNamespace)
-			createNamespace(noDeleteNS)
+		It("should delete all contained resources", func(ctx SpecContext) {
+			createNamespace(ctx, testNamespace)
+			createNamespace(ctx, noDeleteNS)
 
 			t.pod.Name = "test-pod"
-			t.assertCreateSuccess(t.pod)
+			t.assertCreateSuccess(ctx, t.pod)
 
-			_, err := t.client.CoreV1().Services(testNamespace).Create(context.TODO(), &corev1.Service{
+			_, err := t.client.CoreV1().Services(testNamespace).Create(ctx, &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "should-delete",
 				},
 			}, metav1.CreateOptions{})
 			Expect(err).To(Succeed())
 
-			_, err = t.client.CoreV1().Services(noDeleteNS).Create(context.TODO(), &corev1.Service{
+			_, err = t.client.CoreV1().Services(noDeleteNS).Create(ctx, &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "should-not-delete",
 				},
@@ -391,24 +391,24 @@ var _ = Describe("Namespace verification", func() {
 
 			// Delete the namespace
 
-			Expect(t.client.CoreV1().Namespaces().Delete(context.TODO(), testNamespace, metav1.DeleteOptions{})).To(Succeed())
+			Expect(t.client.CoreV1().Namespaces().Delete(ctx, testNamespace, metav1.DeleteOptions{})).To(Succeed())
 
-			_, err = t.doGet(t.pod.Name)
+			_, err = t.doGet(ctx, t.pod.Name)
 			assertMissingNamespaceErr(err)
 
 			// Recreate the namespace
 
-			createNamespace(testNamespace)
+			createNamespace(ctx, testNamespace)
 
-			_, err = t.doGet(t.pod.Name)
+			_, err = t.doGet(ctx, t.pod.Name)
 			Expect(err).To(HaveOccurred())
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
-			_, err = t.client.CoreV1().Services(testNamespace).Get(context.TODO(), "should-delete", metav1.GetOptions{})
+			_, err = t.client.CoreV1().Services(testNamespace).Get(ctx, "should-delete", metav1.GetOptions{})
 			Expect(err).To(HaveOccurred())
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
-			_, err = t.client.CoreV1().Services(noDeleteNS).Get(context.TODO(), "should-not-delete", metav1.GetOptions{})
+			_, err = t.client.CoreV1().Services(noDeleteNS).Get(ctx, "should-not-delete", metav1.GetOptions{})
 			Expect(err).To(Succeed())
 		})
 	})
@@ -446,41 +446,41 @@ func newBasicReactorsTestDriver() *basicReactorsTestDriver {
 	return t
 }
 
-func (t *basicReactorsTestDriver) doGet(name string) (*corev1.Pod, error) {
-	return t.client.CoreV1().Pods(testNamespace).Get(context.Background(), name, metav1.GetOptions{})
+func (t *basicReactorsTestDriver) doGet(ctx context.Context, name string) (*corev1.Pod, error) {
+	return t.client.CoreV1().Pods(testNamespace).Get(ctx, name, metav1.GetOptions{})
 }
 
-func (t *basicReactorsTestDriver) assertGetSuccess(p *corev1.Pod) *corev1.Pod {
-	actual, err := t.doGet(p.Name)
+func (t *basicReactorsTestDriver) assertGetSuccess(ctx context.Context, p *corev1.Pod) *corev1.Pod {
+	actual, err := t.doGet(ctx, p.Name)
 	Expect(err).To(Succeed())
 	Expect(actual).To(Equal(p))
 
 	return actual
 }
 
-func (t *basicReactorsTestDriver) doCreate(pod *corev1.Pod) (*corev1.Pod, error) {
-	return t.client.CoreV1().Pods(testNamespace).Create(context.Background(), pod, metav1.CreateOptions{})
+func (t *basicReactorsTestDriver) doCreate(ctx context.Context, pod *corev1.Pod) (*corev1.Pod, error) {
+	return t.client.CoreV1().Pods(testNamespace).Create(ctx, pod, metav1.CreateOptions{})
 }
 
-func (t *basicReactorsTestDriver) assertCreateSuccess(pod *corev1.Pod) *corev1.Pod {
-	created, err := t.doCreate(pod)
+func (t *basicReactorsTestDriver) assertCreateSuccess(ctx context.Context, pod *corev1.Pod) *corev1.Pod {
+	created, err := t.doCreate(ctx, pod)
 	Expect(err).To(Succeed())
 
-	return t.assertGetSuccess(created)
+	return t.assertGetSuccess(ctx, created)
 }
 
-func (t *basicReactorsTestDriver) doUpdate() (*corev1.Pod, error) {
-	return t.client.CoreV1().Pods(testNamespace).Update(context.Background(), t.pod, metav1.UpdateOptions{})
+func (t *basicReactorsTestDriver) doUpdate(ctx context.Context) (*corev1.Pod, error) {
+	return t.client.CoreV1().Pods(testNamespace).Update(ctx, t.pod, metav1.UpdateOptions{})
 }
 
-func (t *basicReactorsTestDriver) doUpdateSuccess() *corev1.Pod {
-	updated, err := t.doUpdate()
+func (t *basicReactorsTestDriver) doUpdateSuccess(ctx context.Context) *corev1.Pod {
+	updated, err := t.doUpdate(ctx)
 	Expect(err).To(Succeed())
 
-	return t.assertGetSuccess(updated)
+	return t.assertGetSuccess(ctx, updated)
 }
 
 //nolint:gocritic // Ignore hugeParam
-func (t *basicReactorsTestDriver) doDelete(opts metav1.DeleteOptions) error {
-	return t.client.CoreV1().Pods(testNamespace).Delete(context.Background(), t.pod.Name, opts)
+func (t *basicReactorsTestDriver) doDelete(ctx context.Context, opts metav1.DeleteOptions) error {
+	return t.client.CoreV1().Pods(testNamespace).Delete(ctx, t.pod.Name, opts)
 }
