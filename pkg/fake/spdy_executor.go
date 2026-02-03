@@ -22,41 +22,61 @@ import (
 	"context"
 	"net/url"
 
+	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-type fakeExecutor struct {
-	stdout string
-	stderr string
-	err    error
+type SPDYExecutor struct {
+	Stdout     string
+	Stderr     string
+	Err        error
+	URLMatcher types.GomegaMatcher
 }
 
 func SetSPDYExecutor(stdout, stderr string, err error) {
-	resource.NewSPDYExecutor = func(_ *rest.Config, _ string, _ *url.URL) (remotecommand.Executor, error) {
-		return &fakeExecutor{stdout: stdout, stderr: stderr, err: err}, nil
+	SetSPDYExecutors(SPDYExecutor{Stdout: stdout, Stderr: stderr, Err: err})
+}
+
+func SetSPDYExecutors(executors ...SPDYExecutor) {
+	resource.NewSPDYExecutor = func(_ *rest.Config, _ string, url *url.URL) (remotecommand.Executor, error) {
+		for _, e := range executors {
+			if e.URLMatcher == nil {
+				return &e, nil
+			}
+
+			ok, err := e.URLMatcher.Match(url.String())
+			Expect(err).ToNot(HaveOccurred())
+
+			if ok {
+				return &e, nil
+			}
+		}
+
+		return &SPDYExecutor{}, nil
 	}
 }
 
-func (f *fakeExecutor) Stream(options remotecommand.StreamOptions) error {
+func (f *SPDYExecutor) Stream(options remotecommand.StreamOptions) error {
 	return f.StreamWithContext(context.TODO(), options)
 }
 
-func (f *fakeExecutor) StreamWithContext(_ context.Context, options remotecommand.StreamOptions) error {
-	if f.err != nil {
-		return f.err
+func (f *SPDYExecutor) StreamWithContext(_ context.Context, options remotecommand.StreamOptions) error {
+	if f.Err != nil {
+		return f.Err
 	}
 
 	if options.Stdout != nil {
-		_, err := options.Stdout.Write([]byte(f.stdout))
+		_, err := options.Stdout.Write([]byte(f.Stdout))
 		if err != nil {
 			return err
 		}
 	}
 
 	if options.Stderr != nil {
-		_, err := options.Stderr.Write([]byte(f.stderr))
+		_, err := options.Stderr.Write([]byte(f.Stderr))
 		if err != nil {
 			return err
 		}
