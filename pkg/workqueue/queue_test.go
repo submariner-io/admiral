@@ -245,6 +245,7 @@ var _ = Describe("Work Queue", func() {
 			}
 
 			done := make(chan struct{})
+
 			go func() {
 				for i := 1; i <= itemCount; i++ {
 					Eventually(itemCh).Should(Receive())
