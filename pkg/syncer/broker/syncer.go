@@ -327,7 +327,6 @@ func (c *SyncerConfig) createBrokerClient() error {
 		}
 
 		c.BrokerNamespace = spec.RemoteNamespace
-
 		// If we have a secret, try to use it
 		if spec.Secret != "" {
 			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromFiles(spec.APIServer,
@@ -343,6 +342,7 @@ func (c *SyncerConfig) createBrokerClient() error {
 			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(spec.APIServer, spec.APIServerToken, spec.Ca,
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 		}
+		applyQPSBurst(c.BrokerRestConfig, spec)
 	}
 
 	if !authorized {
@@ -360,15 +360,6 @@ func (c *SyncerConfig) createBrokerClient() error {
 
 func (c *SyncerConfig) ensureClients() error {
 	var err error
-
-	// Get client QPS/Burst settings from environment variables
-	brokerSpec, err := getBrokerSpecification()
-	if err != nil {
-		return err
-	}
-
-	// Apply QPS and Burst settings to local REST config
-	applyQPSBurst(c.LocalRestConfig, brokerSpec)
 
 	if c.RestMapper == nil {
 		c.RestMapper, err = util.BuildRestMapper(c.LocalRestConfig)
@@ -389,9 +380,6 @@ func (c *SyncerConfig) ensureClients() error {
 			return err
 		}
 	}
-
-	// Apply QPS and Burst settings to broker REST config
-	applyQPSBurst(c.BrokerRestConfig, brokerSpec)
 
 	return nil
 }
