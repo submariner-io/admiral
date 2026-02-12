@@ -65,6 +65,8 @@ var _ = Describe("Broker Syncer", func() {
 		initialBrokerResources []runtime.Object
 		stopCh                 chan struct{}
 		actualBrokerRestConfig *rest.Config
+		brokerQPSAtCreation    float32
+		brokerBurstAtCreation  int
 		expectInitError        bool
 	)
 
@@ -79,6 +81,8 @@ var _ = Describe("Broker Syncer", func() {
 
 		expectInitError = false
 		actualBrokerRestConfig = nil
+		brokerQPSAtCreation = 0
+		brokerBurstAtCreation = 0
 		initialLocalResources = nil
 		initialBrokerResources = nil
 		stopCh = make(chan struct{})
@@ -128,6 +132,10 @@ var _ = Describe("Broker Syncer", func() {
 				} else if equality.Semantic.DeepDerivative(inConfig, config.BrokerRestConfig) ||
 					(brokerAPIServer != "" && strings.HasSuffix(inConfig.Host, brokerAPIServer)) {
 					actualBrokerRestConfig = inConfig
+					// Capture QPS/Burst values at the moment of client creation
+					// to verify they were applied BEFORE NewDynamicClient was called
+					brokerQPSAtCreation = inConfig.QPS
+					brokerBurstAtCreation = inConfig.Burst
 					return brokerDynClient, nil
 				}
 
@@ -693,45 +701,46 @@ var _ = Describe("Broker Syncer", func() {
 
 	When("client QPS/Burst environment vars are specified", func() {
 		BeforeEach(func() {
+			os.Setenv("BROKER_K8S_APISERVER", "broker-host")
+			os.Setenv("BROKER_K8S_REMOTENAMESPACE", test.RemoteNamespace)
 			os.Setenv("BROKER_K8S_QPS", "100")
 			os.Setenv("BROKER_K8S_BURST", "500")
-
-			config.LocalRestConfig = &rest.Config{
-				Host: "https://local",
-			}
-
-			config.BrokerRestConfig = &rest.Config{
-				Host: "https://broker",
-			}
 		})
 
-		It("should apply QPS and Burst to both local and broker rest configs", func() {
-			Expect(config.LocalRestConfig.QPS).To(Equal(float32(100)))
-			Expect(config.LocalRestConfig.Burst).To(Equal(500))
-			Expect(actualBrokerRestConfig.QPS).To(Equal(float32(100)))
-			Expect(actualBrokerRestConfig.Burst).To(Equal(500))
+		It("should apply QPS and Burst to broker rest config before client creation", func() {
+			Expect(brokerQPSAtCreation).To(Equal(float32(100)))
+			Expect(brokerBurstAtCreation).To(Equal(500))
 		})
 	})
 
 	When("client QPS/Burst environment vars are not specified", func() {
 		BeforeEach(func() {
-			os.Unsetenv("BROKER_K8S_QPS")
-			os.Unsetenv("BROKER_K8S_BURST")
+			os.Setenv("BROKER_K8S_APISERVER", "broker-host")
+			os.Setenv("BROKER_K8S_REMOTENAMESPACE", test.RemoteNamespace)
+		})
 
-			config.LocalRestConfig = &rest.Config{
-				Host: "https://local",
-			}
+		It("should apply default QPS (5) and Burst (10) to broker rest config before client creation", func() {
+			Expect(brokerQPSAtCreation).To(Equal(float32(5)))
+			Expect(brokerBurstAtCreation).To(Equal(10))
+		})
+	})
+
+	When("BrokerRestConfig is explicitly provided with custom QPS/Burst", func() {
+		BeforeEach(func() {
+			os.Setenv("BROKER_K8S_QPS", "100")
+			os.Setenv("BROKER_K8S_BURST", "500")
 
 			config.BrokerRestConfig = &rest.Config{
-				Host: "https://broker",
+				Host:  "https://broker",
+				QPS:   50,
+				Burst: 200,
 			}
 		})
 
-		It("should apply default QPS (5) and Burst (10) to both local and broker rest configs", func() {
-			Expect(config.LocalRestConfig.QPS).To(Equal(float32(5)))
-			Expect(config.LocalRestConfig.Burst).To(Equal(10))
-			Expect(actualBrokerRestConfig.QPS).To(Equal(float32(5)))
-			Expect(actualBrokerRestConfig.Burst).To(Equal(10))
+		It("should preserve the explicitly provided QPS and Burst values", func() {
+			// When BrokerRestConfig is explicitly provided, its QPS/Burst should NOT be overwritten
+			Expect(brokerQPSAtCreation).To(Equal(float32(50)))
+			Expect(brokerBurstAtCreation).To(Equal(200))
 		})
 	})
 })
