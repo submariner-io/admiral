@@ -361,6 +361,15 @@ func (c *SyncerConfig) createBrokerClient() error {
 func (c *SyncerConfig) ensureClients() error {
 	var err error
 
+	// Get client QPS/Burst settings from environment variables
+	brokerSpec, err := getBrokerSpecification()
+	if err != nil {
+		return err
+	}
+
+	// Apply QPS and Burst settings to local REST config
+	applyQPSBurst(c.LocalRestConfig, brokerSpec)
+
 	if c.RestMapper == nil {
 		c.RestMapper, err = util.BuildRestMapper(c.LocalRestConfig)
 		if err != nil {
@@ -381,7 +390,24 @@ func (c *SyncerConfig) ensureClients() error {
 		}
 	}
 
+	// Apply QPS and Burst settings to broker REST config
+	applyQPSBurst(c.BrokerRestConfig, brokerSpec)
+
 	return nil
+}
+
+func applyQPSBurst(restConfig *rest.Config, spec *brokerSpecification) {
+	if restConfig == nil {
+		return
+	}
+
+	if spec.QPS > 0 {
+		restConfig.QPS = spec.QPS
+	}
+
+	if spec.Burst > 0 {
+		restConfig.Burst = spec.Burst
+	}
 }
 
 func (s *Syncer) Start(stopCh <-chan struct{}) error {

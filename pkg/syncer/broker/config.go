@@ -31,9 +31,11 @@ type brokerSpecification struct {
 	APIServer       string
 	APIServerToken  string
 	RemoteNamespace string
-	Insecure        bool `default:"false"`
 	Ca              string
 	Secret          string
+	Burst           int     `default:"10"`
+	QPS             float32 `default:"5"`
+	Insecure        bool    `default:"false"`
 }
 
 const brokerConfigPrefix = "broker_k8s"
@@ -43,7 +45,7 @@ func getBrokerSpecification() (*brokerSpecification, error) {
 
 	err := envconfig.Process(brokerConfigPrefix, &brokerSpec)
 	if err != nil {
-		return nil, errors.Wrap(err, "error processing env configuration")
+		return nil, errors.Wrap(err, "error processing broker env configuration")
 	}
 
 	return &brokerSpec, nil

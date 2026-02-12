@@ -74,6 +74,8 @@ var _ = Describe("Broker Syncer", func() {
 		os.Unsetenv("BROKER_K8S_REMOTENAMESPACE")
 		os.Unsetenv("BROKER_K8S_INSECURE")
 		os.Unsetenv("BROKER_K8S_SECRET")
+		os.Unsetenv("BROKER_K8S_QPS")
+		os.Unsetenv("BROKER_K8S_BURST")
 
 		expectInitError = false
 		actualBrokerRestConfig = nil
@@ -686,6 +688,50 @@ var _ = Describe("Broker Syncer", func() {
 				test.CreateResource(localClient, resource)
 				test.AwaitResource(brokerClient, resource.GetName())
 			})
+		})
+	})
+
+	When("client QPS/Burst environment vars are specified", func() {
+		BeforeEach(func() {
+			os.Setenv("BROKER_K8S_QPS", "100")
+			os.Setenv("BROKER_K8S_BURST", "500")
+
+			config.LocalRestConfig = &rest.Config{
+				Host: "https://local",
+			}
+
+			config.BrokerRestConfig = &rest.Config{
+				Host: "https://broker",
+			}
+		})
+
+		It("should apply QPS and Burst to both local and broker rest configs", func() {
+			Expect(config.LocalRestConfig.QPS).To(Equal(float32(100)))
+			Expect(config.LocalRestConfig.Burst).To(Equal(500))
+			Expect(actualBrokerRestConfig.QPS).To(Equal(float32(100)))
+			Expect(actualBrokerRestConfig.Burst).To(Equal(500))
+		})
+	})
+
+	When("client QPS/Burst environment vars are not specified", func() {
+		BeforeEach(func() {
+			os.Unsetenv("BROKER_K8S_QPS")
+			os.Unsetenv("BROKER_K8S_BURST")
+
+			config.LocalRestConfig = &rest.Config{
+				Host: "https://local",
+			}
+
+			config.BrokerRestConfig = &rest.Config{
+				Host: "https://broker",
+			}
+		})
+
+		It("should apply default QPS (5) and Burst (10) to both local and broker rest configs", func() {
+			Expect(config.LocalRestConfig.QPS).To(Equal(float32(5)))
+			Expect(config.LocalRestConfig.Burst).To(Equal(10))
+			Expect(actualBrokerRestConfig.QPS).To(Equal(float32(5)))
+			Expect(actualBrokerRestConfig.Burst).To(Equal(10))
 		})
 	})
 })
