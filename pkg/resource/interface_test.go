@@ -122,6 +122,7 @@ var _ = Describe("Interface", func() {
 				Type:   "type",
 				Status: metav1.ConditionTrue,
 			})
+
 			return s
 		})
 	})
