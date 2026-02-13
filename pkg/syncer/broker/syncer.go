@@ -390,11 +390,11 @@ func applyQPSBurst(restConfig *rest.Config) {
 		return
 	}
 
-	if qps := global.Get(global.K8S_CLIENT_QPS, 0); qps != 0 {
+	if qps := global.Get(global.K8sBrokerClientQPS, 0); qps != 0 {
 		restConfig.QPS = float32(qps)
 	}
 
-	if burst := global.Get(global.K8S_CLIENT_BURST, 0); burst != 0 {
+	if burst := global.Get(global.K8sBrokerClientBurst, 0); burst != 0 {
 		restConfig.Burst = burst
 	}
 }

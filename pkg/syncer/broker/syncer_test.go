@@ -65,6 +65,7 @@ var _ = Describe("Broker Syncer", func() {
 		initialLocalResources  []runtime.Object
 		initialBrokerResources []runtime.Object
 		stopCh                 chan struct{}
+		actualLocalRestConfig  *rest.Config
 		actualBrokerRestConfig *rest.Config
 		expectInitError        bool
 	)
@@ -80,6 +81,7 @@ var _ = Describe("Broker Syncer", func() {
 		global.Init()
 
 		expectInitError = false
+		actualLocalRestConfig = nil
 		actualBrokerRestConfig = nil
 		initialLocalResources = nil
 		initialBrokerResources = nil
@@ -126,6 +128,7 @@ var _ = Describe("Broker Syncer", func() {
 		if config.LocalRestConfig != nil || config.BrokerRestConfig != nil || brokerAPIServer != "" {
 			resourceutils.NewDynamicClient = func(inConfig *rest.Config) (dynamic.Interface, error) {
 				if equality.Semantic.DeepDerivative(inConfig, config.LocalRestConfig) {
+					actualLocalRestConfig = inConfig
 					return localDynClient, nil
 				} else if equality.Semantic.DeepDerivative(inConfig, config.BrokerRestConfig) ||
 					(brokerAPIServer != "" && strings.HasSuffix(inConfig.Host, brokerAPIServer)) {
@@ -632,7 +635,9 @@ var _ = Describe("Broker Syncer", func() {
 	When("rest config instances are specified", func() {
 		BeforeEach(func() {
 			config.LocalRestConfig = &rest.Config{
-				Host: "https://local",
+				Host:  "https://local",
+				QPS:   30,
+				Burst: 100,
 			}
 
 			config.BrokerRestConfig = &rest.Config{
@@ -645,6 +650,14 @@ var _ = Describe("Broker Syncer", func() {
 		It("should work correctly", func() {
 			test.CreateResource(localClient, resource)
 			test.AwaitResource(brokerClient, resource.GetName())
+		})
+
+		It("should use the local rest config QPS and Burst values", func() {
+			Expect(actualLocalRestConfig.QPS).To(Equal(float32(30)))
+			Expect(actualLocalRestConfig.Burst).To(Equal(100))
+		})
+
+		It("should use the broker rest config QPS and Burst values", func() {
 			Expect(actualBrokerRestConfig.QPS).To(Equal(float32(50)))
 			Expect(actualBrokerRestConfig.Burst).To(Equal(200))
 		})
@@ -653,13 +666,13 @@ var _ = Describe("Broker Syncer", func() {
 			BeforeEach(func() {
 				global.Init(&corev1.ConfigMap{
 					Data: map[string]string{
-						global.K8S_CLIENT_QPS:   "100",
-						global.K8S_CLIENT_BURST: "500",
+						global.K8sBrokerClientQPS:   "100",
+						global.K8sBrokerClientBurst: "500",
 					},
 				})
 			})
 
-			It("should prioritize the rest config instances over global config", func() {
+			It("should prioritize the broker rest config over global config", func() {
 				Expect(actualBrokerRestConfig.QPS).To(Equal(float32(50)))
 				Expect(actualBrokerRestConfig.Burst).To(Equal(200))
 			})
@@ -712,12 +725,12 @@ var _ = Describe("Broker Syncer", func() {
 			})
 		})
 
-		Context("including QPS and Burst", func() {
+		Context("and global QPS/Burst config is set", func() {
 			BeforeEach(func() {
 				global.Init(&corev1.ConfigMap{
 					Data: map[string]string{
-						global.K8S_CLIENT_QPS:   "100",
-						global.K8S_CLIENT_BURST: "500",
+						global.K8sBrokerClientQPS:   "100",
+						global.K8sBrokerClientBurst: "500",
 					},
 				})
 			})
