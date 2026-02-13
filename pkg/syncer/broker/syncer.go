@@ -389,11 +389,11 @@ func applyQPSBurst(restConfig *rest.Config, spec *brokerSpecification) {
 		return
 	}
 
-	if spec.QPS > 0 {
+	if spec.QPS != 0 {
 		restConfig.QPS = spec.QPS
 	}
 
-	if spec.Burst > 0 {
+	if spec.Burst != 0 {
 		restConfig.Burst = spec.Burst
 	}
 }

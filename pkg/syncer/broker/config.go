@@ -33,9 +33,9 @@ type brokerSpecification struct {
 	RemoteNamespace string
 	Ca              string
 	Secret          string
-	Burst           int     `default:"10"`
-	QPS             float32 `default:"5"`
-	Insecure        bool    `default:"false"`
+	Burst           int
+	QPS             float32
+	Insecure        bool `default:"false"`
 }
 
 const brokerConfigPrefix = "broker_k8s"
