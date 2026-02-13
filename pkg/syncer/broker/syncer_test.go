@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/fake"
 	fakefederator "github.com/submariner-io/admiral/pkg/federate/fake"
+	"github.com/submariner-io/admiral/pkg/global"
 	resourceutils "github.com/submariner-io/admiral/pkg/resource"
 	sync "github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/broker"
@@ -76,6 +77,7 @@ var _ = Describe("Broker Syncer", func() {
 		os.Unsetenv("BROKER_K8S_SECRET")
 		os.Unsetenv("BROKER_K8S_QPS")
 		os.Unsetenv("BROKER_K8S_BURST")
+		global.Init()
 
 		expectInitError = false
 		actualBrokerRestConfig = nil
@@ -643,15 +645,21 @@ var _ = Describe("Broker Syncer", func() {
 		It("should work correctly", func() {
 			test.CreateResource(localClient, resource)
 			test.AwaitResource(brokerClient, resource.GetName())
+			Expect(actualBrokerRestConfig.QPS).To(Equal(float32(50)))
+			Expect(actualBrokerRestConfig.Burst).To(Equal(200))
 		})
 
-		Context("and qps/burst env variables are also set", func() {
+		Context("and global config QPS/Burst are also set", func() {
 			BeforeEach(func() {
-				os.Setenv("BROKER_K8S_QPS", "100")
-				os.Setenv("BROKER_K8S_BURST", "500")
+				global.Init(&corev1.ConfigMap{
+					Data: map[string]string{
+						global.K8S_CLIENT_QPS:   "100",
+						global.K8S_CLIENT_BURST: "500",
+					},
+				})
 			})
 
-			It("should prioritize the rest config instances over environment variables", func() {
+			It("should prioritize the rest config instances over global config", func() {
 				Expect(actualBrokerRestConfig.QPS).To(Equal(float32(50)))
 				Expect(actualBrokerRestConfig.Burst).To(Equal(200))
 			})
@@ -706,8 +714,12 @@ var _ = Describe("Broker Syncer", func() {
 
 		Context("including QPS and Burst", func() {
 			BeforeEach(func() {
-				os.Setenv("BROKER_K8S_QPS", "100")
-				os.Setenv("BROKER_K8S_BURST", "500")
+				global.Init(&corev1.ConfigMap{
+					Data: map[string]string{
+						global.K8S_CLIENT_QPS:   "100",
+						global.K8S_CLIENT_BURST: "500",
+					},
+				})
 			})
 
 			It("should apply the QPS and Burst settings to the broker rest config", func() {

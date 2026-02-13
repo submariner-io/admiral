@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
+	"github.com/submariner-io/admiral/pkg/global"
 	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer"
@@ -342,7 +343,7 @@ func (c *SyncerConfig) createBrokerClient() error {
 			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(spec.APIServer, spec.APIServerToken, spec.Ca,
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 		}
-		applyQPSBurst(c.BrokerRestConfig, spec)
+		applyQPSBurst(c.BrokerRestConfig)
 	}
 
 	if !authorized {
@@ -384,17 +385,17 @@ func (c *SyncerConfig) ensureClients() error {
 	return nil
 }
 
-func applyQPSBurst(restConfig *rest.Config, spec *brokerSpecification) {
+func applyQPSBurst(restConfig *rest.Config) {
 	if restConfig == nil {
 		return
 	}
 
-	if spec.QPS != 0 {
-		restConfig.QPS = spec.QPS
+	if qps := global.Get(global.K8S_CLIENT_QPS, 0); qps != 0 {
+		restConfig.QPS = float32(qps)
 	}
 
-	if spec.Burst != 0 {
-		restConfig.Burst = spec.Burst
+	if burst := global.Get(global.K8S_CLIENT_BURST, 0); burst != 0 {
+		restConfig.Burst = burst
 	}
 }
 

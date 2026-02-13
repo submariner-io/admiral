@@ -33,8 +33,6 @@ type brokerSpecification struct {
 	RemoteNamespace string
 	Ca              string
 	Secret          string
-	Burst           int
-	QPS             float32
 	Insecure        bool `default:"false"`
 }
 
