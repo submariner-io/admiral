@@ -76,8 +76,6 @@ var _ = Describe("Broker Syncer", func() {
 		os.Unsetenv("BROKER_K8S_REMOTENAMESPACE")
 		os.Unsetenv("BROKER_K8S_INSECURE")
 		os.Unsetenv("BROKER_K8S_SECRET")
-		os.Unsetenv("BROKER_K8S_QPS")
-		os.Unsetenv("BROKER_K8S_BURST")
 		global.Init()
 
 		expectInitError = false

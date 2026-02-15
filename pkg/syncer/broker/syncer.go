@@ -343,7 +343,11 @@ func (c *SyncerConfig) createBrokerClient() error {
 			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(spec.APIServer, spec.APIServerToken, spec.Ca,
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 		}
-		applyQPSBurst(c.BrokerRestConfig)
+
+		if c.BrokerRestConfig != nil {
+			c.BrokerRestConfig.QPS = float32(global.Get(global.K8sBrokerClientQPS, 0))
+			c.BrokerRestConfig.Burst = global.Get(global.K8sBrokerClientBurst, 0)
+		}
 	}
 
 	if !authorized {
@@ -383,20 +387,6 @@ func (c *SyncerConfig) ensureClients() error {
 	}
 
 	return nil
-}
-
-func applyQPSBurst(restConfig *rest.Config) {
-	if restConfig == nil {
-		return
-	}
-
-	if qps := global.Get(global.K8sBrokerClientQPS, 0); qps != 0 {
-		restConfig.QPS = float32(qps)
-	}
-
-	if burst := global.Get(global.K8sBrokerClientBurst, 0); burst != 0 {
-		restConfig.Burst = burst
-	}
 }
 
 func (s *Syncer) Start(stopCh <-chan struct{}) error {
