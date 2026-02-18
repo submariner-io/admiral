@@ -32,8 +32,8 @@ type brokerSpecification struct {
 	APIServerToken  string
 	RemoteNamespace string
 	Ca              string
-	Secret          string
-	Insecure        bool `default:"false"`
+	Secret          string //nolint:gosec // G117 This is a configuration field name, not secret data
+	Insecure        bool   `default:"false"`
 }
 
 const brokerConfigPrefix = "broker_k8s"
