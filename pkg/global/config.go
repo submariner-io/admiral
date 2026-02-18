@@ -32,6 +32,13 @@ type ValueType interface {
 	string | int | uint16 | uint32 | uint64 | bool | time.Duration
 }
 
+const (
+	K8sClientQPS         = "k8s.client/qps"
+	K8sClientBurst       = "k8s.client/burst"
+	K8sBrokerClientQPS   = "k8s.broker.client/qps"
+	K8sBrokerClientBurst = "k8s.broker.client/burst"
+)
+
 var (
 	configMap sync.Map
 	logger    = log.Logger{Logger: logf.Log.WithName("Global")}

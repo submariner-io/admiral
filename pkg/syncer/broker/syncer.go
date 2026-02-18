@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
+	"github.com/submariner-io/admiral/pkg/global"
 	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer"
@@ -327,7 +328,6 @@ func (c *SyncerConfig) createBrokerClient() error {
 		}
 
 		c.BrokerNamespace = spec.RemoteNamespace
-
 		// If we have a secret, try to use it
 		if spec.Secret != "" {
 			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromFiles(spec.APIServer,
@@ -342,6 +342,11 @@ func (c *SyncerConfig) createBrokerClient() error {
 		if spec.Secret == "" || err != nil {
 			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(spec.APIServer, spec.APIServerToken, spec.Ca,
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
+		}
+
+		if c.BrokerRestConfig != nil {
+			c.BrokerRestConfig.QPS = float32(global.Get(global.K8sBrokerClientQPS, 0))
+			c.BrokerRestConfig.Burst = global.Get(global.K8sBrokerClientBurst, 0)
 		}
 	}
 

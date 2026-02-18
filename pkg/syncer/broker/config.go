@@ -31,9 +31,9 @@ type brokerSpecification struct {
 	APIServer       string
 	APIServerToken  string
 	RemoteNamespace string
-	Insecure        bool `default:"false"`
 	Ca              string
-	Secret          string
+	Secret          string //nolint:gosec // G117 This is a configuration field name, not secret data
+	Insecure        bool   `default:"false"`
 }
 
 const brokerConfigPrefix = "broker_k8s"
@@ -43,7 +43,7 @@ func getBrokerSpecification() (*brokerSpecification, error) {
 
 	err := envconfig.Process(brokerConfigPrefix, &brokerSpec)
 	if err != nil {
-		return nil, errors.Wrap(err, "error processing env configuration")
+		return nil, errors.Wrap(err, "error processing broker env configuration")
 	}
 
 	return &brokerSpec, nil
