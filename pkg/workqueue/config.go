@@ -32,6 +32,7 @@ const (
 	BucketRateLimiterItemsPerSecKey = "bucket-rate-limiter-items-per-sec"
 	BucketRateLimiterMaxBurstKey    = "bucket-rate-limiter-max-burst"
 	MaxVerbosityKey                 = "max-verbosity"
+	NumWorkersKey                   = "num-workers"
 )
 
 type Config struct {
@@ -41,6 +42,7 @@ type Config struct {
 	BucketRateLimiterItemsPerSec int
 	BucketRateLimiterMaxBurst    int
 	MaxVerbosity                 int
+	NumWorkers                   int
 }
 
 func DefaultConfig() Config {
@@ -50,6 +52,7 @@ func DefaultConfig() Config {
 		OverallRateLimiterMaxDelay:   5 * time.Minute,
 		BucketRateLimiterItemsPerSec: 10,
 		BucketRateLimiterMaxBurst:    500,
+		NumWorkers:                   1,
 	}
 }
 
@@ -74,6 +77,7 @@ func ConfigFromGlobal(keyPrefix string, defaultConfig *Config) *Config {
 	config.BucketRateLimiterMaxBurst = global.Get(ToConfigMapDataKey(keyPrefix, BucketRateLimiterMaxBurstKey),
 		config.BucketRateLimiterMaxBurst)
 	config.MaxVerbosity = global.Get(ToConfigMapDataKey(keyPrefix, MaxVerbosityKey), config.MaxVerbosity)
+	config.NumWorkers = global.Get(ToConfigMapDataKey(keyPrefix, NumWorkersKey), config.NumWorkers)
 
 	return &config
 }

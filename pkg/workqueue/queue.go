@@ -59,6 +59,7 @@ type queueType struct {
 	priorityQueue *PriorityQueue
 	name          string
 	logger        log.Logger
+	numWorkers    int
 }
 
 func New(name string) Interface {
@@ -102,7 +103,8 @@ func NewWithConfig(name string, config Config) Interface {
 					}),
 				}),
 			}),
-		name: name,
+		name:       name,
+		numWorkers: config.NumWorkers,
 	}
 
 	q.logger.SetMaxVerbosity(config.MaxVerbosity)
@@ -131,11 +133,20 @@ func (q *queueType) EnqueueWithOpts(obj any, opts EnqueueOpts) {
 	}
 }
 
+// Run starts NumWorkers goroutines that concurrently process items from the queue.
+// When NumWorkers > 1, the ProcessFunc must be safe for concurrent invocation.
 func (q *queueType) Run(process ProcessFunc) {
-	go func() {
-		for q.processNextWorkItem(process) {
-		}
-	}()
+	numWorkers := q.numWorkers
+	if numWorkers <= 0 {
+		numWorkers = 1
+	}
+
+	for range numWorkers {
+		go func() {
+			for q.processNextWorkItem(process) {
+			}
+		}()
+	}
 }
 
 func (q *queueType) processNextWorkItem(process ProcessFunc) bool {
