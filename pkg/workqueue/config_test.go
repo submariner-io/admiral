@@ -35,6 +35,7 @@ var customConfig = workqueue.Config{
 	BucketRateLimiterItemsPerSec: 99,
 	BucketRateLimiterMaxBurst:    9999,
 	MaxVerbosity:                 2,
+	NumWorkers:                   3,
 }
 
 var _ = Describe("DefaultConfigIfNil", func() {
@@ -81,6 +82,7 @@ var _ = Describe("ConfigFromGlobal", func() {
 					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.BucketRateLimiterItemsPerSecKey): "99",
 					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.BucketRateLimiterMaxBurstKey):    "999",
 					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.MaxVerbosityKey):                 "2",
+					workqueue.ToConfigMapDataKey(keyPrefix, workqueue.NumWorkersKey):                   "5",
 				},
 			})
 			Expect(mustConfigFromGlobal(keyPrefix, nil)).To(Equal(workqueue.Config{
@@ -90,6 +92,7 @@ var _ = Describe("ConfigFromGlobal", func() {
 				BucketRateLimiterItemsPerSec: 99,
 				BucketRateLimiterMaxBurst:    999,
 				MaxVerbosity:                 2,
+				NumWorkers:                   5,
 			}))
 		})
 	})
@@ -114,6 +117,7 @@ var _ = Describe("ConfigFromGlobal", func() {
 					BucketRateLimiterItemsPerSec: 99,
 					BucketRateLimiterMaxBurst:    workqueue.DefaultConfig().BucketRateLimiterMaxBurst,
 					MaxVerbosity:                 2,
+					NumWorkers:                   1,
 				}))
 			})
 		})
@@ -127,6 +131,7 @@ var _ = Describe("ConfigFromGlobal", func() {
 					BucketRateLimiterItemsPerSec: 99,
 					BucketRateLimiterMaxBurst:    customConfig.BucketRateLimiterMaxBurst,
 					MaxVerbosity:                 2,
+					NumWorkers:                   3,
 				}))
 			})
 		})

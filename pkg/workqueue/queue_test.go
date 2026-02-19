@@ -23,6 +23,7 @@ import (
 	"errors"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -286,6 +287,85 @@ var _ = Describe("Work Queue", func() {
 
 			It("should not affect functionality", func() {
 			})
+		})
+	})
+
+	Context("with multiple workers", func() {
+		var (
+			processedItems sync.Map
+			maxConcurrent  atomic.Int32
+			processingGate chan struct{}
+		)
+
+		BeforeEach(func() {
+			processedItems = sync.Map{}
+			maxConcurrent = atomic.Int32{}
+			processingGate = make(chan struct{})
+
+			c := workqueue.DefaultConfig()
+			c.NumWorkers = 5
+			c.ItemRateLimiterBaseDelay = 0
+			config = &c
+
+			var currentActive atomic.Int32
+
+			processFn = func(key, _, _ string) (bool, error) {
+				defer GinkgoRecover()
+
+				// Track concurrent execution
+				current := currentActive.Add(1)
+
+				// Update max concurrent if needed
+				for {
+					currentMax := maxConcurrent.Load()
+					if current <= currentMax || maxConcurrent.CompareAndSwap(currentMax, current) {
+						break
+					}
+				}
+
+				// Wait for gate to open to ensure items pile up
+				<-processingGate
+
+				// Simulate some work
+				time.Sleep(10 * time.Millisecond)
+
+				// Mark item as processed
+				processedItems.Store(key, true)
+
+				currentActive.Add(-1)
+
+				return false, nil
+			}
+		})
+
+		It("should process items concurrently with multiple workers", func() {
+			itemCount := 500
+
+			for i := 1; i <= itemCount; i++ {
+				wq.EnqueueWithOpts(cache.ExplicitKey("item"+strconv.Itoa(i)),
+					workqueue.EnqueueOpts{Priority: workqueue.NormalPriority, RateLimited: false})
+			}
+
+			// Give workers time to pick up items and block on the gate
+			time.Sleep(500 * time.Millisecond)
+
+			// Close the gate to allow all workers to proceed
+			close(processingGate)
+
+			// Wait for all items to be processed
+			Eventually(func(g Gomega) {
+				count := 0
+				processedItems.Range(func(_, _ any) bool {
+					count++
+					return true
+				})
+
+				g.Expect(count).To(Equal(itemCount))
+			}).Within(5 * time.Second).Should(Succeed())
+
+			// Verify that multiple workers were active concurrently
+			Expect(maxConcurrent.Load()).To(BeNumerically(">", 1), "Expected multiple workers to be active concurrently")
+			Expect(maxConcurrent.Load()).To(BeNumerically("<=", 5), "Expected at most 5 workers to be active concurrently")
 		})
 	})
 
