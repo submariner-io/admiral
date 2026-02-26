@@ -79,5 +79,5 @@ func ConfigFromGlobal(keyPrefix string, defaultConfig *Config) *Config {
 }
 
 func ToConfigMapDataKey(prefix, name string) string {
-	return fmt.Sprintf("%s.workqueue/%s", prefix, name)
+	return fmt.Sprintf("%s.workqueue.%s", prefix, name)
 }
