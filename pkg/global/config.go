@@ -33,10 +33,10 @@ type ValueType interface {
 }
 
 const (
-	K8sClientQPS         = "k8s.client/qps"
-	K8sClientBurst       = "k8s.client/burst"
-	K8sBrokerClientQPS   = "k8s.broker.client/qps"
-	K8sBrokerClientBurst = "k8s.broker.client/burst"
+	K8sClientQPS         = "k8s.client.qps"
+	K8sClientBurst       = "k8s.client.burst"
+	K8sBrokerClientQPS   = "k8s.broker.client.qps"
+	K8sBrokerClientBurst = "k8s.broker.client.burst"
 )
 
 var (
