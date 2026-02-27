@@ -24,6 +24,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	corev1 "k8s.io/api/core/v1"
@@ -252,6 +253,12 @@ func newTransformFunctionTestDriver() *transformFuncTestDriver {
 		t.expOperation = make(chan syncer.Operation, 20)
 		t.transformed = test.NewPodWithImage(t.config.SourceNamespace, "transformed")
 		t.requeueOnOp = nil
+
+		t.config.Metrics = syncer.MetricsConfig{
+			TransformDurationMsOpts: &prometheus.HistogramOpts{
+				Name: "transform",
+			},
+		}
 
 		t.config.Transform = func(from runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 			defer GinkgoRecover()

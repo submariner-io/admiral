@@ -44,6 +44,7 @@ type Interface interface {
 	Enqueue(obj any)
 	EnqueueWithOpts(obj any, opts EnqueueOpts)
 	NumRequeues(key string) int
+	Len() int
 	Run(process ProcessFunc)
 	ShutDown()
 	ShutDownWithDrain(ctx context.Context) error

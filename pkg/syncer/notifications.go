@@ -20,6 +20,7 @@ package syncer
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
@@ -42,6 +43,8 @@ func (r *resourceSyncer) onCreate(obj any, isInInitialList bool) {
 
 	r.operationQueues.add(key, createOperation(resource))
 
+	r.metrics.trackEnqueue(key)
+
 	// If this is from the initial listing on startup then enqueue with low priority to prioritize newly
 	// created or updated resources. Also don't enqueue with rate limiting since we already know this is
 	// part of a one-time burst.
@@ -50,6 +53,8 @@ func (r *resourceSyncer) onCreate(obj any, isInInitialList bool) {
 	} else {
 		r.workQueue.Enqueue(resource)
 	}
+
+	r.metrics.observeQueueLength(r.config.Name, r.workQueue.Len())
 }
 
 func (r *resourceSyncer) onUpdate(oldObj, newObj any) {
@@ -67,6 +72,10 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj any) {
 		return
 	}
 
+	key, _ := cache.MetaNamespaceKeyFunc(newResource)
+
+	r.metrics.trackEnqueue(key)
+
 	// If the resource version didn't change, that indicates a re-sync by the informer so enqueue at low priority.
 	// We want to prioritize processing resources that did actually change.
 	if oldResource.GetResourceVersion() == newResource.GetResourceVersion() {
@@ -74,6 +83,8 @@ func (r *resourceSyncer) onUpdate(oldObj, newObj any) {
 	} else {
 		r.workQueue.Enqueue(newObj)
 	}
+
+	r.metrics.observeQueueLength(r.config.Name, r.workQueue.Len())
 }
 
 func (r *resourceSyncer) onDelete(obj any) {
@@ -92,7 +103,12 @@ func (r *resourceSyncer) onDelete(obj any) {
 	key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 
 	r.operationQueues.add(key, deleteOperation(resource))
+
+	r.metrics.trackEnqueue(key)
+
 	r.workQueue.Enqueue(obj)
+
+	r.metrics.observeQueueLength(r.config.Name, r.workQueue.Len())
 }
 
 func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op Operation) bool {
@@ -120,7 +136,12 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 
 	converted := r.mustConvert(from)
 
+	transformStart := time.Now()
+
 	transformed, requeue := r.config.Transform(converted, r.workQueue.NumRequeues(key), op)
+
+	r.metrics.observeTransformDurationMs(r.config.Direction, op, r.config.Name, time.Since(transformStart))
+
 	if transformed == nil || reflect.ValueOf(transformed).IsNil() {
 		r.log.V(log.DEBUG).Infof("Syncer %q: transform function returned nil - not syncing - requeue: %v", r.config.Name, requeue)
 		return nil, nil, requeue

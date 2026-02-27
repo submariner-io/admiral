@@ -72,9 +72,19 @@ func testLocalToRemote() {
 	d := newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)
 
 	BeforeEach(func() {
-		d.config.SyncCounterOpts = &prometheus.GaugeOpts{
-			Namespace: "ns",
-			Name:      "test",
+		d.config.Metrics = syncer.MetricsConfig{
+			SyncCounterOpts: &prometheus.GaugeOpts{
+				Name: "sync-counter",
+			},
+			FederationDurationMsOpts: &prometheus.HistogramOpts{
+				Name: "federation",
+			},
+			QueueWaitDurationMsOpts: &prometheus.HistogramOpts{
+				Name: "queue-wait",
+			},
+			QueueLengthOpts: &prometheus.HistogramOpts{
+				Name: "queue-length",
+			},
 		}
 	})
 
@@ -119,7 +129,7 @@ func testRemoteToLocalWithLocalClusterID() {
 	d := newTestDriver(test.RemoteNamespace, "local", syncer.RemoteToLocal)
 
 	BeforeEach(func() {
-		d.config.SyncCounter = prometheus.NewGaugeVec(
+		d.config.Metrics.SyncCounter = prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{},
 			[]string{
 				syncer.DirectionLabel,
