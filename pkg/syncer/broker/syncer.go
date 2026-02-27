@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/global"
 	"github.com/submariner-io/admiral/pkg/log"
@@ -111,8 +110,8 @@ type ResourceConfig struct {
 	// BrokerWorkQueueConfig if specified, configures the underlying work queue for processing broker resources.
 	BrokerWorkQueueConfig *workqueue.Config
 
-	// SyncCounterOpts used to pass name and help text to resource syncer Gauge
-	SyncCounterOpts *prometheus.GaugeOpts
+	// Metrics if specified, configures optional Prometheus metrics for federation, transform, and queue operations.
+	Metrics syncer.MetricsConfig
 }
 
 type SyncerConfig struct {
@@ -214,18 +213,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 	for i := range config.ResourceConfigs {
 		rc := &config.ResourceConfigs[i]
 
-		var syncCounter *prometheus.GaugeVec
-		if rc.SyncCounterOpts != nil {
-			syncCounter = prometheus.NewGaugeVec(
-				*rc.SyncCounterOpts,
-				[]string{
-					syncer.DirectionLabel,
-					syncer.OperationLabel,
-					syncer.SyncerNameLabel,
-				},
-			)
-			prometheus.MustRegister(syncCounter)
-		}
+		metrics := syncer.ResolveMetricsConfig(rc.Metrics)
 
 		federator := rc.BrokerFederator
 		if federator == nil {
@@ -255,7 +243,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			WorkQueueConfig:     rc.LocalWorkQueueConfig,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.LocalResyncPeriod,
-			SyncCounter:         syncCounter,
+			Metrics:             metrics,
 			MaxLogVerbosity:     config.MaxLogVerbosity,
 		})
 		if err != nil {
@@ -295,7 +283,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 			WorkQueueConfig:     rc.BrokerWorkQueueConfig,
 			Scheme:              config.Scheme,
 			ResyncPeriod:        rc.BrokerResyncPeriod,
-			SyncCounter:         syncCounter,
+			Metrics:             metrics,
 			NamespaceInformer:   config.NamespaceInformer,
 			MaxLogVerbosity:     config.MaxLogVerbosity,
 		})

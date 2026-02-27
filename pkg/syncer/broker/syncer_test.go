@@ -179,7 +179,7 @@ var _ = Describe("Broker Syncer", func() {
 
 	When("a local resource is created in the local datastore", func() {
 		BeforeEach(func() {
-			config.ResourceConfigs[0].SyncCounterOpts = &prometheus.GaugeOpts{
+			config.ResourceConfigs[0].Metrics.SyncCounterOpts = &prometheus.GaugeOpts{
 				Namespace: "ns",
 				Name:      utilrand.String(5),
 			}

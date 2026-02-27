@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
 	resourceUtil "github.com/submariner-io/admiral/pkg/resource"
@@ -145,19 +144,7 @@ func newResourceSyncer(config *ResourceSyncerConfig) (*resourceSyncer, error) {
 		syncer.config.DrainWorkQueueTimeout = time.Second * 5
 	}
 
-	if syncer.config.SyncCounter != nil {
-		syncer.syncCounter = syncer.config.SyncCounter
-	} else if syncer.config.SyncCounterOpts != nil {
-		syncer.syncCounter = prometheus.NewGaugeVec(
-			*syncer.config.SyncCounterOpts,
-			[]string{
-				DirectionLabel,
-				OperationLabel,
-				SyncerNameLabel,
-			},
-		)
-		prometheus.MustRegister(syncer.syncCounter)
-	}
+	syncer.metrics = newSyncerMetrics(syncer.config.Metrics)
 
 	workqueueConfig := workqueue.DefaultConfigIfNil(syncer.config.WorkQueueConfig)
 	if config.MaxLogVerbosity > workqueueConfig.MaxVerbosity {
@@ -222,9 +209,7 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 
 	go func() {
 		defer func() {
-			if r.config.SyncCounterOpts != nil {
-				prometheus.Unregister(r.syncCounter)
-			}
+			r.metrics.unregister()
 
 			if r.unregHandler != nil {
 				r.unregHandler()
@@ -340,13 +325,7 @@ func (r *resourceSyncer) ListResourcesBySelector(selector k8slabels.Selector) []
 }
 
 func (r *resourceSyncer) incOpCounter(op Operation) {
-	if r.syncCounter != nil {
-		r.syncCounter.With(prometheus.Labels{
-			DirectionLabel:  r.config.Direction.String(),
-			OperationLabel:  op.String(),
-			SyncerNameLabel: r.config.Name,
-		}).Inc()
-	}
+	r.metrics.incSyncCounter(r.config.Direction, op, r.config.Name)
 }
 
 func (r *resourceSyncer) mustConvert(from any) runtime.Object {

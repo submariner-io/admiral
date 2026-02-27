@@ -21,7 +21,6 @@ package syncer
 import (
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/submariner-io/admiral/pkg/federate"
 	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/workqueue"
@@ -163,19 +162,14 @@ type ResourceSyncerConfig struct {
 	// ResyncPeriod if non-zero, the period at which resources will be re-synced regardless if anything changed. Default is 0.
 	ResyncPeriod time.Duration
 
-	// SyncCounterOpts if specified, used to create a gauge to record counter metrics.
-	// Alternatively the gauge can be created directly and passed via the SyncCounter field,
-	// in which case SyncCounterOpts is ignored.
-	SyncCounterOpts *prometheus.GaugeOpts
-
-	// SyncCounter if specified, used to record counter metrics.
-	SyncCounter *prometheus.GaugeVec
-
 	// NamespaceInformer if specified, used to retry resources that initially failed due to missing namespace.
 	NamespaceInformer cache.SharedInformer
 
 	// WorkQueueConfig if specified, configures the underlying work queue
 	WorkQueueConfig *workqueue.Config
+
+	// Metrics if specified, configures optional Prometheus metrics for federation, transform, and queue operations.
+	Metrics MetricsConfig
 
 	// DrainWorkQueueTimeout configures the maximum amount of time to wait for the work queue to drain on shutdown.
 	// Default is 5 seconds.
@@ -194,7 +188,7 @@ type resourceSyncer struct {
 	config            ResourceSyncerConfig
 	operationQueues   *operationQueueMap
 	stopped           chan struct{}
-	syncCounter       *prometheus.GaugeVec
+	metrics           *syncerMetrics
 	stopCh            <-chan struct{}
 	log               log.Logger
 	missingNamespaces map[string]set.Set[string]

@@ -20,6 +20,7 @@ package syncer
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/log"
@@ -32,6 +33,8 @@ import (
 )
 
 func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error) {
+	r.metrics.recordDequeue(r.config.Name, key)
+
 	resourceOp := r.operationQueues.peek(key)
 
 	if ns == namespaceKey {
@@ -111,7 +114,12 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 
 		r.log.V(log.DEBUG).Infof("Syncer %q syncing resource %q", r.config.Name, resource.GetName())
 
+		federateStart := time.Now()
+
 		err = r.config.Federator.Distribute(context.Background(), resource)
+
+		r.metrics.observeFederationDurationMs(r.config.Direction, op, r.config.Name, time.Since(federateStart))
+
 		if err != nil || r.onSuccessfulSync(resource, transformed, op) {
 			namespace := resourceUtil.ExtractMissingNamespaceFromErr(err)
 			if namespace != "" {
@@ -149,7 +157,12 @@ func (r *resourceSyncer) handleDeleted(key string, deletedResource *unstructured
 
 		deleted := true
 
+		federateStart := time.Now()
+
 		err := r.config.Federator.Delete(context.Background(), resource)
+
+		r.metrics.observeFederationDurationMs(r.config.Direction, Delete, r.config.Name, time.Since(federateStart))
+
 		if apierrors.IsNotFound(err) {
 			r.log.V(log.DEBUG).Infof("Syncer %q: resource %q not found", r.config.Name, resource.GetName())
 
