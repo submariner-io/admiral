@@ -37,7 +37,8 @@ func ConflictOnUpdateReactor(f *testing.Fake, resource string) {
 	resourceVersion := "100"
 	state := sync.Map{}
 
-	chain := []testing.Reactor{&testing.SimpleReactor{
+	chain := make([]testing.Reactor, 0, 2+len(f.ReactionChain))
+	chain = append(chain, &testing.SimpleReactor{
 		Verb:     "get",
 		Resource: resource,
 		Reaction: func(action testing.Action) (bool, runtime.Object, error) {
@@ -75,7 +76,7 @@ func ConflictOnUpdateReactor(f *testing.Fake, resource string) {
 
 			return false, nil, nil
 		},
-	}}
+	})
 	f.ReactionChain = append(chain, f.ReactionChain...)
 }
 
