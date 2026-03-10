@@ -24,6 +24,7 @@ import (
 	"maps"
 	"time"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/fake"
@@ -43,13 +44,14 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/testing"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var _ = Describe("CreateAnew function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	createAnew := func(ctx context.Context) (runtime.Object, error) {
-		return util.CreateAnew(ctx, resource.ForDynamic(t.client),
+		return util.CreateAnew(t.ctx(ctx), resource.ForDynamic(t.client),
 			resource.MustToUnstructured(t.pod), metav1.CreateOptions{}, metav1.DeleteOptions{})
 	}
 
@@ -164,7 +166,7 @@ var _ = Describe("CreateOrUpdate function", func() {
 
 		options.Obj = resource.MustToUnstructured(t.pod)
 
-		result, retObj, err := util.CreateOrUpdateWithOptions(ctx, options)
+		result, retObj, err := util.CreateOrUpdateWithOptions(t.ctx(ctx), options)
 		if err != nil && expResult != util.OperationResultNone {
 			return err
 		}
@@ -188,7 +190,7 @@ var _ = Describe("CreateOrUpdate function", func() {
 
 		Context("and a mutation function specified", func() {
 			It("should invoke the function on create", func(ctx SpecContext) {
-				result, created, err := util.CreateOrUpdateWithOptions(ctx,
+				result, created, err := util.CreateOrUpdateWithOptions(t.ctx(ctx),
 					util.CreateOrUpdateOptions[*unstructured.Unstructured]{
 						Client: resource.ForDynamic(t.client),
 						Obj:    resource.MustToUnstructured(t.pod),
@@ -208,7 +210,7 @@ var _ = Describe("CreateOrUpdate function", func() {
 
 			Context("which returns an error", func() {
 				It("should return an error", func(ctx SpecContext) {
-					_, _, err := util.CreateOrUpdateWithOptions(ctx,
+					_, _, err := util.CreateOrUpdateWithOptions(t.ctx(ctx),
 						util.CreateOrUpdateOptions[*unstructured.Unstructured]{
 							Client: resource.ForDynamic(t.client),
 							Obj:    resource.MustToUnstructured(t.pod),
@@ -230,6 +232,7 @@ var _ = Describe("CreateOrUpdate function", func() {
 
 			It("should successfully create the resource", func(ctx SpecContext) {
 				Expect(createOrUpdate(ctx, util.OperationResultCreated)).To(Succeed())
+
 				actual := t.verifyPod(ctx)
 				Expect(actual.Name).To(HavePrefix("name-prefix-"))
 			})
@@ -308,7 +311,7 @@ var _ = Describe("Update function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	update := func(ctx context.Context) error {
-		return util.Update(ctx, resource.ForDynamic(t.client), resource.MustToUnstructured(t.pod),
+		return util.Update(t.ctx(ctx), resource.ForDynamic(t.client), resource.MustToUnstructured(t.pod),
 			t.mutateFn)
 	}
 
@@ -331,7 +334,7 @@ var _ = Describe("MustUpdate function", func() {
 	t := newCreateOrUpdateTestDiver()
 
 	mustUpdate := func(ctx context.Context) error {
-		return util.MustUpdate(ctx, resource.ForDynamic(t.client),
+		return util.MustUpdate(t.ctx(ctx), resource.ForDynamic(t.client),
 			resource.MustToUnstructured(t.pod), t.mutateFn)
 	}
 
@@ -393,6 +396,10 @@ func newCreateOrUpdateTestDiver() *createOrUpdateTestDriver {
 	})
 
 	return t
+}
+
+func (t *createOrUpdateTestDriver) ctx(ctx context.Context) context.Context {
+	return logr.NewContext(ctx, logf.Log)
 }
 
 func (t *createOrUpdateTestDriver) testGetFailure(doOper func(context.Context, util.OperationResult) error) {
@@ -587,7 +594,7 @@ func (t *createOrUpdateTestDriver) verifyPod(ctx context.Context) *corev1.Pod {
 	pod := t.pod.DeepCopy()
 
 	if pod.Name == "" {
-		list, err := t.client.List(ctx, metav1.ListOptions{})
+		list, err := t.client.List(t.ctx(ctx), metav1.ListOptions{})
 		Expect(err).To(Succeed())
 		Expect(scheme.Scheme.Convert(&list.Items[0], pod, nil)).To(Succeed())
 	}
