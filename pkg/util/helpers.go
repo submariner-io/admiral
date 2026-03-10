@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pkg/errors"
+	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -33,6 +34,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -42,7 +44,11 @@ const (
 	StatusField      = "status"
 )
 
-var lastBadCertificate atomic.Value
+var (
+	lastBadCertificate atomic.Value
+	// helperLogger is used for error hooks which need to be package-level variables.
+	helperLogger = log.Logger{Logger: logf.Log}
+)
 
 var BuildRestMapper = func(restConfig *rest.Config) (meta.RESTMapper, error) {
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(restConfig)
@@ -146,8 +152,8 @@ func DeeplyEmpty(m map[string]any) bool {
 }
 
 var (
-	ErrorHook = logger.Errorf
-	FatalHook = logger.FatalfOnError
+	ErrorHook = helperLogger.Errorf
+	FatalHook = helperLogger.FatalfOnError
 )
 
 func AddCertificateErrorHandler(fatal bool) {
