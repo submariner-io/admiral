@@ -24,6 +24,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/log"
 	"github.com/submariner-io/admiral/pkg/resource"
@@ -36,7 +37,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type OperationResult string
@@ -64,8 +64,6 @@ var backOff wait.Backoff = wait.Backoff{
 	Cap:      40 * time.Second,
 }
 
-var logger = log.Logger{Logger: logf.Log}
-
 type CreateOrUpdateOptions[T runtime.Object] struct {
 	Client         resource.Interface[T]
 	Obj            T
@@ -73,10 +71,6 @@ type CreateOrUpdateOptions[T runtime.Object] struct {
 	MutateOnCreate MutateFn[T]
 	// IdentifyingLabels is used to find an existing resource if GenerateName is set in the target resource.
 	IdentifyingLabels map[string]string
-}
-
-func init() {
-	logger.SetMaxVerbosity(0)
 }
 
 func CreateOrUpdateWithOptions[T runtime.Object](ctx context.Context, options CreateOrUpdateOptions[T]) (OperationResult, T, error) {
@@ -126,6 +120,7 @@ func maybeCreateOrUpdate[T runtime.Object](ctx context.Context, options CreateOr
 	result := OperationResultNone
 
 	objMeta := resource.MustToMeta(options.Obj)
+	logger := log.Logger{Logger: logr.FromContextOrDiscard(ctx)}
 
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		existing, err := getResource(ctx, &options)
@@ -262,6 +257,8 @@ func createResource[T runtime.Object](ctx context.Context, client resource.Inter
 
 		obj = mutated
 	}
+
+	logger := log.Logger{Logger: logr.FromContextOrDiscard(ctx)}
 
 	logger.V(log.DEBUG).Infof("Creating resource: %#v", obj)
 
