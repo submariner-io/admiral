@@ -99,28 +99,27 @@ func testWatchAndSignalOnChange() {
 	signal.Notify(signalCh, signalNum)
 
 	var (
-		ctx       context.Context
 		k8sClient *k8sfake.Clientset
 		configMap *corev1.ConfigMap
 	)
 
 	BeforeEach(func() {
 		k8sClient = k8sfake.NewClientset()
-
-		var cancel context.CancelFunc
-
-		ctx, cancel = context.WithCancel(context.Background()) //nolint:fatcontext // Ignore
-
-		DeferCleanup(cancel)
 	})
 
 	JustBeforeEach(func() {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		DeferCleanup(func() {
+			cancel()
+		})
+
 		configmap.WatchAndSignalOnChange(ctx, k8sClient, test.LocalNamespace, signalNum, configMap1, configMap2)
 
 		assert.AwaitWatchAction(&k8sClient.Fake, "configmaps")
 	})
 
-	createConfigMap := func(name string, data map[string]string) *corev1.ConfigMap {
+	createConfigMap := func(ctx context.Context, name string, data map[string]string) *corev1.ConfigMap {
 		cm, err := k8sClient.CoreV1().ConfigMaps(test.LocalNamespace).Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: name},
 			Data:       data,
@@ -131,19 +130,19 @@ func testWatchAndSignalOnChange() {
 	}
 
 	When("a target ConfigMap is created", func() {
-		It("should send a signal", func() {
-			createConfigMap(configMap1, nil)
+		It("should send a signal", func(ctx context.Context) {
+			createConfigMap(ctx, configMap1, nil)
 
 			Eventually(signalCh).Should(Receive(Equal(signalNum)))
 		})
 	})
 
 	When("an existing target ConfigMap is updated", func() {
-		BeforeEach(func() {
-			configMap = createConfigMap(configMap2, map[string]string{"foo": "initial"})
+		BeforeEach(func(ctx context.Context) {
+			configMap = createConfigMap(ctx, configMap2, map[string]string{"foo": "initial"})
 		})
 
-		It("should send a signal", func() {
+		It("should send a signal", func(ctx context.Context) {
 			Consistently(signalCh).Within(time.Millisecond * 500).ShouldNot(Receive())
 
 			configMap.Data["foo"] = "updated"
@@ -155,11 +154,11 @@ func testWatchAndSignalOnChange() {
 	})
 
 	When("an existing target ConfigMap is deleted", func() {
-		BeforeEach(func() {
-			configMap = createConfigMap(configMap1, map[string]string{"foo": "initial"})
+		BeforeEach(func(ctx context.Context) {
+			configMap = createConfigMap(ctx, configMap1, map[string]string{"foo": "initial"})
 		})
 
-		It("should send a signal", func() {
+		It("should send a signal", func(ctx context.Context) {
 			Consistently(signalCh).Within(time.Millisecond * 500).ShouldNot(Receive())
 
 			Expect(k8sClient.CoreV1().ConfigMaps(test.LocalNamespace).Delete(ctx, configMap1, metav1.DeleteOptions{})).To(Succeed())
@@ -169,8 +168,8 @@ func testWatchAndSignalOnChange() {
 	})
 
 	When("a non-target ConfigMap is created", func() {
-		It("should not send a signal", func() {
-			createConfigMap("other", nil)
+		It("should not send a signal", func(ctx context.Context) {
+			createConfigMap(ctx, "other", nil)
 
 			Consistently(signalCh).ShouldNot(Receive())
 		})
