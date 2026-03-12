@@ -32,7 +32,7 @@ type brokerSpecification struct {
 	APIServerToken  string
 	RemoteNamespace string
 	Ca              string
-	Secret          string //nolint:gosec // G117 This is a configuration field name, not secret data
+	Secret          string
 	Insecure        bool   `default:"false"`
 }
 
