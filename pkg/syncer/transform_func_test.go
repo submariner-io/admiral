@@ -46,7 +46,7 @@ func testTransformFunction() {
 			t.verifyDistribute()
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 			Consistently(func() int {
-				return int(atomic.LoadInt32(&t.invocationCount))
+				return int(t.invocationCount.Load())
 			}).Should(Equal(1))
 		})
 
@@ -57,7 +57,7 @@ func testTransformFunction() {
 
 			It("should eventually retry", func() {
 				Eventually(func() int {
-					return int(atomic.LoadInt32(&t.invocationCount))
+					return int(t.invocationCount.Load())
 				}, 3).Should(BeNumerically(">", 1))
 			})
 		})
@@ -86,7 +86,7 @@ func testTransformFunction() {
 
 		JustBeforeEach(func() {
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
-			atomic.StoreInt32(&t.invocationCount, 0)
+			t.invocationCount.Store(0)
 		})
 
 		It("should delete the transformed resource", func(ctx SpecContext) {
@@ -94,7 +94,7 @@ func testTransformFunction() {
 			t.verifyDelete()
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Delete)))
 			Consistently(func() int {
-				return int(atomic.LoadInt32(&t.invocationCount))
+				return int(t.invocationCount.Load())
 			}).Should(Equal(1))
 		})
 
@@ -106,7 +106,7 @@ func testTransformFunction() {
 			It("should eventually retry", func(ctx SpecContext) {
 				Expect(t.sourceClient.Delete(ctx, t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				Eventually(func() int {
-					return int(atomic.LoadInt32(&t.invocationCount))
+					return int(t.invocationCount.Load())
 				}, 3).Should(BeNumerically(">", 1))
 			})
 		})
@@ -157,7 +157,7 @@ func testTransformFunction() {
 	When("the transform function returns nil with no re-queue", func() {
 		BeforeEach(func() {
 			t.config.Transform = func(_ runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
-				atomic.AddInt32(&t.invocationCount, 1)
+				t.invocationCount.Add(1)
 				t.expOperation <- op
 
 				return nil, false
@@ -168,7 +168,7 @@ func testTransformFunction() {
 			It("should not distribute the resource", func() {
 				test.CreateResource(t.sourceClient, t.resource)
 				t.federator.VerifyNoDistribute()
-				Expect(int(atomic.LoadInt32(&t.invocationCount))).To(Equal(1))
+				Expect(int(t.invocationCount.Load())).To(Equal(1))
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 			})
 		})
@@ -180,12 +180,12 @@ func testTransformFunction() {
 
 			It("should not delete the resource", func(ctx SpecContext) {
 				t.federator.VerifyNoDistribute()
-				atomic.StoreInt32(&t.invocationCount, 0)
+				t.invocationCount.Store(0)
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 
 				Expect(t.sourceClient.Delete(ctx, t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 				t.federator.VerifyNoDelete()
-				Expect(int(atomic.LoadInt32(&t.invocationCount))).To(Equal(1))
+				Expect(int(t.invocationCount.Load())).To(Equal(1))
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Delete)))
 			})
 		})
@@ -239,7 +239,7 @@ type transformFuncTestDriver struct {
 	*testDriver
 	transformed     *corev1.Pod
 	expOperation    chan syncer.Operation
-	invocationCount int32
+	invocationCount atomic.Int32
 	requeueOnOp     *syncer.Operation
 }
 
@@ -248,7 +248,7 @@ func newTransformFunctionTestDriver() *transformFuncTestDriver {
 
 	BeforeEach(func() {
 		test.SetClusterIDLabel(t.resource, "remote")
-		atomic.StoreInt32(&t.invocationCount, 0)
+		t.invocationCount.Store(0)
 
 		t.expOperation = make(chan syncer.Operation, 20)
 		t.transformed = test.NewPodWithImage(t.config.SourceNamespace, "transformed")
@@ -262,7 +262,7 @@ func newTransformFunctionTestDriver() *transformFuncTestDriver {
 
 		t.config.Transform = func(from runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 			defer GinkgoRecover()
-			atomic.AddInt32(&t.invocationCount, 1)
+			t.invocationCount.Add(1)
 
 			pod, ok := from.(*corev1.Pod)
 			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", from)
