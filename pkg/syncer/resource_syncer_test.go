@@ -36,7 +36,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("Resource Syncer", func() {
@@ -303,9 +302,9 @@ func testTrimResourceFields() {
 				Manager:    "kubectl",
 				Operation:  metav1.ManagedFieldsOperationApply,
 				APIVersion: "v1",
-				Time:       ptr.To(metav1.Now()),
+				Time:       new(metav1.Now()),
 				FieldsType: "FieldsV1",
-				FieldsV1:   ptr.To(metav1.FieldsV1{}),
+				FieldsV1:   new(metav1.FieldsV1{}),
 			},
 		})
 

@@ -26,7 +26,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/testing"
-	"k8s.io/utils/ptr"
 )
 
 type deleteReactor struct {
@@ -67,7 +66,7 @@ func (r *deleteReactor) react(a testing.Action) (bool, runtime.Object, error) {
 			return true, existingObj, nil
 		}
 
-		existing.SetDeletionTimestamp(ptr.To(metav1.Now()))
+		existing.SetDeletionTimestamp(new(metav1.Now()))
 
 		obj, err := invokeReactors(testing.NewUpdateAction(action.GetResource(), action.GetNamespace(),
 			existingObj), r.reactors)
