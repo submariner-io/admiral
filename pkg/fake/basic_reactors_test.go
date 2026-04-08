@@ -33,7 +33,6 @@ import (
 	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/watch"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/utils/ptr"
 )
 
 const testNamespace = "test-ns"
@@ -132,7 +131,7 @@ var _ = Describe("Update", func() {
 		})
 
 		It("should delete the resource", func(ctx SpecContext) {
-			t.pod.SetDeletionTimestamp(ptr.To(metav1.Now()))
+			t.pod.SetDeletionTimestamp(new(metav1.Now()))
 			t.pod = t.doUpdateSuccess(ctx)
 
 			t.pod.Finalizers = nil
@@ -175,7 +174,7 @@ var _ = Describe("Delete", func() {
 			It("should return a Conflict error", func(ctx SpecContext) {
 				err := t.doDelete(ctx, metav1.DeleteOptions{
 					Preconditions: &metav1.Preconditions{
-						ResourceVersion: ptr.To("111"),
+						ResourceVersion: new("111"),
 					},
 				})
 				Expect(apierrors.IsConflict(err)).To(BeTrue())
