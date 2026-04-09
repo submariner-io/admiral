@@ -86,13 +86,13 @@ type signingRequestorImpl struct {
 var logger = log.Logger{Logger: logf.Log.WithName("Certificate")}
 
 //nolint:gocritic // Ignore hugeParam - minimal performance hit, we modify our copy
-func StartSigningRequestor(syncerConfig broker.SyncerConfig, stopCh <-chan struct{}) (SigningRequestor, error) {
-	return StartSigningRequestorWithOpts(syncerConfig, stopCh, CertCheckInterval, CertRenewBefore)
+func StartSigningRequestor(ctx context.Context, syncerConfig broker.SyncerConfig, stopCh <-chan struct{}) (SigningRequestor, error) {
+	return StartSigningRequestorWithOpts(ctx, syncerConfig, stopCh, CertCheckInterval, CertRenewBefore)
 }
 
 //nolint:gocritic // Ignore hugeParam - minimal performance hit, we modify our copy
-func StartSigningRequestorWithOpts(syncerConfig broker.SyncerConfig, stopCh <-chan struct{}, certCheckInterval time.Duration,
-	certRenewBefore time.Duration,
+func StartSigningRequestorWithOpts(ctx context.Context, syncerConfig broker.SyncerConfig, stopCh <-chan struct{},
+	certCheckInterval time.Duration, certRenewBefore time.Duration,
 ) (SigningRequestor, error) {
 	sr := &signingRequestorImpl{
 		localNamespace:    syncerConfig.LocalNamespace,
@@ -142,7 +142,7 @@ func StartSigningRequestorWithOpts(syncerConfig broker.SyncerConfig, stopCh <-ch
 		},
 	}
 
-	brokerSyncer, err := broker.NewSyncer(syncerConfig)
+	brokerSyncer, err := broker.NewSyncer(ctx, syncerConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating broker syncer")
 	}
@@ -187,7 +187,7 @@ func StartSigningRequestorWithOpts(syncerConfig broker.SyncerConfig, stopCh <-ch
 	}
 
 	// Start certificate renewal monitoring
-	sr.startCertificateRenewalMonitoring(stopCh)
+	sr.startCertificateRenewalMonitoring(stopCh) //nolint:contextcheck // Intentionally not propagating `ctx` here as it's request-scoped.
 
 	return sr, nil
 }

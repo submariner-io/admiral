@@ -44,19 +44,19 @@ func ToasterGVR() *schema.GroupVersionResource {
 	}
 }
 
-func DeleteAllToasters(client dynamic.Interface, namespace, clusterName string) {
-	DeleteAllOf(client, ToasterGVR(), namespace, clusterName)
+func DeleteAllToasters(ctx context.Context, client dynamic.Interface, namespace, clusterName string) {
+	DeleteAllOf(ctx, client, ToasterGVR(), namespace, clusterName)
 }
 
-func DeleteAllOf(dynClient dynamic.Interface, gvr *schema.GroupVersionResource, namespace, clusterName string) {
+func DeleteAllOf(ctx context.Context, dynClient dynamic.Interface, gvr *schema.GroupVersionResource, namespace, clusterName string) {
 	By(fmt.Sprintf("Deleting all %s in namespace %q from %q", gvr.Resource, namespace, clusterName))
 
 	client := dynClient.Resource(*gvr).Namespace(namespace)
-	Expect(client.DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{})).To(Succeed())
+	Expect(client.DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{})).To(Succeed())
 
-	framework.AwaitUntil(fmt.Sprintf("list %s in namespace %q from %q", gvr.Resource, namespace, clusterName),
-		func() (*unstructured.UnstructuredList, error) {
-			return client.List(context.TODO(), metav1.ListOptions{})
+	framework.AwaitUntil(ctx, fmt.Sprintf("list %s in namespace %q from %q", gvr.Resource, namespace, clusterName),
+		func(ctx context.Context) (*unstructured.UnstructuredList, error) {
+			return client.List(ctx, metav1.ListOptions{})
 		}, func(list *unstructured.UnstructuredList) (bool, string, error) {
 			if len(list.Items) != 0 {
 				return false, fmt.Sprintf("%d %s still remain", len(list.Items), gvr.Resource), nil
@@ -66,10 +66,10 @@ func DeleteAllOf(dynClient dynamic.Interface, gvr *schema.GroupVersionResource, 
 		})
 }
 
-func CreateToaster(client dynamic.Interface, toaster *testV1.Toaster, clusterName string) *testV1.Toaster {
+func CreateToaster(ctx context.Context, client dynamic.Interface, toaster *testV1.Toaster, clusterName string) *testV1.Toaster {
 	By(fmt.Sprintf("Creating Toaster %q in namespace %q in %q", toaster.Name, toaster.Namespace, clusterName))
 
-	obj, err := client.Resource(*ToasterGVR()).Namespace(toaster.Namespace).Create(context.TODO(), resource.MustToUnstructured(toaster),
+	obj, err := client.Resource(*ToasterGVR()).Namespace(toaster.Namespace).Create(ctx, resource.MustToUnstructured(toaster),
 		metav1.CreateOptions{})
 	Expect(err).To(Succeed())
 
@@ -79,15 +79,15 @@ func CreateToaster(client dynamic.Interface, toaster *testV1.Toaster, clusterNam
 	return newToaster
 }
 
-func DeleteToaster(client dynamic.Interface, toDelete runtime.Object, clusterName string) {
+func DeleteToaster(ctx context.Context, client dynamic.Interface, toDelete runtime.Object, clusterName string) {
 	meta, err := metaapi.Accessor(toDelete)
 	Expect(err).To(Succeed())
 
 	By(fmt.Sprintf("Deleting Toaster %q in namespace %q from %q", meta.GetName(), meta.GetNamespace(), clusterName))
 
 	msg := fmt.Sprintf("delete Toaster %q in namespace %q from %q", meta.GetName(), meta.GetNamespace(), clusterName)
-	framework.AwaitUntil(msg, func() (any, error) {
-		return nil, client.Resource(*ToasterGVR()).Namespace(meta.GetNamespace()).Delete(context.TODO(), meta.GetName(), metav1.DeleteOptions{})
+	framework.AwaitUntil(ctx, msg, func(ctx context.Context) (any, error) {
+		return nil, client.Resource(*ToasterGVR()).Namespace(meta.GetNamespace()).Delete(ctx, meta.GetName(), metav1.DeleteOptions{})
 	}, framework.NoopCheckResult)
 }
 

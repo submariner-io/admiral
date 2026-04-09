@@ -19,6 +19,7 @@ limitations under the License.
 package watcher_test
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -124,13 +125,13 @@ var _ = Describe("Resource Watcher", func() {
 
 	When("a Pod is created, updated and deleted", func() {
 		It("should notify the appropriate handler of each event", func(ctx SpecContext) {
-			pod := test.CreateResource(pods, pod)
+			pod := test.CreateResource(ctx, pods, pod)
 
 			Eventually(createdPods).Should(Receive(Equal(pod)))
 			Consistently(createdPods).ShouldNot(Receive())
 
 			pod.Spec.Containers[0].Image = "apache"
-			test.UpdateResource(pods, pod)
+			test.UpdateResource(ctx, pods, pod)
 
 			Eventually(updatedPods).Should(Receive(Equal(pod)))
 			Consistently(updatedPods).ShouldNot(Receive())
@@ -143,14 +144,14 @@ var _ = Describe("Resource Watcher", func() {
 	})
 
 	When("a Service is created", func() {
-		It("should notify the appropriate handler", func() {
+		It("should notify the appropriate handler", func(ctx context.Context) {
 			service := &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-service",
 				},
 			}
 
-			service = test.CreateResource(services, service)
+			service = test.CreateResource(ctx, services, service)
 			Eventually(createdServices).Should(Receive(Equal(service)))
 		})
 	})
@@ -164,12 +165,12 @@ var _ = Describe("Resource Watcher", func() {
 		})
 
 		When("the Pod's Status is updated", func() {
-			It("should not notify of the update", func() {
-				test.CreateResource(pods, pod)
+			It("should not notify of the update", func(ctx context.Context) {
+				test.CreateResource(ctx, pods, pod)
 				Eventually(createdPods).Should(Receive())
 
 				pod.Status.Phase = corev1.PodRunning
-				test.UpdateResource(pods, pod)
+				test.UpdateResource(ctx, pods, pod)
 
 				Consistently(updatedPods, 300*time.Millisecond).ShouldNot(Receive())
 			})
@@ -184,15 +185,15 @@ var _ = Describe("Resource Watcher", func() {
 		})
 
 		When("a Pod is created", func() {
-			It("should not notify of the event", func() {
-				test.CreateResource(pods, pod)
+			It("should not notify of the event", func(ctx context.Context) {
+				test.CreateResource(ctx, pods, pod)
 				Consistently(createdPods, 300*time.Millisecond).ShouldNot(Receive())
 			})
 		})
 	})
 
 	When("ListLocalResources is called", func() {
-		It("should return the correct resources", func() {
+		It("should return the correct resources", func(ctx context.Context) {
 			pod2 := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pod2",
@@ -201,9 +202,9 @@ var _ = Describe("Resource Watcher", func() {
 				},
 			}
 
-			test.CreateResource(pods, pod)
+			test.CreateResource(ctx, pods, pod)
 			Eventually(createdPods).Should(Receive())
-			test.CreateResource(pods, pod2)
+			test.CreateResource(ctx, pods, pod2)
 			Eventually(createdPods).Should(Receive())
 
 			list := resourceWatcher.ListResources(pod, labels.Everything())

@@ -19,6 +19,7 @@ limitations under the License.
 package syncer_test
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -64,7 +65,7 @@ func testPriorityOrdering() {
 			transformedCh            chan string
 		)
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx context.Context) {
 			firstTransform.Store(true)
 
 			transformedCh = make(chan string, 500)
@@ -120,7 +121,7 @@ func testPriorityOrdering() {
 					for i := range numToUpdate {
 						name := initialQueue[len(initialQueue)/2+i]
 
-						test.UpdateResource(d.sourceClient, &corev1.Pod{
+						test.UpdateResource(ctx, d.sourceClient, &corev1.Pod{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      name,
 								Namespace: d.config.SourceNamespace,
@@ -164,7 +165,7 @@ func testPriorityOrdering() {
 		allInitialResourcesAreQueuedCh := make(chan struct{})
 		allNewResourcesAreQueuedCh := make(chan chan struct{})
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx context.Context) {
 			firstTransform.Store(true)
 
 			transformedCh = make(chan string, 500)
@@ -190,14 +191,14 @@ func testPriorityOrdering() {
 					// resources. This ensures that the newly created resources should be dequeued and processed next.
 					Eventually(allInitialResourcesAreQueuedCh).Should(BeClosed())
 
-					test.CreateResource(d.sourceClient, &corev1.Pod{
+					test.CreateResource(ctx, d.sourceClient, &corev1.Pod{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "new1",
 							Namespace: d.config.SourceNamespace,
 						},
 					})
 
-					test.CreateResource(d.sourceClient, &corev1.Pod{
+					test.CreateResource(ctx, d.sourceClient, &corev1.Pod{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "new2",
 							Namespace: d.config.SourceNamespace,

@@ -28,8 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func SetDeleting[T runtime.Object](client resource.Interface[T], name string) {
-	obj, err := client.Get(context.TODO(), name, metav1.GetOptions{})
+func SetDeleting[T runtime.Object](ctx context.Context, client resource.Interface[T], name string) {
+	obj, err := client.Get(ctx, name, metav1.GetOptions{})
 	Expect(err).To(Succeed())
 
 	m, err := meta.Accessor(obj)
@@ -38,12 +38,12 @@ func SetDeleting[T runtime.Object](client resource.Interface[T], name string) {
 	now := metav1.Now()
 	m.SetDeletionTimestamp(&now)
 
-	_, err = client.Update(context.TODO(), obj, metav1.UpdateOptions{})
+	_, err = client.Update(ctx, obj, metav1.UpdateOptions{})
 	Expect(err).To(Succeed())
 }
 
-func GetFinalizers[T runtime.Object](client resource.Interface[T], name string) []string {
-	obj, err := client.Get(context.TODO(), name, metav1.GetOptions{})
+func GetFinalizers[T runtime.Object](ctx context.Context, client resource.Interface[T], name string) []string {
+	obj, err := client.Get(ctx, name, metav1.GetOptions{})
 	Expect(err).To(Succeed())
 
 	metaObj, err := meta.Accessor(obj)

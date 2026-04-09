@@ -84,7 +84,7 @@ func testCreateOrUpdateFederator() {
 		Context("and a local cluster ID is specified", func() {
 			It("should create the resource with the cluster ID label", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-				t.verifyResource()
+				t.verifyResource(ctx)
 			})
 		})
 
@@ -95,7 +95,7 @@ func testCreateOrUpdateFederator() {
 
 			It("should create the resource without the cluster ID label", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-				t.verifyResource()
+				t.verifyResource(ctx)
 			})
 		})
 
@@ -109,7 +109,7 @@ func testCreateOrUpdateFederator() {
 
 			It("should create the resource with the Status data", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-				t.verifyResource()
+				t.verifyResource(ctx)
 			})
 		})
 
@@ -126,7 +126,7 @@ func testCreateOrUpdateFederator() {
 
 			It("should create the resource with the OwnerReferences", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-				t.verifyResource()
+				t.verifyResource(ctx)
 			})
 		})
 
@@ -141,9 +141,9 @@ func testCreateOrUpdateFederator() {
 		})
 
 		Context("and create returns AlreadyExists error due to a simulated out-of-band create", func() {
-			BeforeEach(func() {
+			BeforeEach(func(ctx context.Context) {
 				t.resource.SetNamespace(t.targetNamespace)
-				test.CreateResource(t.resourceClient, t.resource)
+				test.CreateResource(ctx, t.resourceClient, t.resource)
 				t.resource = test.NewPodWithImage(test.LocalNamespace, "apache")
 
 				fake.FailOnAction(&t.dynClient.Fake, "pods", "get",
@@ -154,21 +154,21 @@ func testCreateOrUpdateFederator() {
 
 			It("should update the resource", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-				t.verifyResource()
+				t.verifyResource(ctx)
 			})
 		})
 	})
 
 	When("the resource already exists in the datastore", func() {
-		BeforeEach(func() {
+		BeforeEach(func(ctx context.Context) {
 			t.resource.SetNamespace(t.targetNamespace)
-			test.CreateResource(t.resourceClient, t.resource)
+			test.CreateResource(ctx, t.resourceClient, t.resource)
 			t.resource = test.NewPodWithImage(test.LocalNamespace, "apache")
 		})
 
 		It("should update the resource", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-			t.verifyResource()
+			t.verifyResource(ctx)
 		})
 
 		Context("and update initially fails due to conflict", func() {
@@ -179,7 +179,7 @@ func testCreateOrUpdateFederator() {
 
 			It("should retry until it succeeds", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-				t.verifyResource()
+				t.verifyResource(ctx)
 			})
 		})
 
@@ -210,7 +210,7 @@ func testCreateOrUpdateFederator() {
 			Expect(list.Items).To(HaveLen(1))
 
 			t.resource.Name = list.Items[0].GetName()
-			t.verifyResource()
+			t.verifyResource(ctx)
 
 			_, err = t.resourceClient.Create(ctx, resource.MustToUnstructured(&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -228,7 +228,7 @@ func testCreateOrUpdateFederator() {
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
 
 			t.resource.Name = list.Items[0].GetName()
-			t.verifyResource()
+			t.verifyResource(ctx)
 		})
 	})
 
@@ -250,7 +250,7 @@ func testCreateOrUpdateFederator() {
 
 		It("should create the resource in the source namespace", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-			t.verifyResource()
+			t.verifyResource(ctx)
 		})
 	})
 }
@@ -274,7 +274,7 @@ func testCreateFederator() {
 	When("the resource does not already exist in the datastore", func() {
 		It("create the resource", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-			t.verifyResource()
+			t.verifyResource(ctx)
 		})
 
 		Context("and create fails", func() {
@@ -289,9 +289,9 @@ func testCreateFederator() {
 	})
 
 	When("the resource already exists in the datastore", func() {
-		BeforeEach(func() {
+		BeforeEach(func(ctx context.Context) {
 			t.resource.SetNamespace(t.targetNamespace)
-			test.CreateResource(t.resourceClient, t.resource)
+			test.CreateResource(ctx, t.resourceClient, t.resource)
 		})
 
 		It("should succeed and not update the resource", func(ctx SpecContext) {
@@ -317,9 +317,9 @@ func testUpdateFederator() {
 	})
 
 	When("the resource exists in the datastore", func() {
-		BeforeEach(func() {
+		BeforeEach(func(ctx context.Context) {
 			t.resource.SetNamespace(t.targetNamespace)
-			test.CreateResource(t.resourceClient, t.resource)
+			test.CreateResource(ctx, t.resourceClient, t.resource)
 			t.resource = test.NewPodWithImage(test.LocalNamespace, "apache")
 			t.resource.Labels["newLabel"] = "xyz"
 			t.resource.Annotations["newAnnotation"] = "abc"
@@ -327,7 +327,7 @@ func testUpdateFederator() {
 
 		It("should update the resource", func(ctx SpecContext) {
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-			t.verifyResource()
+			t.verifyResource(ctx)
 		})
 
 		Context("and update initially fails due to conflict", func() {
@@ -338,7 +338,7 @@ func testUpdateFederator() {
 
 			It("should retry until it succeeds", func(ctx SpecContext) {
 				Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-				t.verifyResource()
+				t.verifyResource(ctx)
 			})
 
 			Context("and retrieval to find the existing resource fails", func() {
@@ -381,9 +381,9 @@ func testUpdateStatusFederator() {
 		t.localClusterID = ""
 	})
 
-	JustBeforeEach(func() {
+	JustBeforeEach(func(ctx context.Context) {
 		t.resource.SetNamespace(t.targetNamespace)
-		test.CreateResource(t.resourceClient, t.resource)
+		test.CreateResource(ctx, t.resourceClient, t.resource)
 
 		f = federate.NewUpdateStatusFederator(t.dynClient, t.restMapper, t.federatorNamespace)
 	})
@@ -402,7 +402,7 @@ func testUpdateStatusFederator() {
 			}
 
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-			t.verifyResource()
+			t.verifyResource(ctx)
 		})
 	})
 
@@ -420,7 +420,7 @@ func testUpdateStatusFederator() {
 			}
 
 			Expect(f.Distribute(ctx, t.resource)).To(Succeed())
-			t.verifyResource()
+			t.verifyResource(ctx)
 		})
 	})
 
@@ -444,7 +444,7 @@ func testUpdateStatusFederator() {
 
 			t.resource = prev
 
-			t.verifyResource()
+			t.verifyResource(ctx)
 		})
 	})
 }
@@ -471,16 +471,16 @@ func testDelete() {
 	})
 
 	When("the resource exists in the datastore", func() {
-		JustBeforeEach(func() {
+		JustBeforeEach(func(ctx context.Context) {
 			existing := t.resource.DeepCopy()
 			existing.SetNamespace(t.targetNamespace)
-			test.CreateResource(t.resourceClient, existing)
+			test.CreateResource(ctx, t.resourceClient, existing)
 		})
 
 		It("should delete the resource", func(ctx SpecContext) {
 			Expect(f.Delete(ctx, t.resource)).To(Succeed())
 
-			_, err := test.GetResourceAndError(t.resourceClient, t.resource)
+			_, err := test.GetResourceAndError(ctx, t.resourceClient, t.resource)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 		})
 
@@ -503,7 +503,7 @@ func testDelete() {
 			It("should delete the resource from the source namespace", func(ctx SpecContext) {
 				Expect(f.Delete(ctx, t.resource)).To(Succeed())
 
-				_, err := test.GetResourceAndError(t.resourceClient, t.resource)
+				_, err := test.GetResourceAndError(ctx, t.resourceClient, t.resource)
 				Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			})
 		})
@@ -515,8 +515,8 @@ func testDelete() {
 				t.resource.GenerateName = GenerateNamePrefix
 			})
 
-			JustBeforeEach(func() {
-				test.CreateResource(t.resourceClient, &corev1.Pod{
+			JustBeforeEach(func(ctx context.Context) {
+				test.CreateResource(ctx, t.resourceClient, &corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						GenerateName: "other-",
 						Labels:       t.resource.Labels,
@@ -529,13 +529,13 @@ func testDelete() {
 			It("should delete the resource", func(ctx SpecContext) {
 				Expect(f.Delete(ctx, t.resource)).To(Succeed())
 
-				_, err := test.GetResourceAndError(t.resourceClient, t.resource)
+				_, err := test.GetResourceAndError(ctx, t.resourceClient, t.resource)
 				Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			})
 
 			Context("but another resource also exists with same labels and GenerateName", func() {
-				JustBeforeEach(func() {
-					test.CreateResource(t.resourceClient, &corev1.Pod{
+				JustBeforeEach(func(ctx context.Context) {
+					test.CreateResource(ctx, t.resourceClient, &corev1.Pod{
 						ObjectMeta: metav1.ObjectMeta{
 							GenerateName: GenerateNamePrefix,
 							Labels:       t.resource.Labels,
@@ -591,11 +591,11 @@ func testFederatorFuncs() {
 		}
 
 		Expect(funcs.Distribute(ctx, t.resource)).To(Succeed())
-		test.GetResource(t.resourceClient, t.resource)
+		test.GetResource(ctx, t.resourceClient, t.resource)
 
 		Expect(funcs.Delete(ctx, t.resource)).To(Succeed())
 
-		_, err := test.GetResourceAndError(t.resourceClient, t.resource)
+		_, err := test.GetResourceAndError(ctx, t.resourceClient, t.resource)
 		Expect(apierrors.IsNotFound(err)).To(BeTrue())
 	})
 }
@@ -722,8 +722,8 @@ func newTestDriver() *testDriver {
 	return t
 }
 
-func (t *testDriver) verifyResource() {
-	test.VerifyResource(t.resourceClient, t.resource, t.targetNamespace, t.localClusterID)
+func (t *testDriver) verifyResource(ctx context.Context) {
+	test.VerifyResource(ctx, t.resourceClient, t.resource, t.targetNamespace, t.localClusterID)
 }
 
 func (t *testDriver) setIdentifyingLabels() {

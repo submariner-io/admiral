@@ -19,6 +19,7 @@ limitations under the License.
 package syncer_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -218,8 +219,8 @@ func testSyncErrors() {
 			d.federator.FailOnDistribute(expectedErr)
 		})
 
-		It("should log the error and retry until it succeeds", func() {
-			d.federator.VerifyDistribute(test.CreateResource(d.sourceClient, d.resource))
+		It("should log the error and retry until it succeeds", func(ctx context.Context) {
+			d.federator.VerifyDistribute(test.CreateResource(ctx, d.sourceClient, d.resource))
 			Eventually(d.handledError).WithTimeout(time.Second * 5).Should(Receive(ContainErrorSubstring(expectedErr)))
 		})
 	})
@@ -231,7 +232,7 @@ func testSyncErrors() {
 		})
 
 		It("should log the error and retry until it succeeds", func(ctx SpecContext) {
-			expected := test.GetResource(d.sourceClient, d.resource)
+			expected := test.GetResource(ctx, d.sourceClient, d.resource)
 			d.federator.VerifyDistribute(expected)
 
 			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
@@ -247,7 +248,7 @@ func testSyncErrors() {
 		})
 
 		It("should not log the error nor retry", func(ctx SpecContext) {
-			expected := test.GetResource(d.sourceClient, d.resource)
+			expected := test.GetResource(ctx, d.sourceClient, d.resource)
 			d.federator.VerifyDistribute(expected)
 
 			Expect(d.sourceClient.Delete(ctx, d.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
@@ -270,8 +271,8 @@ func testRequeueResource() {
 	})
 
 	When("the requested resource exists", func() {
-		JustBeforeEach(func() {
-			test.CreateResource(d.sourceClient, d.resource)
+		JustBeforeEach(func(ctx context.Context) {
+			test.CreateResource(ctx, d.sourceClient, d.resource)
 		})
 
 		It("should requeue it", func() {

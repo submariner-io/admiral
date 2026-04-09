@@ -19,6 +19,7 @@ limitations under the License.
 package broker_test
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"errors"
@@ -108,7 +109,7 @@ var _ = Describe("Broker Syncer", func() {
 		brokerDynClient = dynamicfake.NewSimpleDynamicClient(config.Scheme)
 	})
 
-	JustBeforeEach(func() {
+	JustBeforeEach(func(ctx context.Context) {
 		var gvr *schema.GroupVersionResource
 
 		config.RestMapper, gvr = test.GetRESTMapperAndGroupVersionResourceFor(resource)
@@ -144,12 +145,12 @@ var _ = Describe("Broker Syncer", func() {
 		brokerClient = brokerDynClient.Resource(*gvr).Namespace(config.BrokerNamespace)
 
 		for i := range initialLocalResources {
-			test.CreateResource(localDynClient.Resource(*gvr).Namespace(resourceutils.MustToMeta(initialLocalResources[i]).GetNamespace()),
+			test.CreateResource(ctx, localDynClient.Resource(*gvr).Namespace(resourceutils.MustToMeta(initialLocalResources[i]).GetNamespace()),
 				initialLocalResources[i])
 		}
 
 		for i := range initialBrokerResources {
-			test.CreateResource(brokerDynClient.Resource(*gvr).Namespace(resourceutils.MustToMeta(initialBrokerResources[i]).GetNamespace()),
+			test.CreateResource(ctx, brokerDynClient.Resource(*gvr).Namespace(resourceutils.MustToMeta(initialBrokerResources[i]).GetNamespace()),
 				initialBrokerResources[i])
 		}
 
@@ -160,7 +161,7 @@ var _ = Describe("Broker Syncer", func() {
 		}
 
 		var err error
-		syncer, err = broker.NewSyncer(configCopy)
+		syncer, err = broker.NewSyncer(ctx, configCopy)
 
 		if expectInitError {
 			Expect(err).To(HaveOccurred())
@@ -185,19 +186,19 @@ var _ = Describe("Broker Syncer", func() {
 			}
 		})
 
-		JustBeforeEach(func() {
-			test.CreateResource(localClient, resource)
-			test.AwaitResource(brokerClient, resource.GetName())
+		JustBeforeEach(func(ctx context.Context) {
+			test.CreateResource(ctx, localClient, resource)
+			test.AwaitResource(ctx, brokerClient, resource.GetName())
 		})
 
-		It("should correctly sync to the broker datastore", func() {
-			test.VerifyResource(brokerClient, resource, config.BrokerNamespace, config.LocalClusterID)
+		It("should correctly sync to the broker datastore", func(ctx context.Context) {
+			test.VerifyResource(ctx, brokerClient, resource, config.BrokerNamespace, config.LocalClusterID)
 		})
 
 		Context("and then deleted", func() {
 			It("should be deleted from the broker datastore", func(ctx SpecContext) {
 				Expect(localClient.Delete(ctx, resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
-				test.AwaitNoResource(brokerClient, resource.GetName())
+				test.AwaitNoResource(ctx, brokerClient, resource.GetName())
 
 				// Ensure the broker syncer did not try to sync back to the local datastore
 				Consistently(func() []string {
@@ -208,29 +209,29 @@ var _ = Describe("Broker Syncer", func() {
 	})
 
 	When("a non-local resource is created in the local datastore", func() {
-		It("should not sync to the broker datastore", func() {
+		It("should not sync to the broker datastore", func(ctx context.Context) {
 			test.SetClusterIDLabel(resource, "remote")
-			test.CreateResource(localClient, resource)
+			test.CreateResource(ctx, localClient, resource)
 
 			assert.EnsureNoActionsForResource(&brokerDynClient.Fake, "pods", "create")
 		})
 	})
 
 	When("a non-local resource is created in the broker datastore", func() {
-		JustBeforeEach(func() {
+		JustBeforeEach(func(ctx context.Context) {
 			test.SetClusterIDLabel(resource, "remote")
-			test.CreateResource(brokerClient, resource)
-			test.AwaitResource(localClient, resource.GetName())
+			test.CreateResource(ctx, brokerClient, resource)
+			test.AwaitResource(ctx, localClient, resource.GetName())
 		})
 
-		It("should correctly sync to the local datastore", func() {
-			test.VerifyResource(localClient, resource, config.LocalNamespace, "remote")
+		It("should correctly sync to the local datastore", func(ctx context.Context) {
+			test.VerifyResource(ctx, localClient, resource, config.LocalNamespace, "remote")
 		})
 
 		Context("and then deleted", func() {
 			It("should be deleted from the broker datastore", func(ctx SpecContext) {
 				Expect(brokerClient.Delete(ctx, resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
-				test.AwaitNoResource(localClient, resource.GetName())
+				test.AwaitNoResource(ctx, localClient, resource.GetName())
 
 				// Ensure the local syncer did not try to sync back to the broker datastore
 				Consistently(func() []string {
@@ -241,9 +242,9 @@ var _ = Describe("Broker Syncer", func() {
 	})
 
 	When("a local resource is created in the broker datastore", func() {
-		It("should not sync to the local datastore", func() {
+		It("should not sync to the local datastore", func(ctx context.Context) {
 			test.SetClusterIDLabel(resource, config.LocalClusterID)
-			test.CreateResource(brokerClient, resource)
+			test.CreateResource(ctx, brokerClient, resource)
 
 			assert.EnsureNoActionsForResource(&localDynClient.Fake, "pods", "create")
 		})
@@ -257,10 +258,10 @@ var _ = Describe("Broker Syncer", func() {
 		})
 
 		Context("and a local resource is created in any namespace", func() {
-			It("should sync to the broker datastore", func() {
-				test.AwaitResource(brokerClient, resource.GetName())
+			It("should sync to the broker datastore", func(ctx context.Context) {
+				test.AwaitResource(ctx, brokerClient, resource.GetName())
 
-				actual := test.GetResource(brokerClient, resource)
+				actual := test.GetResource(ctx, brokerClient, resource)
 				Expect(actual.Labels).To(HaveKeyWithValue(sync.OrigNamespaceLabelKey, metav1.NamespaceDefault))
 			})
 		})
@@ -276,8 +277,8 @@ var _ = Describe("Broker Syncer", func() {
 				initialBrokerResources = append(initialBrokerResources, staleResource)
 			})
 
-			It("should delete it from the broker datastore on reconciliation", func() {
-				test.AwaitNoResource(brokerClient, staleResource.GetName())
+			It("should delete it from the broker datastore on reconciliation", func(ctx context.Context) {
+				test.AwaitNoResource(ctx, brokerClient, staleResource.GetName())
 			})
 		})
 
@@ -295,9 +296,9 @@ var _ = Describe("Broker Syncer", func() {
 				initialBrokerResources = append(initialBrokerResources, brokerResource)
 			})
 
-			It("should not delete it from the broker datastore on reconciliation", func() {
+			It("should not delete it from the broker datastore on reconciliation", func(ctx context.Context) {
 				time.Sleep(100 * time.Millisecond)
-				test.AwaitResource(brokerClient, localResource.GetName())
+				test.AwaitResource(ctx, brokerClient, localResource.GetName())
 			})
 		})
 	})
@@ -313,11 +314,11 @@ var _ = Describe("Broker Syncer", func() {
 		})
 
 		When("a resource is created in the local datastore", func() {
-			It("should sync the transformed resource to the broker datastore", func() {
-				test.CreateResource(localClient, resource)
+			It("should sync the transformed resource to the broker datastore", func(ctx context.Context) {
+				test.CreateResource(ctx, localClient, resource)
 
-				test.AwaitResource(brokerClient, resource.GetName())
-				test.VerifyResource(brokerClient, transformed, config.BrokerNamespace, config.LocalClusterID)
+				test.AwaitResource(ctx, brokerClient, resource.GetName())
+				test.VerifyResource(ctx, brokerClient, transformed, config.BrokerNamespace, config.LocalClusterID)
 			})
 		})
 	})
@@ -333,12 +334,12 @@ var _ = Describe("Broker Syncer", func() {
 		})
 
 		Context("and a resource is created in the broker datastore", func() {
-			It("should sync the transformed resource to the local datastore", func() {
+			It("should sync the transformed resource to the local datastore", func(ctx context.Context) {
 				test.SetClusterIDLabel(resource, "remote")
-				test.CreateResource(brokerClient, resource)
+				test.CreateResource(ctx, brokerClient, resource)
 
-				test.AwaitResource(localClient, resource.GetName())
-				test.VerifyResource(localClient, transformed, config.LocalNamespace, "remote")
+				test.AwaitResource(ctx, localClient, resource.GetName())
+				test.VerifyResource(ctx, localClient, transformed, config.LocalNamespace, "remote")
 			})
 		})
 	})
@@ -348,9 +349,9 @@ var _ = Describe("Broker Syncer", func() {
 			config.ResourceConfigs[0].LocalFederator = fakefederator.New()
 		})
 
-		It("should use the Federator to sync resources from the broker datastore", func() {
+		It("should use the Federator to sync resources from the broker datastore", func(ctx context.Context) {
 			test.SetClusterIDLabel(resource, "remote")
-			test.CreateResource(brokerClient, resource)
+			test.CreateResource(ctx, brokerClient, resource)
 
 			resource.Namespace = test.RemoteNamespace
 			config.ResourceConfigs[0].LocalFederator.(*fakefederator.Federator).VerifyDistribute(resource)
@@ -362,8 +363,8 @@ var _ = Describe("Broker Syncer", func() {
 			config.ResourceConfigs[0].BrokerFederator = fakefederator.New()
 		})
 
-		It("should use the Federator to sync resources to the broker datastore", func() {
-			test.CreateResource(localClient, resource)
+		It("should use the Federator to sync resources to the broker datastore", func(ctx context.Context) {
+			test.CreateResource(ctx, localClient, resource)
 
 			resource.Namespace = test.LocalNamespace
 			config.ResourceConfigs[0].BrokerFederator.(*fakefederator.Federator).VerifyDistribute(resource)
@@ -371,12 +372,12 @@ var _ = Describe("Broker Syncer", func() {
 	})
 
 	When("a local resource's Status is updated in the local datastore", func() {
-		JustBeforeEach(func() {
-			test.CreateResource(localClient, resource)
-			test.AwaitResource(brokerClient, resource.GetName())
+		JustBeforeEach(func(ctx context.Context) {
+			test.CreateResource(ctx, localClient, resource)
+			test.AwaitResource(ctx, brokerClient, resource.GetName())
 
 			resource.Status.Phase = corev1.PodRunning
-			test.UpdateResource(localClient, resource)
+			test.UpdateResource(ctx, localClient, resource)
 		})
 
 		Context("and the default equivalence function is specified", func() {
@@ -397,8 +398,8 @@ var _ = Describe("Broker Syncer", func() {
 				}
 			})
 
-			It("should sync to the broker datastore", func() {
-				test.AwaitAndVerifyResource(brokerClient, resource.GetName(), func(obj *unstructured.Unstructured) bool {
+			It("should sync to the broker datastore", func(ctx context.Context) {
+				test.AwaitAndVerifyResource(ctx, brokerClient, resource.GetName(), func(obj *unstructured.Unstructured) bool {
 					v, _, _ := unstructured.NestedString(obj.Object, "status", "phase")
 					return corev1.PodPhase(v) == corev1.PodRunning
 				})
@@ -407,13 +408,13 @@ var _ = Describe("Broker Syncer", func() {
 	})
 
 	When("a non-local resource's Status is updated in the broker datastore", func() {
-		JustBeforeEach(func() {
+		JustBeforeEach(func(ctx context.Context) {
 			test.SetClusterIDLabel(resource, "remote")
-			test.CreateResource(brokerClient, resource)
-			test.AwaitResource(localClient, resource.GetName())
+			test.CreateResource(ctx, brokerClient, resource)
+			test.AwaitResource(ctx, localClient, resource.GetName())
 
 			resource.Status.Phase = corev1.PodRunning
-			test.UpdateResource(brokerClient, resource)
+			test.UpdateResource(ctx, brokerClient, resource)
 		})
 
 		Context("and the default equivalence function is specified", func() {
@@ -434,8 +435,8 @@ var _ = Describe("Broker Syncer", func() {
 				}
 			})
 
-			It("should sync to the local datastore", func() {
-				test.AwaitAndVerifyResource(localClient, resource.GetName(), func(obj *unstructured.Unstructured) bool {
+			It("should sync to the local datastore", func(ctx context.Context) {
+				test.AwaitAndVerifyResource(ctx, localClient, resource.GetName(), func(obj *unstructured.Unstructured) bool {
 					v, _, _ := unstructured.NestedString(obj.Object, "status", "phase")
 					return corev1.PodPhase(v) == corev1.PodRunning
 				})
@@ -450,8 +451,8 @@ var _ = Describe("Broker Syncer", func() {
 			initialLocalResources = append(initialLocalResources, resource)
 		})
 
-		It("should delete it from the local datastore on reconciliation", func() {
-			test.AwaitNoResource(localClient, resource.GetName())
+		It("should delete it from the local datastore on reconciliation", func(ctx context.Context) {
+			test.AwaitNoResource(ctx, localClient, resource.GetName())
 		})
 	})
 
@@ -466,9 +467,9 @@ var _ = Describe("Broker Syncer", func() {
 			initialBrokerResources = append(initialBrokerResources, brokerResource)
 		})
 
-		It("should not delete it from the local datastore on reconciliation", func() {
+		It("should not delete it from the local datastore on reconciliation", func(ctx context.Context) {
 			time.Sleep(100 * time.Millisecond)
-			test.AwaitResource(localClient, resource.GetName())
+			test.AwaitResource(ctx, localClient, resource.GetName())
 		})
 	})
 
@@ -478,9 +479,9 @@ var _ = Describe("Broker Syncer", func() {
 			initialLocalResources = append(initialLocalResources, resource)
 		})
 
-		It("should not delete it from the local datastore on reconciliation", func() {
+		It("should not delete it from the local datastore on reconciliation", func(ctx context.Context) {
 			time.Sleep(100 * time.Millisecond)
-			test.AwaitResource(localClient, resource.GetName())
+			test.AwaitResource(ctx, localClient, resource.GetName())
 		})
 	})
 
@@ -491,8 +492,8 @@ var _ = Describe("Broker Syncer", func() {
 			initialBrokerResources = append(initialBrokerResources, resource)
 		})
 
-		It("should delete it from the broker datastore on reconciliation", func() {
-			test.AwaitNoResource(brokerClient, resource.GetName())
+		It("should delete it from the broker datastore on reconciliation", func(ctx context.Context) {
+			test.AwaitNoResource(ctx, brokerClient, resource.GetName())
 		})
 	})
 
@@ -507,9 +508,9 @@ var _ = Describe("Broker Syncer", func() {
 			initialBrokerResources = append(initialBrokerResources, brokerResource)
 		})
 
-		It("should not delete it from the broker datastore on reconciliation", func() {
+		It("should not delete it from the broker datastore on reconciliation", func(ctx context.Context) {
 			time.Sleep(100 * time.Millisecond)
-			test.AwaitResource(brokerClient, resource.GetName())
+			test.AwaitResource(ctx, brokerClient, resource.GetName())
 		})
 	})
 
@@ -520,9 +521,9 @@ var _ = Describe("Broker Syncer", func() {
 			initialBrokerResources = append(initialBrokerResources, resource)
 		})
 
-		It("should not delete it from the broker datastore on reconciliation", func() {
+		It("should not delete it from the broker datastore on reconciliation", func(ctx context.Context) {
 			time.Sleep(100 * time.Millisecond)
-			test.AwaitResource(brokerClient, resource.GetName())
+			test.AwaitResource(ctx, brokerClient, resource.GetName())
 		})
 	})
 
@@ -537,7 +538,7 @@ var _ = Describe("Broker Syncer", func() {
 			},
 		})).To(Succeed())
 
-		test.AwaitResource(brokerClient, name)
+		test.AwaitResource(ctx, brokerClient, name)
 	})
 
 	Specify("GetBrokerClient should return the correct instance", func() {
@@ -559,7 +560,7 @@ var _ = Describe("Broker Syncer", func() {
 			},
 		})).To(Succeed())
 
-		test.AwaitResource(localClient, name)
+		test.AwaitResource(ctx, localClient, name)
 	})
 
 	Specify("GetLocalClient should return the correct instance", func() {
@@ -567,9 +568,9 @@ var _ = Describe("Broker Syncer", func() {
 	})
 
 	When("GetLocalResource is called", func() {
-		It("should return the correct resource", func() {
-			test.CreateResource(localClient, resource)
-			test.AwaitResource(brokerClient, resource.GetName())
+		It("should return the correct resource", func(ctx context.Context) {
+			test.CreateResource(ctx, localClient, resource)
+			test.AwaitResource(ctx, brokerClient, resource.GetName())
 
 			obj, exists, err := syncer.GetLocalResource(resource.Name, test.LocalNamespace, resource)
 			Expect(err).To(Succeed())
@@ -591,9 +592,9 @@ var _ = Describe("Broker Syncer", func() {
 	})
 
 	When("ListLocalResources is called", func() {
-		It("should return the correct resources", func() {
-			test.CreateResource(localClient, resource)
-			test.AwaitResource(brokerClient, resource.GetName())
+		It("should return the correct resources", func(ctx context.Context) {
+			test.CreateResource(ctx, localClient, resource)
+			test.AwaitResource(ctx, brokerClient, resource.GetName())
 
 			list := syncer.ListLocalResources(resource)
 			Expect(list).To(HaveLen(1))
@@ -611,9 +612,9 @@ var _ = Describe("Broker Syncer", func() {
 	})
 
 	When("ListLocalResourcesBySelector is called", func() {
-		It("should return the correct resources", func() {
-			test.CreateResource(localClient, resource)
-			test.AwaitResource(brokerClient, resource.GetName())
+		It("should return the correct resources", func(ctx context.Context) {
+			test.CreateResource(ctx, localClient, resource)
+			test.AwaitResource(ctx, brokerClient, resource.GetName())
 
 			list := syncer.ListLocalResourcesBySelector(resource, labels.Set(resource.Labels).AsSelector())
 			Expect(list).To(HaveLen(1))
@@ -645,9 +646,9 @@ var _ = Describe("Broker Syncer", func() {
 			}
 		})
 
-		It("should work correctly", func() {
-			test.CreateResource(localClient, resource)
-			test.AwaitResource(brokerClient, resource.GetName())
+		It("should work correctly", func(ctx context.Context) {
+			test.CreateResource(ctx, localClient, resource)
+			test.AwaitResource(ctx, brokerClient, resource.GetName())
 		})
 
 		It("should use the local rest config QPS and Burst values", func() {
@@ -697,12 +698,12 @@ var _ = Describe("Broker Syncer", func() {
 			os.Setenv("BROKER_K8S_INSECURE", "true")
 		})
 
-		It("should work correctly", func() {
+		It("should work correctly", func(ctx context.Context) {
 			Expect(actualBrokerRestConfig.BearerToken).To(Equal(apiServerToken))
 			Expect(actualBrokerRestConfig.TLSClientConfig.Insecure).To(BeTrue())
 
-			test.CreateResource(localClient, resource)
-			test.AwaitResource(brokerClient, resource.GetName())
+			test.CreateResource(ctx, localClient, resource)
+			test.AwaitResource(ctx, brokerClient, resource.GetName())
 		})
 
 		Context("with a secret", func() {
@@ -713,13 +714,13 @@ var _ = Describe("Broker Syncer", func() {
 				os.Unsetenv("BROKER_K8S_APISERVERTOKEN")
 			})
 
-			It("should work correctly", func() {
+			It("should work correctly", func(ctx context.Context) {
 				Expect(actualBrokerRestConfig.BearerToken).To(BeEmpty())
 				Expect(actualBrokerRestConfig.BearerTokenFile).To(ContainSubstring(secret))
 				Expect(actualBrokerRestConfig.TLSClientConfig.Insecure).To(BeTrue())
 
-				test.CreateResource(localClient, resource)
-				test.AwaitResource(brokerClient, resource.GetName())
+				test.CreateResource(ctx, localClient, resource)
+				test.AwaitResource(ctx, brokerClient, resource.GetName())
 			})
 		})
 

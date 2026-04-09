@@ -186,14 +186,14 @@ func (t *testDriver) addInitialResource(obj runtime.Object) {
 }
 
 func (t *testDriver) verifyDistributeOnCreateTest(clusterID string) {
-	It("should distribute it", func() {
-		t.federator.VerifyDistribute(test.CreateResource(t.sourceClient, test.SetClusterIDLabel(t.resource, clusterID)))
+	It("should distribute it", func(ctx context.Context) {
+		t.federator.VerifyDistribute(test.CreateResource(ctx, t.sourceClient, test.SetClusterIDLabel(t.resource, clusterID)))
 	})
 }
 
 func (t *testDriver) verifyNoDistributeOnCreateTest(clusterID string) {
-	It("should not distribute it", func() {
-		test.CreateResource(t.sourceClient, test.SetClusterIDLabel(t.resource, clusterID))
+	It("should not distribute it", func(ctx context.Context) {
+		test.CreateResource(ctx, t.sourceClient, test.SetClusterIDLabel(t.resource, clusterID))
 		t.federator.VerifyNoDistribute()
 	})
 }
@@ -203,9 +203,9 @@ func (t *testDriver) verifyDistributeOnUpdateTest(clusterID string) {
 		t.addInitialResource(test.SetClusterIDLabel(t.resource, clusterID))
 	})
 
-	It("should distribute it", func() {
-		t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
-		t.federator.VerifyDistribute(test.UpdateResource(t.sourceClient, test.SetClusterIDLabel(
+	It("should distribute it", func(ctx context.Context) {
+		t.federator.VerifyDistribute(test.GetResource(ctx, t.sourceClient, t.resource))
+		t.federator.VerifyDistribute(test.UpdateResource(ctx, t.sourceClient, test.SetClusterIDLabel(
 			test.NewPodWithImage(t.config.SourceNamespace, "apache"), clusterID)))
 	})
 }
@@ -215,10 +215,10 @@ func (t *testDriver) verifyNoDistributeOnUpdateTest(clusterID string) {
 		t.addInitialResource(test.SetClusterIDLabel(t.resource, clusterID))
 	})
 
-	It("should not distribute it", func() {
+	It("should not distribute it", func(ctx context.Context) {
 		t.federator.VerifyNoDistribute()
 
-		test.UpdateResource(t.sourceClient, test.SetClusterIDLabel(
+		test.UpdateResource(ctx, t.sourceClient, test.SetClusterIDLabel(
 			test.NewPodWithImage(t.config.SourceNamespace, "apache"), clusterID))
 		t.federator.VerifyNoDistribute()
 	})
@@ -230,7 +230,7 @@ func (t *testDriver) verifyDistributeOnDeleteTest(clusterID string) {
 	})
 
 	It("should delete it", func(ctx SpecContext) {
-		expected := test.GetResource(t.sourceClient, t.resource)
+		expected := test.GetResource(ctx, t.sourceClient, t.resource)
 		t.federator.VerifyDistribute(expected)
 
 		Expect(t.sourceClient.Delete(ctx, t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())

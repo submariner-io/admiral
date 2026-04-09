@@ -68,24 +68,24 @@ func GetOccurredActionVerbs(f *testing.Fake, resourceType string, expectedVerbs 
 	return verbs
 }
 
-func AwaitFinalizer[T runtime.Object](client resource.Interface[T], name, finalizer string) {
-	Eventually(func() []string {
-		return GetFinalizers(client, name)
+func AwaitFinalizer[T runtime.Object](ctx context.Context, client resource.Interface[T], name, finalizer string) {
+	Eventually(ctx, func(ctx context.Context) []string {
+		return GetFinalizers(ctx, client, name)
 	}).Should(ContainElement(finalizer))
 }
 
-func AwaitNoFinalizer[T runtime.Object](client resource.Interface[T], name, finalizer string) {
-	Eventually(func() []string {
-		return GetFinalizers(client, name)
+func AwaitNoFinalizer[T runtime.Object](ctx context.Context, client resource.Interface[T], name, finalizer string) {
+	Eventually(ctx, func(ctx context.Context) []string {
+		return GetFinalizers(ctx, client, name)
 	}).ShouldNot(ContainElement(finalizer))
 }
 
-func AssertFinalizers[T runtime.Object](client resource.Interface[T], name string, finalizers ...string) {
+func AssertFinalizers[T runtime.Object](ctx context.Context, client resource.Interface[T], name string, finalizers ...string) {
 	if finalizers == nil {
 		finalizers = []string{}
 	}
 
-	Expect(GetFinalizers(client, name)).To(Equal(finalizers))
+	Expect(GetFinalizers(ctx, client, name)).To(Equal(finalizers))
 }
 
 func AwaitStatusCondition(expCond *metav1.Condition, get func() ([]metav1.Condition, error)) {
@@ -106,15 +106,15 @@ func AwaitStatusCondition(expCond *metav1.Condition, get func() ([]metav1.Condit
 	Expect(found.LastTransitionTime).To(Not(BeNil()))
 }
 
-func AwaitResource[T runtime.Object](client resource.Interface[T], name string) T {
-	return AwaitAndVerifyResource(client, name, nil)
+func AwaitResource[T runtime.Object](ctx context.Context, client resource.Interface[T], name string) T {
+	return AwaitAndVerifyResource(ctx, client, name, nil)
 }
 
-func AwaitAndVerifyResource[T runtime.Object](client resource.Interface[T], name string, verify func(T) bool) T {
+func AwaitAndVerifyResource[T runtime.Object](ctx context.Context, client resource.Interface[T], name string, verify func(T) bool) T {
 	var found T
 
-	Eventually(func() error {
-		obj, err := client.Get(context.TODO(), name, metav1.GetOptions{})
+	Eventually(ctx, func(ctx context.Context) error {
+		obj, err := client.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
@@ -130,16 +130,16 @@ func AwaitAndVerifyResource[T runtime.Object](client resource.Interface[T], name
 	return found
 }
 
-func AwaitNoResource[T runtime.Object](client resource.Interface[T], name string) {
-	Eventually(func() bool {
-		_, err := client.Get(context.TODO(), name, metav1.GetOptions{})
+func AwaitNoResource[T runtime.Object](ctx context.Context, client resource.Interface[T], name string) {
+	Eventually(ctx, func(ctx context.Context) bool {
+		_, err := client.Get(ctx, name, metav1.GetOptions{})
 		return apierrors.IsNotFound(err)
 	}, 3).Should(BeTrue(), "Found unexpected resource %q", name)
 }
 
-func EnsureNoResource[T runtime.Object](client resource.Interface[T], name string) {
-	Consistently(func() bool {
-		_, err := client.Get(context.TODO(), name, metav1.GetOptions{})
+func EnsureNoResource[T runtime.Object](ctx context.Context, client resource.Interface[T], name string) {
+	Consistently(ctx, func(ctx context.Context) bool {
+		_, err := client.Get(ctx, name, metav1.GetOptions{})
 		return apierrors.IsNotFound(err)
 	}, 300*time.Millisecond).Should(BeTrue(), "Found unexpected resource %q", name)
 }

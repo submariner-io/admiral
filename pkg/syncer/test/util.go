@@ -45,8 +45,8 @@ const (
 	LocalNamespace  = "local-ns"
 )
 
-func GetResourceAndError[T runtime.Object](resourceInterface dynamic.ResourceInterface, obj T) (T, error) {
-	u, err := resourceInterface.Get(context.TODO(), resource.MustToMeta(obj).GetName(), metav1.GetOptions{})
+func GetResourceAndError[T runtime.Object](ctx context.Context, resourceInterface dynamic.ResourceInterface, obj T) (T, error) {
+	u, err := resourceInterface.Get(ctx, resource.MustToMeta(obj).GetName(), metav1.GetOptions{})
 	if err != nil {
 		return *new(T), err
 	}
@@ -54,34 +54,35 @@ func GetResourceAndError[T runtime.Object](resourceInterface dynamic.ResourceInt
 	return resource.MustFromUnstructured(u, obj), nil
 }
 
-func GetResource[T runtime.Object](resourceInterface dynamic.ResourceInterface, obj T) T {
-	ret, err := GetResourceAndError(resourceInterface, obj)
+func GetResource[T runtime.Object](ctx context.Context, resourceInterface dynamic.ResourceInterface, obj T) T {
+	ret, err := GetResourceAndError(ctx, resourceInterface, obj)
 	Expect(err).To(Succeed())
 
 	return ret
 }
 
-func CreateResource[T runtime.Object](resourceInterface dynamic.ResourceInterface, obj T) T {
+func CreateResource[T runtime.Object](ctx context.Context, resourceInterface dynamic.ResourceInterface, obj T) T {
 	u := resource.MustToUnstructured(obj)
 	u.SetResourceVersion("")
 
-	created, err := resourceInterface.Create(context.TODO(), u, metav1.CreateOptions{})
+	created, err := resourceInterface.Create(ctx, u, metav1.CreateOptions{})
 	Expect(err).To(Succeed())
 
 	return resource.MustFromUnstructured(created, obj)
 }
 
-func UpdateResource[T runtime.Object](resourceInterface dynamic.ResourceInterface, obj T) T {
+func UpdateResource[T runtime.Object](ctx context.Context, resourceInterface dynamic.ResourceInterface, obj T) T {
 	u := resource.MustToUnstructured(obj)
-	err := util.Update[*unstructured.Unstructured](context.Background(), resource.ForDynamic(resourceInterface), u,
+	err := util.Update(ctx, resource.ForDynamic(resourceInterface), u,
 		util.Replace(u))
 	Expect(err).To(Succeed())
 
-	return GetResource(resourceInterface, obj)
+	return GetResource(ctx, resourceInterface, obj)
 }
 
-func VerifyResource(resourceInterface dynamic.ResourceInterface, expected *corev1.Pod, expNamespace, clusterID string) {
-	actual := GetResource(resourceInterface, expected)
+func VerifyResource(ctx context.Context, resourceInterface dynamic.ResourceInterface, expected *corev1.Pod, expNamespace, clusterID string,
+) {
+	actual := GetResource(ctx, resourceInterface, expected)
 
 	Expect(actual.GetName()).To(Equal(expected.GetName()))
 	Expect(actual.GetNamespace()).To(Equal(expNamespace))
@@ -203,16 +204,16 @@ func SetClusterIDLabel[T runtime.Object](obj T, clusterID string) T {
 	return obj
 }
 
-func AwaitResource(client dynamic.ResourceInterface, name string) *unstructured.Unstructured {
-	return test.AwaitResource(resource.ForDynamic(client), name)
+func AwaitResource(ctx context.Context, client dynamic.ResourceInterface, name string) *unstructured.Unstructured {
+	return test.AwaitResource(ctx, resource.ForDynamic(client), name)
 }
 
-func AwaitAndVerifyResource(client dynamic.ResourceInterface, name string,
+func AwaitAndVerifyResource(ctx context.Context, client dynamic.ResourceInterface, name string,
 	verify func(*unstructured.Unstructured) bool,
 ) *unstructured.Unstructured {
-	return test.AwaitAndVerifyResource(resource.ForDynamic(client), name, verify)
+	return test.AwaitAndVerifyResource(ctx, resource.ForDynamic(client), name, verify)
 }
 
-func AwaitNoResource(client dynamic.ResourceInterface, name string) {
-	test.AwaitNoResource(resource.ForDynamic(client), name)
+func AwaitNoResource(ctx context.Context, client dynamic.ResourceInterface, name string) {
+	test.AwaitNoResource(ctx, resource.ForDynamic(client), name)
 }

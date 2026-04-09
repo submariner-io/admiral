@@ -19,6 +19,8 @@ limitations under the License.
 package syncer_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
@@ -35,9 +37,9 @@ func testUpdateSuppression() {
 		t.addInitialResource(t.resource)
 	})
 
-	JustBeforeEach(func() {
-		t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
-		test.UpdateResource(t.sourceClient, t.resource)
+	JustBeforeEach(func(ctx context.Context) {
+		t.federator.VerifyDistribute(test.GetResource(ctx, t.sourceClient, t.resource))
+		test.UpdateResource(ctx, t.sourceClient, t.resource)
 	})
 
 	When("no equivalence function is specified", func() {
@@ -46,8 +48,8 @@ func testUpdateSuppression() {
 				t.resource.Status.Phase = corev1.PodRunning
 			})
 
-			It("should distribute it", func() {
-				t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
+			It("should distribute it", func(ctx context.Context) {
+				t.federator.VerifyDistribute(test.GetResource(ctx, t.sourceClient, t.resource))
 			})
 		})
 
@@ -56,8 +58,8 @@ func testUpdateSuppression() {
 				t.resource.ObjectMeta.Finalizers = []string{"test"}
 			})
 
-			It("should distribute it", func() {
-				t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
+			It("should distribute it", func(ctx context.Context) {
+				t.federator.VerifyDistribute(test.GetResource(ctx, t.sourceClient, t.resource))
 			})
 		})
 	})
@@ -92,8 +94,8 @@ func testUpdateSuppression() {
 				t.resource.SetLabels(map[string]string{"new-label": "value"})
 			})
 
-			It("should distribute it", func() {
-				t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
+			It("should distribute it", func(ctx context.Context) {
+				t.federator.VerifyDistribute(test.GetResource(ctx, t.sourceClient, t.resource))
 			})
 		})
 
@@ -102,8 +104,8 @@ func testUpdateSuppression() {
 				t.resource.SetAnnotations(map[string]string{"new-annotations": "value"})
 			})
 
-			It("should distribute it", func() {
-				t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
+			It("should distribute it", func(ctx context.Context) {
+				t.federator.VerifyDistribute(test.GetResource(ctx, t.sourceClient, t.resource))
 			})
 		})
 	})
@@ -121,8 +123,8 @@ func testUpdateSuppression() {
 				t.resource.Status.Phase = corev1.PodRunning
 			})
 
-			It("should distribute it", func() {
-				t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
+			It("should distribute it", func(ctx context.Context) {
+				t.federator.VerifyDistribute(test.GetResource(ctx, t.sourceClient, t.resource))
 			})
 		})
 	})
@@ -137,8 +139,8 @@ func testUpdateSuppression() {
 				t.resource.Spec.Hostname = "newHost"
 			})
 
-			It("should distribute it", func() {
-				t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
+			It("should distribute it", func(ctx context.Context) {
+				t.federator.VerifyDistribute(test.GetResource(ctx, t.sourceClient, t.resource))
 			})
 		})
 

@@ -19,6 +19,8 @@ limitations under the License.
 package syncer
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/watcher"
@@ -33,13 +35,13 @@ var _ = Describe("[watcher] Resource watcher tests", func() {
 	t := newTestDriver()
 
 	When(" a Toaster resource is created and deleted", func() {
-		It("should notify the handler of each event", func() {
+		It("should notify the handler of each event", func(ctx context.Context) {
 			clusterName := framework.TestContext.ClusterIDs[framework.ClusterA]
-			toaster := util.CreateToaster(t.client, util.NewToaster("test-toaster", t.framework.Namespace), clusterName)
+			toaster := util.CreateToaster(ctx, t.client, util.NewToaster("test-toaster", t.framework.Namespace), clusterName)
 			toaster.SetManagedFields(nil)
 			Eventually(t.created).Should(Receive(Equal(toaster)))
 
-			util.DeleteToaster(t.client, toaster, clusterName)
+			util.DeleteToaster(ctx, t.client, toaster, clusterName)
 			Eventually(t.deleted).Should(Receive(Equal(toaster.Name)))
 		})
 	})
@@ -75,10 +77,10 @@ func newTestDriver() *testDriver {
 		Expect(toasterWatcher.Start(t.stopCh)).To(Succeed())
 	})
 
-	JustAfterEach(func() {
+	JustAfterEach(func(ctx context.Context) {
 		close(t.stopCh)
 
-		util.DeleteAllToasters(t.client, t.framework.Namespace, framework.TestContext.ClusterIDs[framework.ClusterA])
+		util.DeleteAllToasters(ctx, t.client, t.framework.Namespace, framework.TestContext.ClusterIDs[framework.ClusterA])
 	})
 
 	return t

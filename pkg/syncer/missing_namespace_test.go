@@ -50,8 +50,8 @@ func testWithMissingNamespace() {
 		return t.config.SourceClient.Resource(corev1.SchemeGroupVersion.WithResource("namespaces")).Namespace(metav1.NamespaceNone)
 	}
 
-	createNamespace := func(name string) {
-		test.CreateResource(namespaceClient(), &corev1.Namespace{
+	createNamespace := func(ctx context.Context, name string) {
+		test.CreateResource(ctx, namespaceClient(), &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
@@ -80,21 +80,21 @@ func testWithMissingNamespace() {
 		}, fakeClient.NewSimpleDynamicClient(scheme.Scheme)), resourceutils.MustToUnstructured(&corev1.Namespace{}), 0)
 	})
 
-	JustBeforeEach(func() {
+	JustBeforeEach(func(ctx context.Context) {
 		t.federator.SetDelegator(federate.NewCreateFederator(t.config.SourceClient, t.config.RestMapper, transformedNamespace))
 
-		createNamespace(test.LocalNamespace)
+		createNamespace(ctx, test.LocalNamespace)
 
 		fakereactor.AddVerifyNamespaceReactor(&t.config.SourceClient.(*fakeClient.FakeDynamicClient).Fake, "pods")
 	})
 
-	Specify("distribute should eventually succeed when the namespace is created", func() {
-		resource := test.CreateResource(t.sourceClient, t.resource)
+	Specify("distribute should eventually succeed when the namespace is created", func(ctx context.Context) {
+		resource := test.CreateResource(ctx, t.sourceClient, t.resource)
 		t.federator.VerifyNoDistribute()
 
 		By("Creating namespace")
 
-		createNamespace(transformedNamespace)
+		createNamespace(ctx, transformedNamespace)
 
 		resource.SetNamespace(transformedNamespace)
 		t.federator.VerifyDistribute(resource)
@@ -105,8 +105,8 @@ func testWithMissingNamespace() {
 			t.config.NamespaceInformer = nil
 		})
 
-		It("should not retry", func() {
-			test.CreateResource(t.sourceClient, t.resource)
+		It("should not retry", func(ctx context.Context) {
+			test.CreateResource(ctx, t.sourceClient, t.resource)
 			t.federator.VerifyNoDistribute()
 		})
 	})
@@ -114,23 +114,23 @@ func testWithMissingNamespace() {
 	Context("after a namespace is created and distribute succeeds", func() {
 		const otherNS = "other-ns"
 
-		JustBeforeEach(func() {
-			createNamespace(transformedNamespace)
-			createNamespace(otherNS)
+		JustBeforeEach(func(ctx context.Context) {
+			createNamespace(ctx, transformedNamespace)
+			createNamespace(ctx, otherNS)
 		})
 
 		It("should eventually redistribute when the namespace is recreated", func(ctx SpecContext) {
-			resource := test.CreateResource(t.sourceClient, t.resource)
+			resource := test.CreateResource(ctx, t.sourceClient, t.resource)
 			resource.SetNamespace(transformedNamespace)
 			t.federator.VerifyDistribute(resource)
 
 			other := t.resource.DeepCopy()
 			other.Name = noTransform
-			test.CreateResource(t.sourceClient, other)
+			test.CreateResource(ctx, t.sourceClient, other)
 
 			other = t.resource.DeepCopy()
 			other.Namespace = otherNS
-			test.CreateResource(t.config.SourceClient.Resource(
+			test.CreateResource(ctx, t.config.SourceClient.Resource(
 				*test.GetGroupVersionResourceFor(t.config.RestMapper, other)).Namespace(otherNS), other)
 
 			By("Deleting namespace")
@@ -140,7 +140,7 @@ func testWithMissingNamespace() {
 
 			By("Recreating namespace")
 
-			createNamespace(transformedNamespace)
+			createNamespace(ctx, transformedNamespace)
 			t.federator.VerifyDistribute(resource)
 		})
 	})
