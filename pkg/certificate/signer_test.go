@@ -19,6 +19,7 @@ limitations under the License.
 package certificate_test
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -53,10 +54,10 @@ func (t *signerTestDriver) testStart() {
 	When("a CSR Secret is created and updated", func() {
 		It("should sign it", func(ctx SpecContext) {
 			secret := newCSR()
-			test.CreateResource(t.secretClient(), secret)
+			test.CreateResource(ctx, t.secretClient(), secret)
 
-			Eventually(func(g Gomega) {
-				secret = resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), secret.Name), &corev1.Secret{})
+			Eventually(ctx, func(g Gomega, ctx context.Context) {
+				secret = resource.MustFromUnstructured(test.AwaitResource(ctx, t.secretClient(), secret.Name), &corev1.Secret{})
 				g.Expect(secret.Data).To(HaveKeyWithValue(certificate.TLSDataKey, Not(BeEmpty())))
 				g.Expect(secret.Data).To(HaveKeyWithValue(certificate.CADataKey, Not(BeEmpty())))
 				g.Expect(secret.Annotations).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
@@ -72,10 +73,10 @@ func (t *signerTestDriver) testStart() {
 			secret.Data[certificate.CSRDataKey] = generateTestCSR()
 			delete(secret.Annotations, certificate.RequestSignedLabelKey)
 
-			test.UpdateResource(t.secretClient(), secret)
+			test.UpdateResource(ctx, t.secretClient(), secret)
 
-			Eventually(func(g Gomega) {
-				s := resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), secret.Name), &corev1.Secret{})
+			Eventually(ctx, func(g Gomega, ctx context.Context) {
+				s := resource.MustFromUnstructured(test.AwaitResource(ctx, t.secretClient(), secret.Name), &corev1.Secret{})
 				g.Expect(s.Data).To(HaveKeyWithValue(certificate.TLSDataKey, Not(Equal(secret.Data[certificate.TLSDataKey]))))
 				g.Expect(s.Data).To(HaveKeyWithValue(certificate.CADataKey, Not(Equal(secret.Data[certificate.TLSDataKey]))))
 				g.Expect(s.Annotations).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
@@ -104,21 +105,21 @@ func (t *signerTestDriver) testStart() {
 
 			By("Create Secret in first namespace")
 
-			test.CreateResource(client1, secret)
+			test.CreateResource(ctx, client1, secret)
 
-			Eventually(func(g Gomega) {
-				s := resource.MustFromUnstructured(test.AwaitResource(client1, secret.Name), &corev1.Secret{})
+			Eventually(ctx, func(g Gomega, ctx context.Context) {
+				s := resource.MustFromUnstructured(test.AwaitResource(ctx, client1, secret.Name), &corev1.Secret{})
 				g.Expect(s.Annotations).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
 			}).To(Succeed())
 
-			assert.EnsureNoResource(resource.ForDynamic(client2), secret.Name)
+			assert.EnsureNoResource(ctx, resource.ForDynamic(client2), secret.Name)
 
 			By("Create Secret in second namespace")
 
-			test.CreateResource(client2, secret)
+			test.CreateResource(ctx, client2, secret)
 
-			Eventually(func(g Gomega) {
-				s := resource.MustFromUnstructured(test.AwaitResource(client2, secret.Name), &corev1.Secret{})
+			Eventually(ctx, func(g Gomega, ctx context.Context) {
+				s := resource.MustFromUnstructured(test.AwaitResource(ctx, client2, secret.Name), &corev1.Secret{})
 				g.Expect(s.Annotations).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
 			}).To(Succeed())
 
@@ -129,10 +130,10 @@ func (t *signerTestDriver) testStart() {
 			newSecret := newCSR()
 			newSecret.Name += "2"
 
-			test.CreateResource(client1, newSecret)
+			test.CreateResource(ctx, client1, newSecret)
 
-			Eventually(func(g Gomega) {
-				s := resource.MustFromUnstructured(test.AwaitResource(client1, newSecret.Name), &corev1.Secret{})
+			Eventually(ctx, func(g Gomega, ctx context.Context) {
+				s := resource.MustFromUnstructured(test.AwaitResource(ctx, client1, newSecret.Name), &corev1.Secret{})
 				g.Expect(s.Annotations).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
 			}).To(Succeed())
 		})
@@ -141,16 +142,16 @@ func (t *signerTestDriver) testStart() {
 
 func (t *signerTestDriver) testStop() {
 	Context("Stop", func() {
-		It("should cease signing activity", func() {
+		It("should cease signing activity", func(ctx context.Context) {
 			t.signer.Stop(brokerNamespace)
 
 			client := secretClient(t.dynClient, brokerNamespace)
 
 			secret := newCSR()
-			test.CreateResource(client, secret)
+			test.CreateResource(ctx, client, secret)
 
-			Consistently(func(g Gomega) {
-				secret := resource.MustFromUnstructured(test.AwaitResource(client, secret.Name), &corev1.Secret{})
+			Consistently(ctx, func(g Gomega, ctx context.Context) {
+				secret := resource.MustFromUnstructured(test.AwaitResource(ctx, client, secret.Name), &corev1.Secret{})
 				g.Expect(secret.Data).NotTo(HaveKey(certificate.TLSDataKey))
 				g.Expect(secret.Data).NotTo(HaveKey(certificate.CADataKey))
 				g.Expect(secret.Annotations).NotTo(HaveKey(certificate.RequestSignedLabelKey))
@@ -169,25 +170,25 @@ func (t *signerTestDriver) testExpiration() {
 		t.config.CACheckInterval = time.Millisecond * 20
 	})
 
-	JustBeforeEach(func() {
-		caSecret = resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), certificate.CASecretName), &corev1.Secret{})
+	JustBeforeEach(func(ctx context.Context) {
+		caSecret = resource.MustFromUnstructured(test.AwaitResource(ctx, t.secretClient(), certificate.CASecretName), &corev1.Secret{})
 
 		csrSecret = newCSR()
-		test.CreateResource(t.secretClient(), csrSecret)
+		test.CreateResource(ctx, t.secretClient(), csrSecret)
 
-		Eventually(func(g Gomega) {
-			csrSecret = resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), csrSecret.Name), &corev1.Secret{})
+		Eventually(ctx, func(g Gomega, ctx context.Context) {
+			csrSecret = resource.MustFromUnstructured(test.AwaitResource(ctx, t.secretClient(), csrSecret.Name), &corev1.Secret{})
 			g.Expect(csrSecret.Annotations).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
 		}).To(Succeed())
 	})
 
 	When("the CA certificate has not expired", func() {
-		It("should not rotate it", func() {
-			Consistently(func(g Gomega) {
-				s := test.AwaitResource(t.secretClient(), csrSecret.Name)
+		It("should not rotate it", func(ctx context.Context) {
+			Consistently(ctx, func(g Gomega, ctx context.Context) {
+				s := test.AwaitResource(ctx, t.secretClient(), csrSecret.Name)
 				g.Expect(s.GetAnnotations()).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
 
-				s = test.AwaitResource(t.secretClient(), certificate.CASecretName)
+				s = test.AwaitResource(ctx, t.secretClient(), certificate.CASecretName)
 				g.Expect(s.GetAnnotations()).To(Equal(caSecret.Annotations))
 				g.Expect(resource.MustFromUnstructured(s, &corev1.Secret{}).Data).To(Equal(caSecret.Data))
 			}).Within(time.Millisecond * 200).To(Succeed())
@@ -200,12 +201,12 @@ func (t *signerTestDriver) testExpiration() {
 			t.config.RotateBefore = time.Second
 		})
 
-		It("should rotate it and re-sign all CSRs", func() {
-			Eventually(func(g Gomega) {
-				s := resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), csrSecret.Name), &corev1.Secret{})
+		It("should rotate it and re-sign all CSRs", func(ctx context.Context) {
+			Eventually(ctx, func(g Gomega, ctx context.Context) {
+				s := resource.MustFromUnstructured(test.AwaitResource(ctx, t.secretClient(), csrSecret.Name), &corev1.Secret{})
 				g.Expect(s.Data[certificate.TLSDataKey]).NotTo(Equal(csrSecret.Data[certificate.TLSDataKey]))
 
-				s = resource.MustFromUnstructured(test.AwaitResource(t.secretClient(), certificate.CASecretName), &corev1.Secret{})
+				s = resource.MustFromUnstructured(test.AwaitResource(ctx, t.secretClient(), certificate.CASecretName), &corev1.Secret{})
 				g.Expect(s.Annotations).NotTo(Equal(caSecret.Annotations))
 				g.Expect(s.Data).NotTo(Equal(caSecret.Data))
 			}).Within(t.config.CACertValidity + time.Second).To(Succeed())

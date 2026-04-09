@@ -19,6 +19,8 @@ limitations under the License.
 package syncer_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/syncer"
@@ -34,8 +36,8 @@ func testShouldProcessFunction() {
 
 	When("a resource is created in the datastore", func() {
 		When("the ShouldProcess function returns true", func() {
-			It("should distribute it", func() {
-				t.federator.VerifyDistribute(test.CreateResource(t.sourceClient, t.resource))
+			It("should distribute it", func(ctx context.Context) {
+				t.federator.VerifyDistribute(test.CreateResource(ctx, t.sourceClient, t.resource))
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 			})
 		})
@@ -45,8 +47,8 @@ func testShouldProcessFunction() {
 				t.shouldProcess = false
 			})
 
-			It("should not distribute it", func() {
-				test.CreateResource(t.sourceClient, t.resource)
+			It("should not distribute it", func(ctx context.Context) {
+				test.CreateResource(ctx, t.sourceClient, t.resource)
 				t.federator.VerifyNoDistribute()
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 			})
@@ -59,12 +61,13 @@ func testShouldProcessFunction() {
 		})
 
 		When("the ShouldProcess function returns true", func() {
-			It("should distribute it", func() {
-				t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
+			It("should distribute it", func(ctx context.Context) {
+				t.federator.VerifyDistribute(test.GetResource(ctx, t.sourceClient, t.resource))
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 
 				t.expResource = test.NewPodWithImage(t.config.SourceNamespace, "apache")
-				t.federator.VerifyDistribute(test.UpdateResource(t.sourceClient, t.expResource))
+				test.UpdateResource(ctx, t.sourceClient, t.expResource)
+				t.federator.VerifyDistribute(test.GetResource(ctx, t.sourceClient, t.expResource))
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Update)))
 			})
 		})
@@ -74,12 +77,12 @@ func testShouldProcessFunction() {
 				t.shouldProcess = false
 			})
 
-			It("should not distribute it", func() {
+			It("should not distribute it", func(ctx context.Context) {
 				t.federator.VerifyNoDistribute()
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 
 				t.expResource = test.NewPodWithImage(t.config.SourceNamespace, "apache")
-				test.UpdateResource(t.sourceClient, t.expResource)
+				test.UpdateResource(ctx, t.sourceClient, t.expResource)
 				t.federator.VerifyNoDistribute()
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Update)))
 			})
@@ -93,7 +96,7 @@ func testShouldProcessFunction() {
 
 		When("the ShouldProcess function returns true", func() {
 			It("should delete it", func(ctx SpecContext) {
-				expected := test.GetResource(t.sourceClient, t.resource)
+				expected := test.GetResource(ctx, t.sourceClient, t.resource)
 				t.federator.VerifyDistribute(expected)
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 

@@ -85,14 +85,14 @@ func testWithTransformLocalToBroker() {
 	})
 
 	When("Toaster resources are created and deleted in one cluster", func() {
-		It("should correctly sync the ExportedToaster resources to both clusters", func() {
-			toaster := t.createToaster(framework.ClusterA)
-			t.awaitExportedToaster(framework.ClusterA, toaster)
-			t.awaitExportedToaster(framework.ClusterB, toaster)
+		It("should correctly sync the ExportedToaster resources to both clusters", func(ctx context.Context) {
+			toaster := t.createToaster(ctx, framework.ClusterA)
+			t.awaitExportedToaster(ctx, framework.ClusterA, toaster)
+			t.awaitExportedToaster(ctx, framework.ClusterB, toaster)
 
-			t.deleteToaster(framework.ClusterA, toaster)
-			t.awaitNoExportedToaster(framework.ClusterA, toaster)
-			t.awaitNoExportedToaster(framework.ClusterB, toaster)
+			t.deleteToaster(ctx, framework.ClusterA, toaster)
+			t.awaitNoExportedToaster(ctx, framework.ClusterA, toaster)
+			t.awaitNoExportedToaster(ctx, framework.ClusterB, toaster)
 		})
 	})
 }
@@ -109,18 +109,18 @@ func testWithLabelSelector() {
 
 	When("a label selector is specified", func() {
 		When("Toaster resources are created with and without the label selector criteria", func() {
-			It("should correctly sync or exclude the Toaster resource", func() {
+			It("should correctly sync or exclude the Toaster resource", func(ctx context.Context) {
 				By("Creating a Toaster with the label selector criteria")
 
-				toaster := t.createToasterResource(framework.ClusterA, util.AddLabel(t.newToaster("sync"), "foo", "bar"))
-				t.awaitToaster(framework.ClusterB, toaster)
+				toaster := t.createToasterResource(ctx, framework.ClusterA, util.AddLabel(t.newToaster("sync"), "foo", "bar"))
+				t.awaitToaster(ctx, framework.ClusterB, toaster)
 
 				By("Creating a Toaster without the label selector criteria")
 
-				toaster = t.createToasterResource(framework.ClusterA, t.newToaster("no-sync"))
+				toaster = t.createToasterResource(ctx, framework.ClusterA, t.newToaster("no-sync"))
 
 				time.Sleep(1000 * time.Millisecond)
-				t.awaitNoToaster(framework.ClusterB, toaster)
+				t.awaitNoToaster(ctx, framework.ClusterB, toaster)
 			})
 		})
 	})
@@ -135,18 +135,18 @@ func testWithFieldSelector() {
 
 	When("a field selector is specified", func() {
 		When("Toaster resources are created with and without the field selector criteria", func() {
-			It("should correctly sync or exclude the Toaster resource", func() {
+			It("should correctly sync or exclude the Toaster resource", func(ctx context.Context) {
 				By("Creating a Toaster with the field selector criteria")
 
-				toaster := t.createToasterResource(framework.ClusterA, t.newToaster("sync"))
-				t.awaitToaster(framework.ClusterB, toaster)
+				toaster := t.createToasterResource(ctx, framework.ClusterA, t.newToaster("sync"))
+				t.awaitToaster(ctx, framework.ClusterB, toaster)
 
 				By("Creating a Toaster without the field selector criteria")
 
-				toaster = t.createToasterResource(framework.ClusterA, t.newToaster("no-sync"))
+				toaster = t.createToasterResource(ctx, framework.ClusterA, t.newToaster("no-sync"))
 
 				time.Sleep(1000 * time.Millisecond)
-				t.awaitNoToaster(framework.ClusterB, toaster)
+				t.awaitNoToaster(ctx, framework.ClusterB, toaster)
 			})
 		})
 	})
@@ -175,9 +175,9 @@ func newTestDriver() *testDriver {
 		t.clusterClients = nil
 	})
 
-	JustBeforeEach(func() {
-		clusterASyncer := t.newSyncer(framework.ClusterA)
-		clusterBSyncer := t.newSyncer(framework.ClusterB)
+	JustBeforeEach(func(ctx context.Context) {
+		clusterASyncer := t.newSyncer(ctx, framework.ClusterA)
+		clusterBSyncer := t.newSyncer(ctx, framework.ClusterB)
 
 		c, err := dynamic.NewForConfig(framework.RestConfigs[framework.ClusterA])
 		Expect(err).To(Succeed())
@@ -193,24 +193,24 @@ func newTestDriver() *testDriver {
 		Expect(clusterBSyncer.Start(t.stopCh)).To(Succeed())
 	})
 
-	JustAfterEach(func() {
+	JustAfterEach(func(ctx context.Context) {
 		close(t.stopCh)
 
 		brokerNS, found := os.LookupEnv("BROKER_K8S_REMOTENAMESPACE")
 		Expect(found).To(BeTrue())
 
-		t.deleteAllToasters(framework.ClusterA, f.Namespace)
-		t.deleteAllExportedToasters(framework.ClusterA, f.Namespace)
-		t.deleteAllToasters(framework.ClusterB, f.Namespace)
-		t.deleteAllExportedToasters(framework.ClusterB, f.Namespace)
-		t.deleteAllToasters(framework.ClusterB, brokerNS)
-		t.deleteAllExportedToasters(framework.ClusterB, brokerNS)
+		t.deleteAllToasters(ctx, framework.ClusterA, f.Namespace)
+		t.deleteAllExportedToasters(ctx, framework.ClusterA, f.Namespace)
+		t.deleteAllToasters(ctx, framework.ClusterB, f.Namespace)
+		t.deleteAllExportedToasters(ctx, framework.ClusterB, f.Namespace)
+		t.deleteAllToasters(ctx, framework.ClusterB, brokerNS)
+		t.deleteAllExportedToasters(ctx, framework.ClusterB, brokerNS)
 	})
 
 	return t
 }
 
-func (t *testDriver) newSyncer(cluster framework.ClusterIndex) *broker.Syncer {
+func (t *testDriver) newSyncer(ctx context.Context, cluster framework.ClusterIndex) *broker.Syncer {
 	localResourceType := &testV1.Toaster{}
 
 	localClusterID := ""
@@ -218,7 +218,7 @@ func (t *testDriver) newSyncer(cluster framework.ClusterIndex) *broker.Syncer {
 		localClusterID = framework.TestContext.ClusterIDs[cluster]
 	}
 
-	syncerObj, err := broker.NewSyncer(broker.SyncerConfig{
+	syncerObj, err := broker.NewSyncer(ctx, broker.SyncerConfig{
 		LocalRestConfig: framework.RestConfigs[cluster],
 		LocalNamespace:  t.framework.Namespace,
 		LocalClusterID:  localClusterID,
@@ -241,18 +241,18 @@ func (t *testDriver) newSyncer(cluster framework.ClusterIndex) *broker.Syncer {
 
 func (t *testDriver) bidirectionalSyncTests() {
 	When("Toaster resources are created and deleted in one cluster", func() {
-		It("should correctly sync the Toaster resources to the other cluster", func() {
-			toaster := t.createToaster(framework.ClusterA)
-			t.awaitToaster(framework.ClusterB, toaster)
+		It("should correctly sync the Toaster resources to the other cluster", func(ctx context.Context) {
+			toaster := t.createToaster(ctx, framework.ClusterA)
+			t.awaitToaster(ctx, framework.ClusterB, toaster)
 
-			t.deleteToaster(framework.ClusterA, toaster)
-			t.awaitNoToaster(framework.ClusterB, toaster)
+			t.deleteToaster(ctx, framework.ClusterA, toaster)
+			t.awaitNoToaster(ctx, framework.ClusterB, toaster)
 
-			toaster = t.createToaster(framework.ClusterB)
-			t.awaitToaster(framework.ClusterA, toaster)
+			toaster = t.createToaster(ctx, framework.ClusterB)
+			t.awaitToaster(ctx, framework.ClusterA, toaster)
 
-			t.deleteToaster(framework.ClusterB, toaster)
-			t.awaitNoToaster(framework.ClusterA, toaster)
+			t.deleteToaster(ctx, framework.ClusterB, toaster)
+			t.awaitNoToaster(ctx, framework.ClusterA, toaster)
 		})
 	})
 }
@@ -261,38 +261,38 @@ func (t *testDriver) newToaster(name string) *testV1.Toaster {
 	return util.NewToaster(name, t.framework.Namespace)
 }
 
-func (t *testDriver) createToaster(cluster framework.ClusterIndex) *testV1.Toaster {
-	return t.createToasterResource(cluster, t.newToaster(framework.TestContext.ClusterIDs[cluster]+"-toaster"))
+func (t *testDriver) createToaster(ctx context.Context, cluster framework.ClusterIndex) *testV1.Toaster {
+	return t.createToasterResource(ctx, cluster, t.newToaster(framework.TestContext.ClusterIDs[cluster]+"-toaster"))
 }
 
-func (t *testDriver) createToasterResource(cluster framework.ClusterIndex, toaster *testV1.Toaster) *testV1.Toaster {
-	return util.CreateToaster(t.clusterClients[cluster], toaster, framework.TestContext.ClusterIDs[cluster])
+func (t *testDriver) createToasterResource(ctx context.Context, cluster framework.ClusterIndex, toaster *testV1.Toaster) *testV1.Toaster {
+	return util.CreateToaster(ctx, t.clusterClients[cluster], toaster, framework.TestContext.ClusterIDs[cluster])
 }
 
-func (t *testDriver) deleteToaster(cluster framework.ClusterIndex, toDelete *testV1.Toaster) {
-	util.DeleteToaster(t.clusterClients[cluster], toDelete, framework.TestContext.ClusterIDs[cluster])
+func (t *testDriver) deleteToaster(ctx context.Context, cluster framework.ClusterIndex, toDelete *testV1.Toaster) {
+	util.DeleteToaster(ctx, t.clusterClients[cluster], toDelete, framework.TestContext.ClusterIDs[cluster])
 }
 
-func (t *testDriver) awaitToaster(cluster framework.ClusterIndex, expected *testV1.Toaster) {
+func (t *testDriver) awaitToaster(ctx context.Context, cluster framework.ClusterIndex, expected *testV1.Toaster) {
 	By(fmt.Sprintf("Waiting for Toaster %q to be synced to %q", expected.Name, framework.TestContext.ClusterIDs[cluster]))
-	actual, ok := t.awaitResource(cluster, util.ToasterGVR(), expected).(*testV1.Toaster)
+	actual, ok := t.awaitResource(ctx, cluster, util.ToasterGVR(), expected).(*testV1.Toaster)
 	Expect(ok).To(BeTrue())
 	Expect(actual.Spec).To(Equal(expected.Spec))
 }
 
-func (t *testDriver) awaitNoToaster(cluster framework.ClusterIndex, lookup *testV1.Toaster) {
+func (t *testDriver) awaitNoToaster(ctx context.Context, cluster framework.ClusterIndex, lookup *testV1.Toaster) {
 	By(fmt.Sprintf("Waiting for Toaster %q to be removed from %q", lookup.Name, framework.TestContext.ClusterIDs[cluster]))
-	t.awaitNoResource(cluster, util.ToasterGVR(), lookup)
+	t.awaitNoResource(ctx, cluster, util.ToasterGVR(), lookup)
 }
 
-func (t *testDriver) awaitNoExportedToaster(cluster framework.ClusterIndex, lookup *testV1.Toaster) {
+func (t *testDriver) awaitNoExportedToaster(ctx context.Context, cluster framework.ClusterIndex, lookup *testV1.Toaster) {
 	By(fmt.Sprintf("Waiting for ExportedToaster %q to be removed from %q", lookup.Name, framework.TestContext.ClusterIDs[cluster]))
-	t.awaitNoResource(cluster, exportedToasterGVR(), lookup)
+	t.awaitNoResource(ctx, cluster, exportedToasterGVR(), lookup)
 }
 
-func (t *testDriver) awaitExportedToaster(cluster framework.ClusterIndex, expected *testV1.Toaster) {
+func (t *testDriver) awaitExportedToaster(ctx context.Context, cluster framework.ClusterIndex, expected *testV1.Toaster) {
 	By(fmt.Sprintf("Waiting for ExportedToaster %q to be synced to %q", expected.Name, framework.TestContext.ClusterIDs[cluster]))
-	actual, ok := t.awaitResource(cluster, exportedToasterGVR(), &testV1.ExportedToaster{
+	actual, ok := t.awaitResource(ctx, cluster, exportedToasterGVR(), &testV1.ExportedToaster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      expected.Name,
 			Namespace: expected.Namespace,
@@ -303,7 +303,7 @@ func (t *testDriver) awaitExportedToaster(cluster framework.ClusterIndex, expect
 	Expect(actual.Spec).To(Equal(expected.Spec))
 }
 
-func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.GroupVersionResource,
+func (t *testDriver) awaitResource(ctx context.Context, cluster framework.ClusterIndex, gvr *schema.GroupVersionResource,
 	resource runtime.Object,
 ) runtime.Object {
 	clusterName := framework.TestContext.ClusterIDs[cluster]
@@ -312,9 +312,9 @@ func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.G
 	Expect(err).To(Succeed())
 
 	msg := fmt.Sprintf("get %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
-	raw := framework.AwaitUntil(msg, func() (runtime.Unstructured, error) {
+	raw := framework.AwaitUntil(ctx, msg, func(ctx context.Context) (runtime.Unstructured, error) {
 		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(
-			context.TODO(), meta.GetName(), metav1.GetOptions{})
+			ctx, meta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil, nil //nolint:nilnil // Returning nil value is intentional
 		}
@@ -335,16 +335,18 @@ func (t *testDriver) awaitResource(cluster framework.ClusterIndex, gvr *schema.G
 	return result
 }
 
-func (t *testDriver) awaitNoResource(cluster framework.ClusterIndex, gvr *schema.GroupVersionResource, resource runtime.Object) {
+func (t *testDriver) awaitNoResource(ctx context.Context, cluster framework.ClusterIndex, gvr *schema.GroupVersionResource,
+	resource runtime.Object,
+) {
 	clusterName := framework.TestContext.ClusterIDs[cluster]
 
 	meta, err := metaapi.Accessor(resource)
 	Expect(err).To(Succeed())
 
 	msg := fmt.Sprintf("get %s %q in namespace %q from %q", gvr.Resource, meta.GetName(), meta.GetNamespace(), clusterName)
-	framework.AwaitUntil(msg, func() (runtime.Unstructured, error) {
+	framework.AwaitUntil(ctx, msg, func(ctx context.Context) (runtime.Unstructured, error) {
 		obj, err := t.clusterClients[cluster].Resource(*gvr).Namespace(meta.GetNamespace()).Get(
-			context.TODO(), meta.GetName(), metav1.GetOptions{})
+			ctx, meta.GetName(), metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil, nil //nolint:nilnil // Returning nil value is intentional
 		}
@@ -359,12 +361,12 @@ func (t *testDriver) awaitNoResource(cluster framework.ClusterIndex, gvr *schema
 	})
 }
 
-func (t *testDriver) deleteAllToasters(cluster framework.ClusterIndex, namespace string) {
-	util.DeleteAllToasters(t.clusterClients[cluster], namespace, framework.TestContext.ClusterIDs[cluster])
+func (t *testDriver) deleteAllToasters(ctx context.Context, cluster framework.ClusterIndex, namespace string) {
+	util.DeleteAllToasters(ctx, t.clusterClients[cluster], namespace, framework.TestContext.ClusterIDs[cluster])
 }
 
-func (t *testDriver) deleteAllExportedToasters(cluster framework.ClusterIndex, namespace string) {
-	util.DeleteAllOf(t.clusterClients[cluster], exportedToasterGVR(), namespace, framework.TestContext.ClusterIDs[cluster])
+func (t *testDriver) deleteAllExportedToasters(ctx context.Context, cluster framework.ClusterIndex, namespace string) {
+	util.DeleteAllOf(ctx, t.clusterClients[cluster], exportedToasterGVR(), namespace, framework.TestContext.ClusterIDs[cluster])
 }
 
 func exportedToasterGVR() *schema.GroupVersionResource {

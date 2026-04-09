@@ -19,6 +19,7 @@ limitations under the License.
 package syncer_test
 
 import (
+	"context"
 	"errors"
 	"sync/atomic"
 
@@ -38,8 +39,8 @@ func testTransformFunction() {
 	t := newTransformFunctionTestDriver()
 
 	When("a resource is created in the datastore", func() {
-		JustBeforeEach(func() {
-			test.CreateResource(t.sourceClient, t.resource)
+		JustBeforeEach(func(ctx context.Context) {
+			test.CreateResource(ctx, t.sourceClient, t.resource)
 		})
 
 		It("should distribute the transformed resource", func() {
@@ -68,12 +69,12 @@ func testTransformFunction() {
 			t.addInitialResource(t.resource)
 		})
 
-		It("should distribute the transformed resource", func() {
+		It("should distribute the transformed resource", func(ctx context.Context) {
 			t.verifyDistribute()
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 
 			t.resource = test.NewPodWithImage(t.config.SourceNamespace, "updated")
-			test.UpdateResource(t.sourceClient, test.NewPodWithImage(t.config.SourceNamespace, "updated"))
+			test.UpdateResource(ctx, t.sourceClient, test.NewPodWithImage(t.config.SourceNamespace, "updated"))
 			t.federator.VerifyDistribute(t.transformed)
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Update)))
 		})
@@ -146,8 +147,8 @@ func testTransformFunction() {
 			t.federator.FailOnDistribute(errors.New("fake error"))
 		})
 
-		It("should retry until it succeeds", func() {
-			test.CreateResource(t.sourceClient, t.resource)
+		It("should retry until it succeeds", func(ctx context.Context) {
+			test.CreateResource(ctx, t.sourceClient, t.resource)
 			t.verifyDistribute()
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
@@ -165,8 +166,8 @@ func testTransformFunction() {
 		})
 
 		Context("and a resource is created in the datastore", func() {
-			It("should not distribute the resource", func() {
-				test.CreateResource(t.sourceClient, t.resource)
+			It("should not distribute the resource", func(ctx context.Context) {
+				test.CreateResource(ctx, t.sourceClient, t.resource)
 				t.federator.VerifyNoDistribute()
 				Expect(int(t.invocationCount.Load())).To(Equal(1))
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
@@ -210,8 +211,8 @@ func testTransformFunction() {
 		})
 
 		Context("and a resource is created in the datastore", func() {
-			It("should eventually distribute the transformed resource", func() {
-				test.CreateResource(t.sourceClient, t.resource)
+			It("should eventually distribute the transformed resource", func(ctx context.Context) {
+				test.CreateResource(ctx, t.sourceClient, t.resource)
 				t.verifyDistribute()
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 			})

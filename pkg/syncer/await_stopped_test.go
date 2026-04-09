@@ -47,7 +47,7 @@ func testAwaitStopped() {
 			t.stopCh = nil
 		}()
 
-		test.CreateResource(t.sourceClient, t.resource)
+		test.CreateResource(ctx, t.sourceClient, t.resource)
 		Eventually(t.config.Federator.(*blockingFederator).distributeStarted).Should(Receive())
 
 		close(t.stopCh)

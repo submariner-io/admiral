@@ -19,6 +19,7 @@ limitations under the License.
 package syncer_test
 
 import (
+	"context"
 	"errors"
 	"sync/atomic"
 	"time"
@@ -39,8 +40,8 @@ func testOnSuccessfulSyncFunction() {
 	t := newOnSuccessfulSyncFuncTestDriver()
 
 	When("a resource is successfully created in the datastore", func() {
-		It("should invoke the OnSuccessfulSync function", func() {
-			t.federator.VerifyDistribute(test.CreateResource(t.sourceClient, t.resource))
+		It("should invoke the OnSuccessfulSync function", func(ctx context.Context) {
+			t.federator.VerifyDistribute(test.CreateResource(ctx, t.sourceClient, t.resource))
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 			Consistently(t.expOperation).ShouldNot(Receive())
 		})
@@ -51,12 +52,12 @@ func testOnSuccessfulSyncFunction() {
 			t.addInitialResource(t.resource)
 		})
 
-		It("should invoke the OnSuccessfulSync function", func() {
-			t.federator.VerifyDistribute(test.GetResource(t.sourceClient, t.resource))
+		It("should invoke the OnSuccessfulSync function", func(ctx context.Context) {
+			t.federator.VerifyDistribute(test.GetResource(ctx, t.sourceClient, t.resource))
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 
 			t.expResource = test.NewPodWithImage(t.config.SourceNamespace, "apache")
-			t.federator.VerifyDistribute(test.UpdateResource(t.sourceClient, t.expResource))
+			t.federator.VerifyDistribute(test.UpdateResource(ctx, t.sourceClient, t.expResource))
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Update)))
 		})
 	})
@@ -67,7 +68,7 @@ func testOnSuccessfulSyncFunction() {
 		})
 
 		It("should invoke the OnSuccessfulSync function", func(ctx SpecContext) {
-			expected := test.GetResource(t.sourceClient, t.resource)
+			expected := test.GetResource(ctx, t.sourceClient, t.resource)
 			t.federator.VerifyDistribute(expected)
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 
@@ -87,8 +88,8 @@ func testOnSuccessfulSyncFunction() {
 				}
 			})
 
-			It("should invoke the OnSuccessfulSync function with the transformed resource", func() {
-				test.CreateResource(t.sourceClient, t.resource)
+			It("should invoke the OnSuccessfulSync function with the transformed resource", func(ctx context.Context) {
+				test.CreateResource(ctx, t.sourceClient, t.resource)
 				t.federator.VerifyDistribute(t.expResource)
 				Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 			})
@@ -101,15 +102,15 @@ func testOnSuccessfulSyncFunction() {
 			t.federator.ResetOnFailure.Store(false)
 		})
 
-		It("should not invoke the OnSuccessfulSync function", func() {
-			test.CreateResource(t.sourceClient, t.resource)
+		It("should not invoke the OnSuccessfulSync function", func(ctx context.Context) {
+			test.CreateResource(ctx, t.sourceClient, t.resource)
 			Consistently(t.expOperation, 300*time.Millisecond).ShouldNot(Receive())
 		})
 	})
 
 	When("delete fails", func() {
-		JustBeforeEach(func() {
-			t.federator.VerifyDistribute(test.CreateResource(t.sourceClient, t.resource))
+		JustBeforeEach(func(ctx context.Context) {
+			t.federator.VerifyDistribute(test.CreateResource(ctx, t.sourceClient, t.resource))
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 		})
 
@@ -138,12 +139,12 @@ func testOnSuccessfulSyncFunction() {
 	})
 
 	When("the OnSuccessfulSync function returns true", func() {
-		BeforeEach(func() {
+		BeforeEach(func(ctx context.Context) {
 			t.onSuccessfulSyncReturn.Store(true)
 		})
 
-		It("should retry", func(ctx SpecContext) {
-			t.federator.VerifyDistribute(test.CreateResource(t.sourceClient, t.resource))
+		It("should retry", func(ctx context.Context) {
+			t.federator.VerifyDistribute(test.CreateResource(ctx, t.sourceClient, t.resource))
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 			Eventually(t.expOperation).Should(Receive(Equal(syncer.Create)))
 			Consistently(t.expOperation).ShouldNot(Receive())
@@ -167,7 +168,7 @@ type onSuccessfulSyncFuncTestDriver struct {
 func newOnSuccessfulSyncFuncTestDriver() *onSuccessfulSyncFuncTestDriver {
 	t := &onSuccessfulSyncFuncTestDriver{testDriver: newTestDriver(test.LocalNamespace, "", syncer.LocalToRemote)}
 
-	BeforeEach(func() {
+	BeforeEach(func(ctx context.Context) {
 		t.expOperation = make(chan syncer.Operation, 20)
 		t.expResource = t.resource
 

@@ -57,10 +57,10 @@ var _ = Describe("Add", func() {
 	})
 
 	When("the resource has no Finalizers", func() {
-		It("should add the new one", func() {
+		It("should add the new one", func(ctx context.Context) {
 			Expect(err).To(Succeed())
 			Expect(added).To(BeTrue())
-			t.assertFinalizers(finalizerName)
+			t.assertFinalizers(ctx, finalizerName)
 		})
 
 		Context("and update initially fails with a conflict error", func() {
@@ -68,10 +68,10 @@ var _ = Describe("Add", func() {
 				fake.ConflictOnUpdateReactor(&t.kubeClient.Fake, "pods")
 			})
 
-			It("should eventually succeed", func() {
+			It("should eventually succeed", func(ctx context.Context) {
 				Expect(err).To(Succeed())
 				Expect(added).To(BeTrue())
-				t.assertFinalizers(finalizerName)
+				t.assertFinalizers(ctx, finalizerName)
 			})
 		})
 	})
@@ -81,10 +81,10 @@ var _ = Describe("Add", func() {
 			t.pod.Finalizers = []string{"other"}
 		})
 
-		It("should append the new one", func() {
+		It("should append the new one", func(ctx context.Context) {
 			Expect(err).To(Succeed())
 			Expect(added).To(BeTrue())
-			t.assertFinalizers("other", finalizerName)
+			t.assertFinalizers(ctx, "other", finalizerName)
 		})
 	})
 
@@ -93,11 +93,11 @@ var _ = Describe("Add", func() {
 			t.pod.Finalizers = []string{finalizerName}
 		})
 
-		It("should not try to re-add it", func() {
+		It("should not try to re-add it", func(ctx context.Context) {
 			Expect(err).To(Succeed())
 			Expect(added).To(BeFalse())
 			test.EnsureNoActionsForResource(&t.kubeClient.Fake, "pods", "get", "update")
-			t.assertFinalizers(finalizerName)
+			t.assertFinalizers(ctx, finalizerName)
 		})
 	})
 
@@ -107,10 +107,10 @@ var _ = Describe("Add", func() {
 			t.pod.DeletionTimestamp = &now
 		})
 
-		It("should not add the Finalizer", func() {
+		It("should not add the Finalizer", func(ctx context.Context) {
 			Expect(err).To(Succeed())
 			Expect(added).To(BeFalse())
-			t.assertFinalizers()
+			t.assertFinalizers(ctx)
 		})
 	})
 
@@ -143,9 +143,9 @@ var _ = Describe("Remove", func() {
 	})
 
 	When("the Finalizer is present", func() {
-		It("should remove it", func() {
+		It("should remove it", func(ctx context.Context) {
 			Expect(err).To(Succeed())
-			t.assertFinalizers()
+			t.assertFinalizers(ctx)
 		})
 
 		Context("and update initially fails with a conflict error", func() {
@@ -153,9 +153,9 @@ var _ = Describe("Remove", func() {
 				fake.ConflictOnUpdateReactor(&t.kubeClient.Fake, "pods")
 			})
 
-			It("should eventually succeed", func() {
+			It("should eventually succeed", func(ctx context.Context) {
 				Expect(err).To(Succeed())
-				t.assertFinalizers()
+				t.assertFinalizers(ctx)
 			})
 		})
 	})
@@ -165,9 +165,9 @@ var _ = Describe("Remove", func() {
 			t.pod.Finalizers = []string{"other1", finalizerName, "other2"}
 		})
 
-		It("should not remove the others", func() {
+		It("should not remove the others", func(ctx context.Context) {
 			Expect(err).To(Succeed())
-			t.assertFinalizers("other1", "other2")
+			t.assertFinalizers(ctx, "other1", "other2")
 		})
 	})
 
@@ -176,10 +176,10 @@ var _ = Describe("Remove", func() {
 			t.pod.Finalizers = []string{"other"}
 		})
 
-		It("should not try to remove it", func() {
+		It("should not try to remove it", func(ctx context.Context) {
 			Expect(err).To(Succeed())
 			test.EnsureNoActionsForResource(&t.kubeClient.Fake, "pods", "get", "update")
-			t.assertFinalizers("other")
+			t.assertFinalizers(ctx, "other")
 		})
 	})
 
@@ -224,6 +224,6 @@ func (t *testDriver) justBeforeEach(ctx context.Context) {
 	t.kubeClient.Fake.ClearActions()
 }
 
-func (t *testDriver) assertFinalizers(exp ...string) {
-	test.AssertFinalizers(t.client, t.pod.Name, exp...)
+func (t *testDriver) assertFinalizers(ctx context.Context, exp ...string) {
+	test.AssertFinalizers(ctx, t.client, t.pod.Name, exp...)
 }

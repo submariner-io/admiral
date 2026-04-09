@@ -19,6 +19,7 @@ limitations under the License.
 package broker
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -174,12 +175,12 @@ type Syncer struct {
 var logger = log.Logger{Logger: logf.Log.WithName("BrokerSyncer")}
 
 // NewSyncer creates a Syncer that performs bi-directional syncing of resources between a local source and a central broker.
-func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Minimal performance hit, we modify our copy
+func NewSyncer(ctx context.Context, config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Minimal performance hit, we modify our copy
 	if len(config.ResourceConfigs) == 0 {
 		return nil, errors.New("no resources to sync")
 	}
 
-	if err := config.ensureClients(); err != nil {
+	if err := config.ensureClients(ctx); err != nil {
 		return nil, err
 	}
 
@@ -297,7 +298,7 @@ func NewSyncer(config SyncerConfig) (*Syncer, error) { //nolint:gocritic // Mini
 	return brokerSyncer, nil
 }
 
-func (c *SyncerConfig) createBrokerClient() error {
+func (c *SyncerConfig) createBrokerClient(ctx context.Context) error {
 	_, gvr, e := util.ToUnstructuredResource(c.ResourceConfigs[0].BrokerResourceType, c.RestMapper)
 	if e != nil {
 		return e //nolint:wrapcheck // OK to return the error as is.
@@ -308,7 +309,7 @@ func (c *SyncerConfig) createBrokerClient() error {
 
 	if c.BrokerRestConfig != nil {
 		// We have an existing REST configuration, assume it’s correct (but check it anyway)
-		authorized, err = resource.IsAuthorizedFor(c.BrokerRestConfig, *gvr, c.BrokerNamespace)
+		authorized, err = resource.IsAuthorizedFor(ctx, c.BrokerRestConfig, *gvr, c.BrokerNamespace)
 	} else {
 		spec, e := getBrokerSpecification()
 		if e != nil {
@@ -318,7 +319,7 @@ func (c *SyncerConfig) createBrokerClient() error {
 		c.BrokerNamespace = spec.RemoteNamespace
 		// If we have a secret, try to use it
 		if spec.Secret != "" {
-			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromFiles(spec.APIServer,
+			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromFiles(ctx, spec.APIServer,
 				filepath.Join(SecretPath(spec.Secret), "token"), filepath.Join(SecretPath(spec.Secret), "ca.crt"),
 				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 			if err != nil {
@@ -328,8 +329,8 @@ func (c *SyncerConfig) createBrokerClient() error {
 
 		// If we encountered an error, or we don't have a secret, use the values in the spec
 		if spec.Secret == "" || err != nil {
-			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(spec.APIServer, spec.APIServerToken, spec.Ca,
-				&rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
+			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(ctx, spec.APIServer, spec.APIServerToken,
+				spec.Ca, &rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
 		}
 
 		if c.BrokerRestConfig != nil {
@@ -351,7 +352,7 @@ func (c *SyncerConfig) createBrokerClient() error {
 	return errors.Wrap(err, "error creating dynamic client")
 }
 
-func (c *SyncerConfig) ensureClients() error {
+func (c *SyncerConfig) ensureClients(ctx context.Context) error {
 	var err error
 
 	if c.RestMapper == nil {
@@ -369,7 +370,7 @@ func (c *SyncerConfig) ensureClients() error {
 	}
 
 	if c.BrokerClient == nil {
-		if err := c.createBrokerClient(); err != nil {
+		if err := c.createBrokerClient(ctx); err != nil {
 			return err
 		}
 	}

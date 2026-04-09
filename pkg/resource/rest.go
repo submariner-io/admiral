@@ -39,7 +39,7 @@ var NewDynamicClient = func(config *rest.Config) (dynamic.Interface, error) {
 
 var NewSPDYExecutor = remotecommand.NewSPDYExecutor
 
-func GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig,
+func GetAuthorizedRestConfigFromData(ctx context.Context, apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig,
 	gvr schema.GroupVersionResource, namespace string,
 ) (*rest.Config, bool, error) {
 	// First try a REST config without the CA trust chain
@@ -48,7 +48,7 @@ func GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caData string, t
 		return nil, false, err
 	}
 
-	authorized, err := IsAuthorizedFor(restConfig, gvr, namespace)
+	authorized, err := IsAuthorizedFor(ctx, restConfig, gvr, namespace)
 	if !authorized {
 		// Now try with the trust chain
 		restConfig, err = BuildRestConfigFromData(apiServer, apiServerToken, caData, tls)
@@ -56,23 +56,23 @@ func GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caData string, t
 			return nil, false, err
 		}
 
-		authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
+		authorized, err = IsAuthorizedFor(ctx, restConfig, gvr, namespace)
 	}
 
 	return restConfig, authorized, err
 }
 
-func GetAuthorizedRestConfigFromFiles(apiServer, apiServerTokenFile, caFile string, tls *rest.TLSClientConfig,
+func GetAuthorizedRestConfigFromFiles(ctx context.Context, apiServer, apiServerTokenFile, caFile string, tls *rest.TLSClientConfig,
 	gvr schema.GroupVersionResource, namespace string,
 ) (*rest.Config, bool, error) {
 	// First try a REST config without the CA trust chain
 	restConfig := BuildRestConfigFromFiles(apiServer, apiServerTokenFile, "", tls)
-	authorized, err := IsAuthorizedFor(restConfig, gvr, namespace)
+	authorized, err := IsAuthorizedFor(ctx, restConfig, gvr, namespace)
 
 	if !authorized {
 		// Now try with the trust chain
 		restConfig = BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile, tls)
-		authorized, err = IsAuthorizedFor(restConfig, gvr, namespace)
+		authorized, err = IsAuthorizedFor(ctx, restConfig, gvr, namespace)
 	}
 
 	return restConfig, authorized, err
@@ -115,13 +115,13 @@ func BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile string, tls 
 	}
 }
 
-func IsAuthorizedFor(restConfig *rest.Config, gvr schema.GroupVersionResource, namespace string) (bool, error) {
+func IsAuthorizedFor(ctx context.Context, restConfig *rest.Config, gvr schema.GroupVersionResource, namespace string) (bool, error) {
 	client, err := NewDynamicClient(restConfig)
 	if err != nil {
 		return false, errors.Wrap(err, "error creating dynamic client")
 	}
 
-	_, err = client.Resource(gvr).Namespace(namespace).Get(context.TODO(), "any", metav1.GetOptions{})
+	_, err = client.Resource(gvr).Namespace(namespace).Get(ctx, "any", metav1.GetOptions{})
 	if IsUnknownAuthorityError(err) {
 		return false, errors.Wrapf(err, "cannot access the API server %q", restConfig.Host)
 	}

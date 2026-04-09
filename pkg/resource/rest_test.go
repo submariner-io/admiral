@@ -19,6 +19,7 @@ limitations under the License.
 package resource_test
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"errors"
@@ -46,8 +47,8 @@ var _ = Describe("GetAuthorizedRestConfigFromData", func() {
 	d := newDynamicClientInfo()
 
 	When("a CA trust chain is not needed", func() {
-		It("should succeed when authorized", func() {
-			restConfig, authorized, err := resource.GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caDataEncoded,
+		It("should succeed when authorized", func(ctx context.Context) {
+			restConfig, authorized, err := resource.GetAuthorizedRestConfigFromData(ctx, apiServer, apiServerToken, caDataEncoded,
 				&rest.TLSClientConfig{Insecure: true}, gvr, "test-ns")
 			Expect(err).To(Succeed())
 			Expect(authorized).To(BeTrue())
@@ -56,10 +57,10 @@ var _ = Describe("GetAuthorizedRestConfigFromData", func() {
 			Expect(restConfig.TLSClientConfig.Insecure).To(BeTrue())
 		})
 
-		It("should fail when an API server error occurs", func() {
+		It("should fail when an API server error occurs", func(ctx context.Context) {
 			fake.FailOnAction(&d.clientWithoutCAData.Fake, gvr.Resource, "*", nil, false)
 
-			_, authorized, err := resource.GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caDataEncoded,
+			_, authorized, err := resource.GetAuthorizedRestConfigFromData(ctx, apiServer, apiServerToken, caDataEncoded,
 				&rest.TLSClientConfig{Insecure: true}, gvr, "test-ns")
 			Expect(err).ToNot(Succeed())
 			Expect(authorized).To(BeTrue())
@@ -71,8 +72,8 @@ var _ = Describe("GetAuthorizedRestConfigFromData", func() {
 			fake.FailOnAction(&d.clientWithoutCAData.Fake, gvr.Resource, "*", x509.UnknownAuthorityError{}, false)
 		})
 
-		It("should succeed when authorized", func() {
-			restConfig, authorized, err := resource.GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caDataEncoded,
+		It("should succeed when authorized", func(ctx context.Context) {
+			restConfig, authorized, err := resource.GetAuthorizedRestConfigFromData(ctx, apiServer, apiServerToken, caDataEncoded,
 				&rest.TLSClientConfig{Insecure: false}, gvr, "test-ns")
 			Expect(err).To(Succeed())
 			Expect(authorized).To(BeTrue())
@@ -82,35 +83,35 @@ var _ = Describe("GetAuthorizedRestConfigFromData", func() {
 			Expect(restConfig.TLSClientConfig.CAData).To(Equal(caData))
 		})
 
-		It("should fail when not authorized", func() {
+		It("should fail when not authorized", func(ctx context.Context) {
 			fake.FailOnAction(&d.clientWithCAData.Fake, gvr.Resource, "*", x509.UnknownAuthorityError{}, false)
 
-			_, authorized, err := resource.GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caDataEncoded,
+			_, authorized, err := resource.GetAuthorizedRestConfigFromData(ctx, apiServer, apiServerToken, caDataEncoded,
 				&rest.TLSClientConfig{Insecure: false}, gvr, "test-ns")
 			Expect(err).ToNot(Succeed())
 			Expect(authorized).To(BeFalse())
 		})
 
-		It("should fail when an API server error occurs", func() {
+		It("should fail when an API server error occurs", func(ctx context.Context) {
 			fake.FailOnAction(&d.clientWithCAData.Fake, gvr.Resource, "*", nil, false)
 
-			_, authorized, err := resource.GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caDataEncoded, nil, gvr, "test-ns")
+			_, authorized, err := resource.GetAuthorizedRestConfigFromData(ctx, apiServer, apiServerToken, caDataEncoded, nil, gvr, "test-ns")
 			Expect(err).ToNot(Succeed())
 			Expect(authorized).To(BeTrue())
 		})
 
-		It("should fail when the CA data is invalid", func() {
-			_, _, err := resource.GetAuthorizedRestConfigFromData(apiServer, apiServerToken, "=@#$=%^", nil, gvr, "test-ns")
+		It("should fail when the CA data is invalid", func(ctx context.Context) {
+			_, _, err := resource.GetAuthorizedRestConfigFromData(ctx, apiServer, apiServerToken, "=@#$=%^", nil, gvr, "test-ns")
 			Expect(err).ToNot(Succeed())
 		})
 	})
 
-	It("should fail when client creation fails", func() {
+	It("should fail when client creation fails", func(ctx context.Context) {
 		resource.NewDynamicClient = func(_ *rest.Config) (dynamic.Interface, error) {
 			return nil, errors.New("error creating client")
 		}
 
-		_, _, err := resource.GetAuthorizedRestConfigFromData(apiServer, apiServerToken, caDataEncoded, nil, gvr, "test-ns")
+		_, _, err := resource.GetAuthorizedRestConfigFromData(ctx, apiServer, apiServerToken, caDataEncoded, nil, gvr, "test-ns")
 		Expect(err).ToNot(Succeed())
 	})
 })
@@ -122,8 +123,8 @@ var _ = Describe("GetAuthorizedRestConfigFromFiles", func() {
 	d := newDynamicClientInfo()
 
 	When("a CA trust chain is not needed", func() {
-		It("should succeed when authorized", func() {
-			restConfig, authorized, err := resource.GetAuthorizedRestConfigFromFiles(apiServer, apiServerTokenFile, caFile,
+		It("should succeed when authorized", func(ctx context.Context) {
+			restConfig, authorized, err := resource.GetAuthorizedRestConfigFromFiles(ctx, apiServer, apiServerTokenFile, caFile,
 				&rest.TLSClientConfig{Insecure: true}, gvr, "test-ns")
 			Expect(err).To(Succeed())
 			Expect(authorized).To(BeTrue())
@@ -132,10 +133,10 @@ var _ = Describe("GetAuthorizedRestConfigFromFiles", func() {
 			Expect(restConfig.TLSClientConfig.Insecure).To(BeTrue())
 		})
 
-		It("should fail when an API server error occurs", func() {
+		It("should fail when an API server error occurs", func(ctx context.Context) {
 			fake.FailOnAction(&d.clientWithoutCAData.Fake, gvr.Resource, "*", nil, false)
 
-			_, authorized, err := resource.GetAuthorizedRestConfigFromFiles(apiServer, apiServerTokenFile, caFile,
+			_, authorized, err := resource.GetAuthorizedRestConfigFromFiles(ctx, apiServer, apiServerTokenFile, caFile,
 				nil, gvr, "test-ns")
 			Expect(err).ToNot(Succeed())
 			Expect(authorized).To(BeTrue())
@@ -147,8 +148,8 @@ var _ = Describe("GetAuthorizedRestConfigFromFiles", func() {
 			fake.FailOnAction(&d.clientWithoutCAData.Fake, gvr.Resource, "*", x509.UnknownAuthorityError{}, false)
 		})
 
-		It("should succeed when authorized", func() {
-			restConfig, authorized, err := resource.GetAuthorizedRestConfigFromFiles(apiServer, apiServerTokenFile, caFile,
+		It("should succeed when authorized", func(ctx context.Context) {
+			restConfig, authorized, err := resource.GetAuthorizedRestConfigFromFiles(ctx, apiServer, apiServerTokenFile, caFile,
 				&rest.TLSClientConfig{Insecure: false}, gvr, "test-ns")
 			Expect(err).To(Succeed())
 			Expect(authorized).To(BeTrue())
@@ -158,19 +159,19 @@ var _ = Describe("GetAuthorizedRestConfigFromFiles", func() {
 			Expect(restConfig.TLSClientConfig.CAFile).To(Equal(caFile))
 		})
 
-		It("should fail when not authorized", func() {
+		It("should fail when not authorized", func(ctx context.Context) {
 			fake.FailOnAction(&d.clientWithCAData.Fake, gvr.Resource, "*", x509.UnknownAuthorityError{}, false)
 
-			_, authorized, err := resource.GetAuthorizedRestConfigFromFiles(apiServer, apiServerTokenFile, caFile,
+			_, authorized, err := resource.GetAuthorizedRestConfigFromFiles(ctx, apiServer, apiServerTokenFile, caFile,
 				&rest.TLSClientConfig{Insecure: false}, gvr, "test-ns")
 			Expect(err).ToNot(Succeed())
 			Expect(authorized).To(BeFalse())
 		})
 
-		It("should fail when an API server error occurs", func() {
+		It("should fail when an API server error occurs", func(ctx context.Context) {
 			fake.FailOnAction(&d.clientWithCAData.Fake, gvr.Resource, "*", nil, false)
 
-			_, authorized, err := resource.GetAuthorizedRestConfigFromFiles(apiServer, apiServerTokenFile, caFile, nil, gvr, "test-ns")
+			_, authorized, err := resource.GetAuthorizedRestConfigFromFiles(ctx, apiServer, apiServerTokenFile, caFile, nil, gvr, "test-ns")
 			Expect(err).ToNot(Succeed())
 			Expect(authorized).To(BeTrue())
 		})

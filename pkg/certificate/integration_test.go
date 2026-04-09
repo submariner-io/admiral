@@ -19,6 +19,7 @@ limitations under the License.
 package certificate_test
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -52,16 +53,16 @@ var _ = Describe("Integration", func() {
 
 		var localSecret *corev1.Secret
 
-		Eventually(func(g Gomega) {
-			localSecret = awaitSecret(tSR.localSecretClient())
+		Eventually(ctx, func(g Gomega, ctx context.Context) {
+			localSecret = awaitSecret(ctx, tSR.localSecretClient())
 			g.Expect(localSecret.Annotations).To(HaveKey(certificate.RequestSignedLabelKey))
 		}).To(Succeed())
 
 		Eventually(tSR.signedDataCh).Should(Receive(Equal(localSecret.Data)))
 
 		// Should expire and be re-signed.
-		Eventually(func(g Gomega) {
-			s := awaitSecret(tSR.localSecretClient())
+		Eventually(ctx, func(g Gomega, ctx context.Context) {
+			s := awaitSecret(ctx, tSR.localSecretClient())
 			g.Expect(s.Data[certificate.TLSDataKey]).NotTo(Equal(localSecret.Data[certificate.TLSDataKey]))
 			localSecret = s
 		}).Within(tS.config.CertValidity + time.Second).To(Succeed())

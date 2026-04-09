@@ -78,8 +78,8 @@ var _ = Describe("CreateAnew function", func() {
 	})
 
 	When("the resource already exists", func() {
-		BeforeEach(func() {
-			t.createPod()
+		BeforeEach(func(ctx context.Context) {
+			t.createPod(ctx)
 		})
 
 		Context("and the new resource spec differs", func() {
@@ -175,7 +175,7 @@ var _ = Describe("CreateOrUpdate function", func() {
 
 		if result != util.OperationResultNone {
 			Expect(retObj).NotTo(BeNil())
-			Expect(retObj).To(Equal(test.GetResource(t.client, retObj)))
+			Expect(retObj).To(Equal(test.GetResource(ctx, t.client, retObj)))
 		}
 
 		return err
@@ -283,12 +283,12 @@ var _ = Describe("CreateOrUpdate function", func() {
 		})
 
 		Context("and Create initially returns AlreadyExists due to a simulated out-of-band create", func() {
-			BeforeEach(func() {
-				t.createPod()
+			BeforeEach(func(ctx context.Context) {
+				t.createPod(ctx)
 				t.pod = test.NewPodWithImage("", "apache")
 			})
 
-			JustBeforeEach(func() {
+			JustBeforeEach(func(ctx context.Context) {
 				fake.FailOnAction(t.testingFake, "pods", "get", apierrors.NewNotFound(schema.GroupResource{},
 					t.pod.GetName()), true)
 				fake.FailOnAction(t.testingFake, "pods", "create", apierrors.NewAlreadyExists(schema.GroupResource{},
@@ -417,10 +417,10 @@ func (t *createOrUpdateTestDriver) testGetFailure(doOper func(context.Context, u
 
 func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(context.Context, util.OperationResult) error) {
 	When("the resource already exists", func() {
-		JustBeforeEach(func() {
+		JustBeforeEach(func(ctx context.Context) {
 			labels := t.pod.Labels
 			generateName := t.pod.GenerateName
-			t.createPod()
+			t.createPod(ctx)
 
 			t.pod = test.NewPodWithImage("", "apache")
 			t.pod.GenerateName = generateName
@@ -445,7 +445,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(context.Context, uti
 			})
 
 			It("should update the resource", func(ctx SpecContext) {
-				test.CreateResource(t.client, &corev1.Pod{
+				test.CreateResource(ctx, t.client, &corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						GenerateName: "other-prefix",
 						Labels:       t.pod.Labels,
@@ -458,7 +458,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(context.Context, uti
 
 			Context("but more than one matching resources exist", func() {
 				It("should return an error", func(ctx SpecContext) {
-					test.CreateResource(t.client, &corev1.Pod{
+					test.CreateResource(ctx, t.client, &corev1.Pod{
 						ObjectMeta: metav1.ObjectMeta{
 							GenerateName: t.pod.GenerateName,
 							Labels:       t.pod.Labels,
@@ -495,14 +495,14 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(context.Context, uti
 				t.pod.Status = corev1.PodStatus{Phase: corev1.PodPending}
 			})
 
-			JustBeforeEach(func() {
-				t.pod = test.GetResource(t.client, t.pod)
+			JustBeforeEach(func(ctx context.Context) {
+				t.pod = test.GetResource(ctx, t.client, t.pod)
 				t.pod.Status = corev1.PodStatus{Phase: corev1.PodRunning}
 			})
 
 			It("should only update the status", func(ctx SpecContext) {
 				Expect(doUpdate(ctx, util.OperationResultUpdated)).To(Succeed())
-				Expect(test.GetResource(t.client, t.pod).Status).To(Equal(t.pod.Status))
+				Expect(test.GetResource(ctx, t.client, t.pod).Status).To(Equal(t.pod.Status))
 				tests.EnsureNoActionsForResource(t.testingFake, "pods", "update")
 			})
 
@@ -513,7 +513,7 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(context.Context, uti
 
 				It("should update the status", func(ctx SpecContext) {
 					Expect(doUpdate(ctx, util.OperationResultUpdated)).To(Succeed())
-					Expect(test.GetResource(t.client, t.pod).Status).To(Equal(t.pod.Status))
+					Expect(test.GetResource(ctx, t.client, t.pod).Status).To(Equal(t.pod.Status))
 				})
 			})
 		})
@@ -523,8 +523,8 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(context.Context, uti
 				t.pod.Status = corev1.PodStatus{Phase: corev1.PodPending}
 			})
 
-			JustBeforeEach(func() {
-				t.pod = test.GetResource(t.client, t.pod)
+			JustBeforeEach(func(ctx context.Context) {
+				t.pod = test.GetResource(ctx, t.client, t.pod)
 				t.pod.Status = corev1.PodStatus{}
 			})
 
@@ -586,8 +586,8 @@ func (t *createOrUpdateTestDriver) testUpdate(doUpdate func(context.Context, uti
 	})
 }
 
-func (t *createOrUpdateTestDriver) createPod() {
-	test.CreateResource(t.client, t.pod)
+func (t *createOrUpdateTestDriver) createPod(ctx context.Context) {
+	test.CreateResource(ctx, t.client, t.pod)
 }
 
 func (t *createOrUpdateTestDriver) verifyPod(ctx context.Context) *corev1.Pod {
@@ -599,7 +599,7 @@ func (t *createOrUpdateTestDriver) verifyPod(ctx context.Context) *corev1.Pod {
 		Expect(scheme.Scheme.Convert(&list.Items[0], pod, nil)).To(Succeed())
 	}
 
-	actual := test.GetResource(t.client, pod)
+	actual := test.GetResource(ctx, t.client, pod)
 	t.compareWithPod(actual)
 
 	return actual

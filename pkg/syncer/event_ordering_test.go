@@ -32,13 +32,13 @@ func testEventOrdering() {
 
 	When("a create occurs immediately following a delete", func() {
 		It("should process both events in order", func(ctx SpecContext) {
-			first := test.CreateResource(t.sourceClient, t.resource)
+			first := test.CreateResource(ctx, t.sourceClient, t.resource)
 			t.federator.VerifyDistribute(first)
 			Eventually(t.opChan).Should(Receive(Equal(syncer.Create)))
 
 			t.resource = test.NewPodWithImage(t.config.SourceNamespace, "apache")
 			Expect(t.sourceClient.Delete(ctx, first.GetName(), metav1.DeleteOptions{})).To(Succeed())
-			second := test.CreateResource(t.sourceClient, t.resource)
+			second := test.CreateResource(ctx, t.sourceClient, t.resource)
 
 			Eventually(t.opChan).Should(Receive(Equal(syncer.Delete)))
 			Eventually(t.opChan).Should(Receive(Equal(syncer.Create)))
@@ -51,7 +51,7 @@ func testEventOrdering() {
 
 	When("a delete occurs immediately following a create", func() {
 		It("should process both events in order", func(ctx SpecContext) {
-			r := test.CreateResource(t.sourceClient, t.resource)
+			r := test.CreateResource(ctx, t.sourceClient, t.resource)
 			Expect(t.sourceClient.Delete(ctx, r.GetName(), metav1.DeleteOptions{})).To(Succeed())
 
 			Eventually(t.opChan).Should(Receive(Equal(syncer.Create)))
@@ -65,10 +65,10 @@ func testEventOrdering() {
 
 	When("a delete occurs immediately following an update", func() {
 		It("should process both events in order", func(ctx SpecContext) {
-			t.federator.VerifyDistribute(test.CreateResource(t.sourceClient, t.resource))
+			t.federator.VerifyDistribute(test.CreateResource(ctx, t.sourceClient, t.resource))
 			Eventually(t.opChan).Should(Receive(Equal(syncer.Create)))
 
-			t.federator.VerifyDistribute(test.UpdateResource(t.sourceClient,
+			t.federator.VerifyDistribute(test.UpdateResource(ctx, t.sourceClient,
 				test.NewPodWithImage(t.config.SourceNamespace, "apache")))
 			Expect(t.sourceClient.Delete(ctx, t.resource.GetName(), metav1.DeleteOptions{})).To(Succeed())
 
