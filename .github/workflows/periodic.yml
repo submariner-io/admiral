@@ -30,3 +30,49 @@ jobs:
           title: Broken link detected by periodic linting
           content-filepath: .github/ISSUE_TEMPLATE/broken-link.md
           labels: automated, broken link
+
+  maintained-branches:
+    name: List maintained branches
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      - name: Determine the supported branches (release-0.25 and later)
+        id: set-matrix
+        run: |
+          printf 'matrix={"branch":["devel"' >> $GITHUB_OUTPUT
+          printf ',"%s"' $(git branch -r --list 'origin/release-*' |
+            awk -F- '{ sub("origin/", ""); split($2, v, ".") } (v[1] > 0 || (v[1] == 0 && v[2] >= 18))') >> $GITHUB_OUTPUT
+          printf ']}' >> $GITHUB_OUTPUT
+
+  vulnerability-scan-periodic:
+    name: Vulnerability Scanning
+    if: github.repository_owner == 'submariner-io'
+    needs: maintained-branches
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.maintained-branches.outputs.matrix) }}
+    steps:
+      - name: Check out the repository
+        id: checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ matrix.branch }}
+      - name: Run govulncheck (producing a SARIF report)
+        run: make govulncheck.sarif
+      - name: Upload SARIF report
+        if: always()
+        uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13  # v4.35.1
+        with:
+          sarif_file: govulncheck.sarif
+          category: govulncheck-${{ matrix.branch }}
+          ref: ${{ steps.checkout.outputs.ref }}
+          sha: ${{ steps.checkout.outputs.commit }}
