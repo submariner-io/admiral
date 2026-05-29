@@ -106,5 +106,5 @@ func ConfigFromConfigMap(configMap *corev1.ConfigMap, keyPrefix string, defaultC
 }
 
 func ToConfigMapDataKey(prefix, name string) string {
-	return fmt.Sprintf("%s.workqueue/%s", prefix, name)
+	return fmt.Sprintf("%s.workqueue.%s", prefix, name)
 }
