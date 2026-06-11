@@ -42,22 +42,14 @@ var NewSPDYExecutor = remotecommand.NewSPDYExecutor
 func GetAuthorizedRestConfigFromData(ctx context.Context, apiServer, apiServerToken, caData string, tls *rest.TLSClientConfig,
 	gvr schema.GroupVersionResource, namespace string,
 ) (*rest.Config, bool, error) {
-	// First try a REST config without the CA trust chain
-	restConfig, err := BuildRestConfigFromData(apiServer, apiServerToken, "", tls)
+	// Always load the CA when provided to avoid startup race conditions where the API server
+	// may be temporarily unreachable, causing the no-CA attempt to fail with a non-x509 error.
+	restConfig, err := BuildRestConfigFromData(apiServer, apiServerToken, caData, tls)
 	if err != nil {
 		return nil, false, err
 	}
 
 	authorized, err := IsAuthorizedFor(ctx, restConfig, gvr, namespace)
-	if !authorized {
-		// Now try with the trust chain
-		restConfig, err = BuildRestConfigFromData(apiServer, apiServerToken, caData, tls)
-		if err != nil {
-			return nil, false, err
-		}
-
-		authorized, err = IsAuthorizedFor(ctx, restConfig, gvr, namespace)
-	}
 
 	return restConfig, authorized, err
 }
@@ -65,15 +57,10 @@ func GetAuthorizedRestConfigFromData(ctx context.Context, apiServer, apiServerTo
 func GetAuthorizedRestConfigFromFiles(ctx context.Context, apiServer, apiServerTokenFile, caFile string, tls *rest.TLSClientConfig,
 	gvr schema.GroupVersionResource, namespace string,
 ) (*rest.Config, bool, error) {
-	// First try a REST config without the CA trust chain
-	restConfig := BuildRestConfigFromFiles(apiServer, apiServerTokenFile, "", tls)
+	// Always load the CA when provided to avoid startup race conditions where the API server
+	// may be temporarily unreachable, causing the no-CA attempt to fail with a non-x509 error.
+	restConfig := BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile, tls)
 	authorized, err := IsAuthorizedFor(ctx, restConfig, gvr, namespace)
-
-	if !authorized {
-		// Now try with the trust chain
-		restConfig = BuildRestConfigFromFiles(apiServer, apiServerTokenFile, caFile, tls)
-		authorized, err = IsAuthorizedFor(ctx, restConfig, gvr, namespace)
-	}
 
 	return restConfig, authorized, err
 }
