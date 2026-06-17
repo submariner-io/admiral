@@ -424,7 +424,7 @@ func (r *resourceSyncer) shutDownWorkQueue() {
 			break
 		}
 
-		r.log.Warningf(err.Error())
+		r.log.Warning(err.Error())
 	}
 
 	close(r.stopped)
