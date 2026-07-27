@@ -54,14 +54,18 @@ func StartServer(endpoints EndpointType, port int) StopFunc {
 		return func() {}
 	}
 
-	srv := &http.Server{Addr: fmt.Sprintf(":%d", port), ReadHeaderTimeout: 60 * time.Second}
+	// Use a dedicated mux so only the handlers registered below are reachable on this listener,
+	// regardless of what other packages may have registered on http.DefaultServeMux.
+	mux := http.NewServeMux()
+
+	srv := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux, ReadHeaderTimeout: 60 * time.Second}
 
 	if endpoints&Metrics != 0 {
-		http.Handle("/metrics", promhttp.Handler())
+		mux.Handle("/metrics", promhttp.Handler())
 	}
 
 	if endpoints&Profile != 0 {
-		http.HandleFunc("/debug", pprof.Profile)
+		mux.HandleFunc("/debug", pprof.Profile)
 	}
 
 	go func() {
