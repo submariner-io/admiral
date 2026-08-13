@@ -10,3 +10,8 @@ ignore:
   - vulnerability: CVE-2021-22570
     package:
       name: google.golang.org/protobuf
+
+  # Transitive dep via prometheus/client_golang; no parent version available with fix; Unknown severity
+  - vulnerability: GO-2026-5841
+    package:
+      name: github.com/klauspost/compress
