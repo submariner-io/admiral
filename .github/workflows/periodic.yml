@@ -44,7 +44,7 @@ jobs:
       - name: Determine the supported branches (release-0.25 and later)
         id: set-matrix
         run: |
-          printf 'matrix={"branch":["devel"' >> $GITHUB_OUTPUT
+          printf 'matrix={"branch":["release-0.25"' >> $GITHUB_OUTPUT
           printf ',"%s"' $(git branch -r --list 'origin/release-*' |
             awk -F- '{ sub("origin/", ""); split($2, v, ".") } (v[1] > 0 || (v[1] == 0 && v[2] >= 18))') >> $GITHUB_OUTPUT
           printf ']}' >> $GITHUB_OUTPUT
