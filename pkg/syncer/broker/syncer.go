@@ -329,8 +329,14 @@ func (c *SyncerConfig) createBrokerClient(ctx context.Context) error {
 
 		// If we encountered an error, or we don't have a secret, use the values in the spec
 		if spec.Secret == "" || err != nil {
-			c.BrokerRestConfig, authorized, err = resource.GetAuthorizedRestConfigFromData(ctx, spec.APIServer, spec.APIServerToken,
-				spec.Ca, &rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
+			specRestConfig, specAuthorized, specErr := resource.GetAuthorizedRestConfigFromData(ctx, spec.APIServer,
+				spec.APIServerToken, spec.Ca, &rest.TLSClientConfig{Insecure: spec.Insecure}, *gvr, spec.RemoteNamespace)
+
+			// Keep the secret's configuration if its CA was trusted and the spec values don't work, so that an API
+			// server which isn't reachable yet doesn't leave us without the secret's CA.
+			if spec.Secret == "" || !authorized || (specAuthorized && specErr == nil) {
+				c.BrokerRestConfig, authorized, err = specRestConfig, specAuthorized, specErr
+			}
 		}
 
 		if c.BrokerRestConfig != nil {

@@ -24,6 +24,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -721,6 +723,58 @@ var _ = Describe("Broker Syncer", func() {
 
 				test.CreateResource(ctx, localClient, resource)
 				test.AwaitResource(ctx, brokerClient, resource.GetName())
+			})
+
+			Context("and the broker API server is not reachable", func() {
+				BeforeEach(func() {
+					os.Setenv("BROKER_K8S_INSECURE", "false")
+					fake.FailOnAction(&brokerDynClient.Fake, "pods", "get", errors.New("connection refused"), false)
+				})
+
+				It("should keep the secret's configuration", func() {
+					Expect(actualBrokerRestConfig.TLSClientConfig.CAFile).To(Equal(filepath.Join(broker.SecretPath(secret), "ca.crt")))
+					Expect(actualBrokerRestConfig.BearerTokenFile).To(Equal(filepath.Join(broker.SecretPath(secret), "token")))
+				})
+			})
+
+			Context("and the secret's token is rejected", func() {
+				BeforeEach(func() {
+					os.Setenv("BROKER_K8S_APISERVERTOKEN", apiServerToken)
+					fake.FailOnAction(&brokerDynClient.Fake, "pods", "get", apierrors.NewUnauthorized("token expired"), true)
+				})
+
+				It("should fall back to the environment configuration", func() {
+					Expect(actualBrokerRestConfig.BearerToken).To(Equal(apiServerToken))
+					Expect(actualBrokerRestConfig.BearerTokenFile).To(BeEmpty())
+				})
+			})
+
+			Context("and the secret's CA is not trusted", func() {
+				BeforeEach(func() {
+					os.Setenv("BROKER_K8S_APISERVERTOKEN", apiServerToken)
+					fake.FailOnAction(&brokerDynClient.Fake, "pods", "get", x509.UnknownAuthorityError{}, true)
+				})
+
+				It("should fall back to the environment configuration", func() {
+					Expect(actualBrokerRestConfig.BearerToken).To(Equal(apiServerToken))
+					Expect(actualBrokerRestConfig.BearerTokenFile).To(BeEmpty())
+					Expect(actualBrokerRestConfig.TLSClientConfig.CAFile).To(BeEmpty())
+				})
+			})
+
+			Context("and the secret's CA is not trusted and the environment configuration is forbidden", func() {
+				BeforeEach(func() {
+					os.Setenv("BROKER_K8S_APISERVERTOKEN", apiServerToken)
+					// The last reactor added runs first, so the secret gets the CA error and the environment configuration the 403.
+					fake.FailOnAction(&brokerDynClient.Fake, "pods", "get",
+						apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "any", errors.New("RBAC not applied")), true)
+					fake.FailOnAction(&brokerDynClient.Fake, "pods", "get", x509.UnknownAuthorityError{}, true)
+				})
+
+				It("should use the environment configuration", func() {
+					Expect(actualBrokerRestConfig.BearerToken).To(Equal(apiServerToken))
+					Expect(actualBrokerRestConfig.TLSClientConfig.CAFile).To(BeEmpty())
+				})
 			})
 		})
 
