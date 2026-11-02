@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 )
 
 func testTransformFunction() {
@@ -52,7 +51,7 @@ func testTransformFunction() {
 
 		Context("and the transform function specifies to re-queue", func() {
 			BeforeEach(func() {
-				t.requeueOnOp = ptr.To(syncer.Create)
+				t.requeueOnOp = new(syncer.Create)
 			})
 
 			It("should eventually retry", func() {
@@ -100,7 +99,7 @@ func testTransformFunction() {
 
 		Context("and the transform function specifies to re-queue", func() {
 			BeforeEach(func() {
-				t.requeueOnOp = ptr.To(syncer.Delete)
+				t.requeueOnOp = new(syncer.Delete)
 			})
 
 			It("should eventually retry", func(ctx SpecContext) {
@@ -113,7 +112,7 @@ func testTransformFunction() {
 
 		Context("after the create operation is re-queued", func() {
 			BeforeEach(func() {
-				t.requeueOnOp = ptr.To(syncer.Create)
+				t.requeueOnOp = new(syncer.Create)
 			})
 
 			It("should not retry the create operation", func(ctx SpecContext) {
