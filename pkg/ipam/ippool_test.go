@@ -373,10 +373,10 @@ func verifyContiguous(ips []string) {
 }
 
 type testDriver struct {
-	pool    *ipam.IPPool
-	cidr    string
-	network *net.IPNet
 	metrics ipam.MetricsReporter
+	pool    *ipam.IPPool
+	network *net.IPNet
+	cidr    string
 }
 
 func newTestDriver() *testDriver {

@@ -267,7 +267,9 @@ func createResource[T runtime.Object](ctx context.Context, client resource.Inter
 	created, err := client.Create(ctx, obj, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
 		logger.V(log.TRACE).Infof("Resource %q already exists - retrying", objMeta.GetName())
-		return *new(T), apierrors.NewConflict(schema.GroupResource{}, objMeta.GetName(), err)
+
+		return *new(T),
+			apierrors.NewConflict(schema.GroupResource{}, objMeta.GetName(), err) //nolint:wrapcheck // This is the error we want
 	}
 
 	if err != nil {

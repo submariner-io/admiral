@@ -72,15 +72,13 @@ type SigningRequestor interface {
 }
 
 type signingRequestorImpl struct {
-	localNamespace     string
-	localClusterID     string
 	localSecretClient  dynamic.ResourceInterface
 	brokerSecretClient dynamic.ResourceInterface
+	issuedCerts        sync.Map // map[secretName]certInfo
+	localNamespace     string
+	localClusterID     string
 	certRenewBefore    time.Duration
 	certCheckInterval  time.Duration
-
-	// Certificate management fields
-	issuedCerts sync.Map // map[secretName]certInfo
 }
 
 var logger = log.Logger{Logger: logf.Log.WithName("Certificate")}
