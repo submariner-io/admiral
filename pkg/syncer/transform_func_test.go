@@ -239,8 +239,8 @@ type transformFuncTestDriver struct {
 	*testDriver
 	transformed     *corev1.Pod
 	expOperation    chan syncer.Operation
-	invocationCount atomic.Int32
 	requeueOnOp     *syncer.Operation
+	invocationCount atomic.Int32
 }
 
 func newTransformFunctionTestDriver() *transformFuncTestDriver {

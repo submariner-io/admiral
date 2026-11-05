@@ -69,8 +69,6 @@ const (
 
 type httpTraceRoundTripper struct {
 	wrapped                        nethttp.RoundTripper
-	enableLogging                  bool
-	logger                         log.Logger
 	k8sConnectionsTotal            *prometheus.CounterVec
 	k8sConnectionIdleTime          *prometheus.HistogramVec
 	k8sConnectionErrors            *prometheus.CounterVec
@@ -79,6 +77,8 @@ type httpTraceRoundTripper struct {
 	k8sDNSLookupDuration           *prometheus.HistogramVec
 	k8sFirstResponseByteDuration   *prometheus.HistogramVec
 	k8sHTTPProtocol                *prometheus.CounterVec
+	logger                         log.Logger
+	enableLogging                  bool
 }
 
 func AddTraceMetrics(restConfig *rest.Config, compName string) {
