@@ -35,13 +35,13 @@ import (
 )
 
 type Federator struct {
-	lock             sync.Mutex
-	distribute       chan *unstructured.Unstructured
-	delete           chan *unstructured.Unstructured
 	delegator        federate.Federator
 	failOnDistribute error
 	failOnDelete     error
+	distribute       chan *unstructured.Unstructured
+	delete           chan *unstructured.Unstructured
 	logger           log.Logger
+	lock             sync.Mutex
 	ResetOnFailure   atomic.Bool
 }
 
