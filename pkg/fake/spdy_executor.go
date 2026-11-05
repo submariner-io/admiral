@@ -30,10 +30,10 @@ import (
 )
 
 type SPDYExecutor struct {
-	Stdout     string
-	Stderr     string
 	Err        error
 	URLMatcher types.GomegaMatcher
+	Stdout     string
+	Stderr     string
 }
 
 func SetSPDYExecutor(stdout, stderr string, err error) {

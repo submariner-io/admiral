@@ -39,11 +39,11 @@ type priorityType struct {
 // PriorityQueue implements heap.Interface and orders items by descending priority such that
 // items with higher priority values are de-queued first.
 type PriorityQueue struct {
-	items      []itemType
 	indices    map[any]int
 	priorities sync.Map
-	name       string
 	logger     log.Logger
+	name       string
+	items      []itemType
 }
 
 func NewPriorityQueue(name string) *PriorityQueue {

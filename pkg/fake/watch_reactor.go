@@ -28,9 +28,9 @@ import (
 )
 
 type WatchReactor struct {
-	mutex            sync.Mutex
 	watches          map[string]*watchDelegator
 	filteringReactor filteringWatchReactor
+	mutex            sync.Mutex
 }
 
 func NewWatchReactor(f *testing.Fake) *WatchReactor {
