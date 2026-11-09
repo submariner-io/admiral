@@ -80,7 +80,11 @@ type signerImpl struct {
 }
 
 func NewSigner(config SignerConfig) (Signer, error) {
-	s := &signerImpl{SignerConfig: config}
+	s := &signerImpl{
+		SignerConfig: config,
+		restMapper:   config.RestMapper,
+		dynClient:    config.DynClient,
+	}
 
 	if s.CACheckInterval == 0 {
 		s.CACheckInterval = CACheckInterval
