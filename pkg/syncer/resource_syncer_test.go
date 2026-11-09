@@ -55,6 +55,7 @@ var _ = Describe("Resource Syncer", func() {
 	Describe("ListResources", testListResources)
 	Describe("ListResourcesBySelector", testListResourcesBySelector)
 	Describe("RequeueResource", testRequeueResource)
+	Describe("Cluster-scoped resource", testClusterScopedResource)
 	Describe("Reconcile", func() {
 		Context(fmt.Sprintf("Direction: %s", syncer.LocalToRemote), testReconcileLocalToRemote)
 		Context(fmt.Sprintf("Direction: %s", syncer.RemoteToLocal), testReconcileRemoteToLocal)

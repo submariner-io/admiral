@@ -277,7 +277,7 @@ func (r *resourceSyncer) AwaitStopped(ctx context.Context) error {
 }
 
 func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bool, error) {
-	obj, exists, err := r.store.GetByKey(namespace + "/" + name)
+	obj, exists, err := r.store.GetByKey(cache.NewObjectName(namespace, name).String())
 	if err != nil {
 		return nil, false, errors.Wrap(err, "error retrieving resource")
 	}
@@ -290,7 +290,7 @@ func (r *resourceSyncer) GetResource(name, namespace string) (runtime.Object, bo
 }
 
 func (r *resourceSyncer) RequeueResource(name, namespace string) {
-	obj, exists, err := r.store.GetByKey(namespace + "/" + name)
+	obj, exists, err := r.store.GetByKey(cache.NewObjectName(namespace, name).String())
 	if err != nil {
 		r.log.Errorf(err, "Error retrieving resource - unable to requeue")
 		return
