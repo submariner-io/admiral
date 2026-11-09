@@ -28,6 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func testGetResource() {
@@ -56,6 +57,51 @@ func testGetResource() {
 			Expect(err).To(Succeed())
 			Expect(exists).To(BeFalse())
 		})
+	})
+}
+
+func testClusterScopedResource() {
+	t := newTestDriver(metav1.NamespaceAll, "", syncer.LocalToRemote)
+
+	var (
+		node        *corev1.Node
+		transformed *corev1.Node
+	)
+
+	BeforeEach(func() {
+		node = &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-node",
+			},
+		}
+
+		transformed = node.DeepCopy()
+		transformed.Spec.Unschedulable = true
+
+		t.config.ResourceType = &corev1.Node{}
+		t.config.Transform = func(_ runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+			return transformed, false
+		}
+
+		t.addInitialResource(node)
+	})
+
+	It("GetResource should return the resource", func() {
+		obj, exists, err := t.syncer.GetResource(node.Name, metav1.NamespaceNone)
+		Expect(err).To(Succeed())
+		Expect(exists).To(BeTrue())
+
+		actual, ok := obj.(*corev1.Node)
+		Expect(ok).To(BeTrue())
+		Expect(actual.Name).To(Equal(node.Name))
+	})
+
+	It("RequeueResource should requeue the resource", func() {
+		t.federator.VerifyDistribute(transformed)
+
+		t.syncer.RequeueResource(node.Name, metav1.NamespaceNone)
+
+		t.federator.VerifyDistribute(transformed)
 	})
 }
 
