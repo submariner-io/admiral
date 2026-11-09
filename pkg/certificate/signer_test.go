@@ -24,11 +24,14 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"github.com/submariner-io/admiral/pkg/certificate"
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	assert "github.com/submariner-io/admiral/pkg/test"
+	"github.com/submariner-io/admiral/pkg/util"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
@@ -42,6 +45,7 @@ var _ = Describe("Signer", func() {
 	Context("Start", t.testStart)
 	Context("Stop", t.testStop)
 	Context("CA expiration", t.testExpiration)
+	Context("with the DynClient and RestMapper specified", t.testWithClientsSpecified)
 })
 
 type signerTestDriver struct {
@@ -211,6 +215,40 @@ func (t *signerTestDriver) testExpiration() {
 				g.Expect(s.Data).NotTo(Equal(caSecret.Data))
 			}).Within(t.config.CACertValidity + time.Second).To(Succeed())
 		})
+	})
+}
+
+func (t *signerTestDriver) testWithClientsSpecified() {
+	BeforeEach(func() {
+		t.config.DynClient = t.dynClient
+		t.config.RestMapper = test.GetRESTMapperFor(&corev1.Secret{})
+
+		origNewDynamicClient := resource.NewDynamicClient
+		resource.NewDynamicClient = func(_ *rest.Config) (dynamic.Interface, error) {
+			return nil, errors.New("NewDynamicClient should not be called")
+		}
+
+		origBuildRestMapper := util.BuildRestMapper
+		util.BuildRestMapper = func(_ *rest.Config) (meta.RESTMapper, error) {
+			return nil, errors.New("BuildRestMapper should not be called")
+		}
+
+		DeferCleanup(func() {
+			resource.NewDynamicClient = origNewDynamicClient
+			util.BuildRestMapper = origBuildRestMapper
+		})
+	})
+
+	It("should use them to sign a CSR Secret", func(ctx SpecContext) {
+		secret := newCSR()
+		test.CreateResource(ctx, t.secretClient(), secret)
+
+		Eventually(ctx, func(g Gomega, ctx context.Context) {
+			secret = resource.MustFromUnstructured(test.AwaitResource(ctx, t.secretClient(), secret.Name), &corev1.Secret{})
+			g.Expect(secret.Data).To(HaveKeyWithValue(certificate.TLSDataKey, Not(BeEmpty())))
+			g.Expect(secret.Data).To(HaveKeyWithValue(certificate.CADataKey, Not(BeEmpty())))
+			g.Expect(secret.Annotations).To(HaveKeyWithValue(certificate.RequestSignedLabelKey, Not(BeEmpty())))
+		}).To(Succeed())
 	})
 }
 
