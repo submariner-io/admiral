@@ -74,17 +74,11 @@ type Signer interface {
 
 type signerImpl struct {
 	SignerConfig
-	restMapper meta.RESTMapper
-	dynClient  dynamic.Interface
-	syncerMap  sync.Map
+	syncerMap sync.Map
 }
 
 func NewSigner(config SignerConfig) (Signer, error) {
-	s := &signerImpl{
-		SignerConfig: config,
-		restMapper:   config.RestMapper,
-		dynClient:    config.DynClient,
-	}
+	s := &signerImpl{SignerConfig: config}
 
 	if s.CACheckInterval == 0 {
 		s.CACheckInterval = CACheckInterval
@@ -107,13 +101,13 @@ func NewSigner(config SignerConfig) (Signer, error) {
 		errs []error
 	)
 
-	if config.RestMapper == nil {
-		s.restMapper, err = util.BuildRestMapper(config.RestConfig)
+	if s.RestMapper == nil {
+		s.RestMapper, err = util.BuildRestMapper(config.RestConfig)
 		errs = append(errs, errors.Wrap(err, "error building the REST mapper"))
 	}
 
-	if config.DynClient == nil {
-		s.dynClient, err = resource.NewDynamicClient(config.RestConfig)
+	if s.DynClient == nil {
+		s.DynClient, err = resource.NewDynamicClient(config.RestConfig)
 		errs = append(errs, errors.Wrap(err, "error creating dynamic client"))
 	}
 
@@ -135,9 +129,9 @@ func (s *signerImpl) Start(ctx context.Context, namespace string) error {
 	//nolint:contextcheck // NewResourceSyncer doesn't accept context parameter
 	secretSyncer, err := syncer.NewResourceSyncer(&syncer.ResourceSyncerConfig{
 		Name:            "Cert Signer",
-		SourceClient:    s.dynClient,
+		SourceClient:    s.DynClient,
 		SourceNamespace: namespace,
-		RestMapper:      s.restMapper,
+		RestMapper:      s.RestMapper,
 		ResourceType:    &corev1.Secret{},
 		ShouldProcess: func(obj *unstructured.Unstructured, op syncer.Operation) bool {
 			return op != syncer.Delete && obj.GetLabels()[SigningRequestLabelKey] != "" && obj.GetAnnotations()[RequestSignedLabelKey] == ""
@@ -152,7 +146,7 @@ func (s *signerImpl) Start(ctx context.Context, namespace string) error {
 
 			return secret, err != nil
 		},
-		Federator: federate.NewUpdateFederator(s.dynClient, s.restMapper, namespace,
+		Federator: federate.NewUpdateFederator(s.DynClient, s.RestMapper, namespace,
 			func(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) *unstructured.Unstructured {
 				existingSecret := resource.MustFromUnstructured(oldObj, &corev1.Secret{})
 				updatedSecret := resource.MustFromUnstructured(newObj, &corev1.Secret{})
@@ -189,7 +183,7 @@ func (s *signerImpl) Stop(namespace string) {
 
 func (s *signerImpl) signSecret(ctx context.Context, secret *corev1.Secret) error {
 	// Get CA secret using dynamic client
-	caSecretClient := s.dynClient.Resource(corev1.SchemeGroupVersion.WithResource("secrets")).Namespace(secret.Namespace)
+	caSecretClient := s.DynClient.Resource(corev1.SchemeGroupVersion.WithResource("secrets")).Namespace(secret.Namespace)
 
 	caSecretUnstructured, err := caSecretClient.Get(ctx, CASecretName, metav1.GetOptions{})
 	if err != nil {
@@ -252,7 +246,7 @@ func (s *signerImpl) signSecret(ctx context.Context, secret *corev1.Secret) erro
 
 // issueCA issues a CA certificate in the specified namespace, creating or rotating it if necessary.
 func (s *signerImpl) issueCA(ctx context.Context, namespace string) error {
-	caSecretClient := s.dynClient.Resource(corev1.SchemeGroupVersion.WithResource("secrets")).Namespace(namespace)
+	caSecretClient := s.DynClient.Resource(corev1.SchemeGroupVersion.WithResource("secrets")).Namespace(namespace)
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -380,7 +374,7 @@ func (s *signerImpl) startPeriodicCACheck(namespace string, stopCh <-chan struct
 
 // resignAllCSRs finds all existing CSR secrets and re-signs them with the new CA.
 func (s *signerImpl) resignAllCSRs(ctx context.Context, namespace string) error {
-	secretClient := s.dynClient.Resource(corev1.SchemeGroupVersion.WithResource("secrets")).Namespace(namespace)
+	secretClient := s.DynClient.Resource(corev1.SchemeGroupVersion.WithResource("secrets")).Namespace(namespace)
 
 	// List all secrets with the CSR request label
 	secretList, err := secretClient.List(ctx, metav1.ListOptions{
