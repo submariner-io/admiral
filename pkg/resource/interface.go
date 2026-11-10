@@ -87,7 +87,7 @@ func (i *InterfaceFuncs[T]) List(ctx context.Context, options metav1.ListOptions
 //
 //nolint:gocritic // hugeParam - we're matching K8s API
 func DefaultUpdateStatus[T runtime.Object](_ context.Context, _ T, _ metav1.UpdateOptions) (T, error) {
-	return *new(T), apierrors.NewNotFound(schema.GroupResource{}, "")
+	return *new(T), apierrors.NewNotFound(schema.GroupResource{}, "") //nolint:wrapcheck // This is the error we want
 }
 
 func MustExtractList[T runtime.Object](from runtime.Object) []T {

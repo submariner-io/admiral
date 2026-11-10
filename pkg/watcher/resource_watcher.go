@@ -60,9 +60,6 @@ type EventHandlerFuncs struct {
 }
 
 type ResourceConfig struct {
-	// Name of this watcher used for logging.
-	Name string
-
 	// ResourceType the types of the resources to watch.
 	ResourceType runtime.Object
 
@@ -77,6 +74,12 @@ type ResourceConfig struct {
 	// ShouldProcess function invoked to determine if a resource should be processed.
 	ShouldProcess syncer.ShouldProcessFunc
 
+	// WorkQueueConfig if specified, configures the underlying work queue
+	WorkQueueConfig *workqueue.Config
+
+	// Name of this watcher; used for logging.
+	Name string
+
 	// SourceNamespace the namespace of the resources to watch.
 	SourceNamespace string
 
@@ -86,17 +89,11 @@ type ResourceConfig struct {
 	// SourceFieldSelector optional selector to restrict the resources to watch by their fields.
 	SourceFieldSelector string
 
-	// WorkQueueConfig if specified, configures the underlying work queue
-	WorkQueueConfig *workqueue.Config
-
 	// MaxLogVerbosity configures the maximum verbosity for debug logging. Default is 0 which disables debug logging.
 	MaxLogVerbosity int
 }
 
 type Config struct {
-	// RestConfig the REST config used to access the resources to watch.
-	RestConfig *rest.Config
-
 	// RestMapper used to obtain GroupVersionResources. This is optional and is provided for unit testing in lieu of the
 	// RestConfig. If not specified, one is created from the RestConfig.
 	RestMapper meta.RESTMapper
@@ -105,17 +102,20 @@ type Config struct {
 	// of the RestConfig. If not specified, one is created from the RestConfig.
 	Client dynamic.Interface
 
+	// RestConfig the REST config used to access the resources to watch.
+	RestConfig *rest.Config
+
 	// WaitForCacheSync if true, waits for the informer cache to sync on Start. Default is true.
 	WaitForCacheSync *bool
 
 	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
 	Scheme *runtime.Scheme
 
-	// ResyncPeriod if non-zero, the period at which resources will be re-synced regardless if anything changed. Default is 0.
-	ResyncPeriod time.Duration
-
 	// ResourceConfigs the configurations for the resources to watch.
 	ResourceConfigs []ResourceConfig
+
+	// ResyncPeriod if non-zero, the period at which resources will be re-synced regardless if anything changed. Default is 0.
+	ResyncPeriod time.Duration
 }
 
 type resourceWatcher struct {

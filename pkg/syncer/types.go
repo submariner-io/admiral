@@ -103,40 +103,35 @@ type ResourceEquivalenceFunc func(obj1, obj2 *unstructured.Unstructured) bool
 type ShouldProcessFunc func(obj *unstructured.Unstructured, op Operation) bool
 
 type ResourceSyncerConfig struct {
-	// Name of this syncer used for logging.
-	Name string
-
-	// SourceClient the client used to obtain the resources to sync.
-	SourceClient dynamic.Interface
-
-	// SourceNamespace the namespace of the resources to sync.
-	SourceNamespace string
-
-	// SourceLabelSelector optional selector to restrict the resources to sync by their labels.
-	SourceLabelSelector string
-
-	// SourceFieldSelector optional selector to restrict the resources to sync by their fields.
-	SourceFieldSelector string
-
-	// LocalClusterID the cluster ID of the source client. This is used in conjunction with Direction to avoid
-	// loops when syncing the same resources between the local and remote sources.
-	LocalClusterID string
-
-	// Direction specifies how resources are synced. It is assumed that resources emanating from a remote source have
-	// the cluster ID label specified by federate.ClusterIDLabelKey set appropriately. If set to LocalToRemote, only
-	// resources that do not have a cluster ID label are synced. This avoids re-syncing non-local resources. If set to
-	// RemoteToLocal, resources whose cluster ID label matches LocalClusterID are not synced. This avoids syncing
-	// local resources from the remote source.
-	Direction SyncDirection
+	// Metrics if specified, configures optional Prometheus metrics for federation, transform, and queue operations.
+	Metrics MetricsConfig
 
 	// RestMapper used to obtain GroupVersionResources.
 	RestMapper meta.RESTMapper
 
-	// Federator used to perform the syncing.
-	Federator federate.Federator
+	// SourceClient the client used to obtain the resources to sync.
+	SourceClient dynamic.Interface
+
+	// NamespaceInformer if specified, used to retry resources that initially failed due to missing namespace.
+	NamespaceInformer cache.SharedInformer
 
 	// ResourceType the type of the resources to sync.
 	ResourceType runtime.Object
+
+	// Federator used to perform the syncing.
+	Federator federate.Federator
+
+	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
+	Scheme *runtime.Scheme
+
+	// ShouldProcess function invoked to determine if a resource should be processed.
+	ShouldProcess ShouldProcessFunc
+
+	// WorkQueueConfig if specified, configures the underlying work queue
+	WorkQueueConfig *workqueue.Config
+
+	// WaitForCacheSync if true, waits for the informer cache to sync on Start. Default is true.
+	WaitForCacheSync *bool
 
 	// Transform function used to transform resources prior to syncing.
 	Transform TransformFunc
@@ -150,26 +145,31 @@ type ResourceSyncerConfig struct {
 	// By default all updates are processed.
 	ResourcesEquivalent ResourceEquivalenceFunc
 
-	// ShouldProcess function invoked to determine if a resource should be processed.
-	ShouldProcess ShouldProcessFunc
+	// Name of this syncer; used for logging.
+	Name string
 
-	// WaitForCacheSync if true, waits for the informer cache to sync on Start. Default is true.
-	WaitForCacheSync *bool
+	// SourceFieldSelector optional selector to restrict the resources to sync by their fields.
+	SourceFieldSelector string
 
-	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
-	Scheme *runtime.Scheme
+	// SourceLabelSelector optional selector to restrict the resources to sync by their labels.
+	SourceLabelSelector string
+
+	// LocalClusterID the cluster ID of the source client. This is used in conjunction with Direction to avoid
+	// loops when syncing the same resources between the local and remote sources.
+	LocalClusterID string
+
+	// SourceNamespace the namespace of the resources to sync.
+	SourceNamespace string
+
+	// Direction specifies how resources are synced. It is assumed that resources emanating from a remote source have
+	// the cluster ID label specified by federate.ClusterIDLabelKey set appropriately. If set to LocalToRemote, only
+	// resources that do not have a cluster ID label are synced. This avoids re-syncing non-local resources. If set to
+	// RemoteToLocal, resources whose cluster ID label matches LocalClusterID are not synced. This avoids syncing
+	// local resources from the remote source.
+	Direction SyncDirection
 
 	// ResyncPeriod if non-zero, the period at which resources will be re-synced regardless if anything changed. Default is 0.
 	ResyncPeriod time.Duration
-
-	// NamespaceInformer if specified, used to retry resources that initially failed due to missing namespace.
-	NamespaceInformer cache.SharedInformer
-
-	// WorkQueueConfig if specified, configures the underlying work queue
-	WorkQueueConfig *workqueue.Config
-
-	// Metrics if specified, configures optional Prometheus metrics for federation, transform, and queue operations.
-	Metrics MetricsConfig
 
 	// DrainWorkQueueTimeout configures the maximum amount of time to wait for the work queue to drain on shutdown.
 	// Default is 5 seconds.
@@ -181,15 +181,15 @@ type ResourceSyncerConfig struct {
 
 type resourceSyncer struct {
 	workQueue         workqueue.Interface
-	cachesSynced      []cache.InformerSynced
-	unregHandler      func()
 	informer          cache.Controller
 	store             cache.Store
-	config            ResourceSyncerConfig
+	unregHandler      func()
 	operationQueues   *operationQueueMap
 	stopped           chan struct{}
 	metrics           *syncerMetrics
 	stopCh            <-chan struct{}
-	log               log.Logger
 	missingNamespaces map[string]set.Set[string]
+	log               log.Logger
+	cachesSynced      []cache.InformerSynced
+	config            ResourceSyncerConfig
 }

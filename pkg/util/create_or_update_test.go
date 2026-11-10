@@ -354,12 +354,12 @@ var _ = Describe("MustUpdate function", func() {
 })
 
 type createOrUpdateTestDriver struct {
+	client      dynamic.ResourceInterface
+	expectedErr error
 	pod         *corev1.Pod
 	testingFake *testing.Fake
-	client      dynamic.ResourceInterface
-	origBackoff wait.Backoff
-	expectedErr error
 	mutateFn    util.MutateFn[*unstructured.Unstructured]
+	origBackoff wait.Backoff
 }
 
 func newCreateOrUpdateTestDiver() *createOrUpdateTestDriver {
