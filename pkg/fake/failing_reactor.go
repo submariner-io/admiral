@@ -26,12 +26,12 @@ import (
 )
 
 type FailingReactor struct {
-	mutex          sync.Mutex
 	failOnCreate   error
 	failOnUpdate   error
 	failOnDelete   error
 	failOnGet      error
 	failOnList     error
+	mutex          sync.Mutex
 	resetOnFailure bool
 }
 

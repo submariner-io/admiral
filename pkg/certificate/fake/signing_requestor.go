@@ -38,9 +38,9 @@ import (
 type SigningRequestor struct {
 	caKey       *rsa.PrivateKey
 	caCert      *x509.Certificate
-	caPEM       []byte
 	issuedCh    chan []string
 	onUninstall chan struct{}
+	caPEM       []byte
 }
 
 var _ certificate.SigningRequestor = &SigningRequestor{}
