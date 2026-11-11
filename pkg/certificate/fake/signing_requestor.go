@@ -36,9 +36,9 @@ import (
 )
 
 type SigningRequestor struct {
+	caPEM       []byte
 	caKey       *rsa.PrivateKey
 	caCert      *x509.Certificate
-	caPEM       []byte
 	issuedCh    chan []string
 	onUninstall chan struct{}
 }

@@ -27,7 +27,8 @@ import (
 type Toaster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              ToasterSpec `json:"spec"`
+
+	Spec ToasterSpec `json:"spec"`
 }
 
 type ToasterSpec struct {
@@ -48,7 +49,8 @@ type ToasterList struct {
 type ExportedToaster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              ToasterSpec `json:"spec"`
+
+	Spec ToasterSpec `json:"spec"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

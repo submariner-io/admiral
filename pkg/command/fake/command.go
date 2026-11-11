@@ -34,9 +34,9 @@ import (
 type InterceptorFn func(*exec.Cmd) InterceptorFuncs
 
 type Executor struct {
-	mutex          sync.Mutex
 	commands       []*exec.Cmd
 	commandOutputs []commandOutputInfo
+	mutex          sync.Mutex
 	interceptor    InterceptorFn
 }
 
@@ -60,8 +60,8 @@ type pipeReader struct {
 }
 
 type commandOutputInfo struct {
-	pathMatcher  any
 	expectedArgs []any
+	pathMatcher  any
 	output       string
 	err          error
 }

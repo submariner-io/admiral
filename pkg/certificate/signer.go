@@ -74,9 +74,9 @@ type Signer interface {
 
 type signerImpl struct {
 	SignerConfig
+	syncerMap  sync.Map
 	restMapper meta.RESTMapper
 	dynClient  dynamic.Interface
-	syncerMap  sync.Map
 }
 
 func NewSigner(config SignerConfig) (Signer, error) {

@@ -31,12 +31,12 @@ import (
 )
 
 type IPPool struct {
-	cidr      string
-	network   *net.IPNet
-	size      uint32
-	available *treemap.Map // int IP is the key, string IP is the value
-	mutex     sync.RWMutex
 	metrics   MetricsReporter
+	cidr      string
+	available *treemap.Map // int IP is the key, string IP is the value
+	network   *net.IPNet
+	mutex     sync.RWMutex
+	size      uint32
 }
 
 type MetricsReporter interface {

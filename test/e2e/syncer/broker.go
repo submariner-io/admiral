@@ -153,13 +153,13 @@ func testWithFieldSelector() {
 }
 
 type testDriver struct {
-	framework              *framework.Framework
-	localSourceNamespace   string
-	transformLocalToBroker func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool)
+	clusterClients         []dynamic.Interface
 	brokerResourceType     runtime.Object
+	localSourceNamespace   string
 	labelSelector          string
 	fieldSelector          string
-	clusterClients         []dynamic.Interface
+	framework              *framework.Framework
+	transformLocalToBroker func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool)
 	stopCh                 chan struct{}
 }
 

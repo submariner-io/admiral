@@ -27,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("EnsureValidName", func() {
@@ -86,9 +85,9 @@ var _ = Describe("TrimManagedFields", func() {
 					Manager:    "kubectl",
 					Operation:  metav1.ManagedFieldsOperationApply,
 					APIVersion: "v1",
-					Time:       ptr.To(metav1.Now()),
+					Time:       &metav1.Time{},
 					FieldsType: "FieldsV1",
-					FieldsV1:   ptr.To(metav1.FieldsV1{}),
+					FieldsV1:   &metav1.FieldsV1{},
 				},
 			}
 

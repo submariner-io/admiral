@@ -29,8 +29,8 @@ type createOperation *unstructured.Unstructured
 type deleteOperation *unstructured.Unstructured
 
 type operationQueueMap struct {
-	mutex  sync.Mutex
 	queues map[string][]any
+	mutex  sync.Mutex
 }
 
 func (m *operationQueueMap) peek(key string) any {

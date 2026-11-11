@@ -28,8 +28,8 @@ import (
 )
 
 type WatchReactor struct {
-	mutex            sync.Mutex
 	watches          map[string]*watchDelegator
+	mutex            sync.Mutex
 	filteringReactor filteringWatchReactor
 }
 

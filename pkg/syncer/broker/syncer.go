@@ -43,6 +43,9 @@ import (
 )
 
 type ResourceConfig struct {
+	// Metrics if specified, configures optional Prometheus metrics for federation, transform, and queue operations.
+	Metrics syncer.MetricsConfig
+
 	// SourceNamespace the namespace in the local source from which to retrieve the local resources to sync.
 	LocalSourceNamespace string
 
@@ -54,6 +57,15 @@ type ResourceConfig struct {
 
 	// LocalResourceType the type of the local resources to sync to the broker.
 	LocalResourceType runtime.Object
+
+	// LocalFederator used to perform the syncing of resources locally from the broker.
+	LocalFederator federate.Federator
+
+	// BrokerResourceType the type of the broker resources to sync to the local source.
+	BrokerResourceType runtime.Object
+
+	// BrokerFederator used to perform the syncing of local resources to the broker.
+	BrokerFederator federate.Federator
 
 	// TransformLocalToBroker function used to transform a local resource to the equivalent broker resource.
 	TransformLocalToBroker syncer.TransformFunc
@@ -68,22 +80,6 @@ type ResourceConfig struct {
 	// LocalShouldProcess function invoked to determine if a local resource should be processed.
 	LocalShouldProcess syncer.ShouldProcessFunc
 
-	// LocalFederator used to perform the syncing of resources locally from the broker.
-	LocalFederator federate.Federator
-
-	// LocalWaitForCacheSync if true, waits for the local informer cache to sync on Start. Default is true.
-	LocalWaitForCacheSync *bool
-
-	// LocalResyncPeriod if non-zero, the period at which local resources will be re-synced regardless if anything changed.
-	// Default is 0.
-	LocalResyncPeriod time.Duration
-
-	// LocalWorkQueueConfig if specified, configures the underlying work queue for processing local resources.
-	LocalWorkQueueConfig *workqueue.Config
-
-	// BrokerResourceType the type of the broker resources to sync to the local source.
-	BrokerResourceType runtime.Object
-
 	// TransformBrokerToLocal function used to transform a broker resource to the equivalent local resource.
 	TransformBrokerToLocal syncer.TransformFunc
 
@@ -97,32 +93,47 @@ type ResourceConfig struct {
 	// BrokerShouldProcess function invoked to determine if a broker resource should be processed.
 	BrokerShouldProcess syncer.ShouldProcessFunc
 
-	// BrokerFederator used to perform the syncing of local resources to the broker.
-	BrokerFederator federate.Federator
+	// LocalWorkQueueConfig if specified, configures the underlying work queue for processing local resources.
+	LocalWorkQueueConfig *workqueue.Config
 
-	// BrokerWaitForCacheSync if true, waits for the broker informer cache to sync on Start. Default is false.
-	BrokerWaitForCacheSync *bool
-
-	// BrokerResyncPeriod if non-zero, the period at which broker resources will be re-synced regardless if anything changed.
-	// Default is 0.
-	BrokerResyncPeriod time.Duration
+	// LocalWaitForCacheSync if true, waits for the local informer cache to sync on Start. Default is true.
+	LocalWaitForCacheSync *bool
 
 	// BrokerWorkQueueConfig if specified, configures the underlying work queue for processing broker resources.
 	BrokerWorkQueueConfig *workqueue.Config
 
-	// Metrics if specified, configures optional Prometheus metrics for federation, transform, and queue operations.
-	Metrics syncer.MetricsConfig
+	// BrokerWaitForCacheSync if true, waits for the broker informer cache to sync on Start. Default is false.
+	BrokerWaitForCacheSync *bool
+
+	// LocalResyncPeriod if non-zero, the period at which local resources will be re-synced regardless if anything changed.
+	// Default is 0.
+	LocalResyncPeriod time.Duration
+
+	// BrokerResyncPeriod if non-zero, the period at which broker resources will be re-synced regardless if anything changed.
+	// Default is 0.
+	BrokerResyncPeriod time.Duration
 }
 
 type SyncerConfig struct {
-	Name string
-
-	// LocalRestConfig the REST config used to access the local resources to sync.
-	LocalRestConfig *rest.Config
+	// ResourceConfigs the configurations for resources to sync
+	ResourceConfigs []ResourceConfig
 
 	// LocalClient the client used to access local resources to sync. This is optional and is provided for unit testing
 	// in lieu of the LocalRestConfig. If not specified, one is created from the LocalRestConfig.
 	LocalClient dynamic.Interface
+
+	// RestMapper used to obtain GroupVersionResources. This is optional and is provided for unit testing. If not specified,
+	// one is created from the LocalRestConfig.
+	RestMapper meta.RESTMapper
+
+	// BrokerClient the client used to access local resources to sync. This is optional and is provided for unit testing
+	// in lieu of the BrokerRestConfig. If not specified, one is created from the BrokerRestConfig.
+	BrokerClient dynamic.Interface
+
+	// NamespaceInformer if specified, used to retry local resources that initially failed due to missing namespace.
+	NamespaceInformer cache.SharedInformer
+
+	Name string
 
 	// LocalNamespace the namespace in the local source to which resources from the broker will be synced.
 	LocalNamespace string
@@ -132,30 +143,19 @@ type SyncerConfig struct {
 	// specify an empty LocalClusterID to disable this loop protection.
 	LocalClusterID string
 
-	// RestMapper used to obtain GroupVersionResources. This is optional and is provided for unit testing. If not specified,
-	// one is created from the LocalRestConfig.
-	RestMapper meta.RESTMapper
+	// BrokerNamespace the namespace in the broker to which resources from the local source will be synced. If not
+	// specified, the namespace is obtained from an environment variable.
+	BrokerNamespace string
+
+	// LocalRestConfig the REST config used to access the local resources to sync.
+	LocalRestConfig *rest.Config
 
 	// BrokerRestConfig the REST config used to access the broker resources to sync. If not specified and the BrokerClient
 	// is not specified, the config is built from environment variables.
 	BrokerRestConfig *rest.Config
 
-	// BrokerClient the client used to access local resources to sync. This is optional and is provided for unit testing
-	// in lieu of the BrokerRestConfig. If not specified, one is created from the BrokerRestConfig.
-	BrokerClient dynamic.Interface
-
-	// BrokerNamespace the namespace in the broker to which resources from the local source will be synced. If not
-	// specified, the namespace is obtained from an environment variable.
-	BrokerNamespace string
-
-	// ResourceConfigs the configurations for resources to sync
-	ResourceConfigs []ResourceConfig
-
 	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
 	Scheme *runtime.Scheme
-
-	// NamespaceInformer if specified, used to retry local resources that initially failed due to missing namespace.
-	NamespaceInformer cache.SharedInformer
 
 	// MaxLogVerbosity configures the maximum verbosity for debug logging. Default is 0 which disables debug logging.
 	MaxLogVerbosity int
@@ -163,12 +163,12 @@ type SyncerConfig struct {
 
 type Syncer struct {
 	syncers         []syncer.Interface
-	localSyncers    map[reflect.Type]syncer.Interface
 	localFederator  federate.Federator
 	remoteFederator federate.Federator
 	brokerNamespace string
 	brokerClient    dynamic.Interface
 	localClient     dynamic.Interface
+	localSyncers    map[reflect.Type]syncer.Interface
 }
 
 var logger = log.Logger{Logger: logf.Log.WithName("BrokerSyncer")}

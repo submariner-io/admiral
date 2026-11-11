@@ -45,7 +45,7 @@ func (a *Adapter) Error(err error, message string, args ...any) error {
 		return ""
 	}
 
-	a.Basic.Failure(capitalizeFirst(err.Error()))
+	a.Basic.Failure("%s", capitalizeFirst(err.Error()))
 	a.Basic.End()
 
 	return err
