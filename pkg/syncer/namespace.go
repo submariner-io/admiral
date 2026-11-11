@@ -38,20 +38,25 @@ func (r *resourceSyncer) handleMissingNamespace(key, namespace string) {
 		return
 	}
 
+	r.missingNamespacesMutex.Lock()
+	defer r.missingNamespacesMutex.Unlock()
+
 	r.recordNamespaceSeen(namespace)
 	r.missingNamespaces[namespace].Insert(key)
 }
 
 func (r *resourceSyncer) handleNamespaceAdded(namespace string) {
+	r.missingNamespacesMutex.Lock()
 	keys, ok := r.missingNamespaces[namespace]
+	delete(r.missingNamespaces, namespace)
+	r.missingNamespacesMutex.Unlock()
+
 	if !ok || keys.Len() == 0 {
 		return
 	}
 
 	r.log.V(log.DEBUG).Infof("Syncer %q: namespace %q created - re-queueing %d resources",
 		r.config.Name, namespace, keys.Len())
-
-	delete(r.missingNamespaces, namespace)
 
 	for _, k := range keys.UnsortedList() {
 		ns, name, _ := cache.SplitMetaNamespaceKey(k)
@@ -60,10 +65,7 @@ func (r *resourceSyncer) handleNamespaceAdded(namespace string) {
 }
 
 func (r *resourceSyncer) handleNamespaceDeleted(namespace string) {
-	keys, ok := r.missingNamespaces[namespace]
-	if !ok {
-		keys = set.New[string]()
-	}
+	keys := set.New[string]()
 
 	for _, key := range r.store.ListKeys() {
 		obj, exists, _ := r.store.GetByKey(key)
@@ -80,6 +82,12 @@ func (r *resourceSyncer) handleNamespaceDeleted(namespace string) {
 			keys.Insert(key)
 		}
 	}
+
+	// Don't hold the lock while transforming above as the Transform function may take a while.
+	r.missingNamespacesMutex.Lock()
+	defer r.missingNamespacesMutex.Unlock()
+
+	keys = keys.Union(r.missingNamespaces[namespace])
 
 	if keys.Len() > 0 {
 		r.missingNamespaces[namespace] = keys
