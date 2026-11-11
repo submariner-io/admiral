@@ -60,62 +60,26 @@ type EventHandlerFuncs struct {
 }
 
 type ResourceConfig struct {
-	// ResourceType the types of the resources to watch.
-	ResourceType runtime.Object
-
-	// Handler that is notified of create, update, and delete events.
-	Handler EventHandler
-
-	// Name of this watcher used for logging.
-	Name string
-
-	// SourceNamespace the namespace of the resources to watch.
-	SourceNamespace string
-
-	// SourceLabelSelector optional selector to restrict the resources to watch by their labels.
-	SourceLabelSelector string
-
-	// SourceFieldSelector optional selector to restrict the resources to watch by their fields.
-	SourceFieldSelector string
-
-	// ResourcesEquivalent function to compare two resources for equivalence. This is invoked on an update notification
-	// to compare the old and new resources. If true is returned, the update is ignored, otherwise the update is processed.
-	// By default all updates are processed.
+	ResourceType        runtime.Object
+	Handler             EventHandler
 	ResourcesEquivalent syncer.ResourceEquivalenceFunc
-
-	// ShouldProcess function invoked to determine if a resource should be processed.
-	ShouldProcess syncer.ShouldProcessFunc
-
-	// WorkQueueConfig if specified, configures the underlying work queue
-	WorkQueueConfig *workqueue.Config
-
-	// MaxLogVerbosity configures the maximum verbosity for debug logging. Default is 0 which disables debug logging.
-	MaxLogVerbosity int
+	ShouldProcess       syncer.ShouldProcessFunc
+	WorkQueueConfig     *workqueue.Config
+	Name                string
+	SourceNamespace     string
+	SourceLabelSelector string
+	SourceFieldSelector string
+	MaxLogVerbosity     int
 }
 
 type Config struct {
-	// ResourceConfigs the configurations for the resources to watch.
-	ResourceConfigs []ResourceConfig
-
-	// RestMapper used to obtain GroupVersionResources. This is optional and is provided for unit testing in lieu of the
-	// RestConfig. If not specified, one is created from the RestConfig.
-	RestMapper meta.RESTMapper
-
-	// Client used to access the resources to watch. This is optional and is provided for unit testing in lieu
-	// of the RestConfig. If not specified, one is created from the RestConfig.
-	Client dynamic.Interface
-
-	// RestConfig the REST config used to access the resources to watch.
-	RestConfig *rest.Config
-
-	// WaitForCacheSync if true, waits for the informer cache to sync on Start. Default is true.
+	RestMapper       meta.RESTMapper
+	Client           dynamic.Interface
+	RestConfig       *rest.Config
 	WaitForCacheSync *bool
-
-	// Scheme used to convert resource objects. By default the global k8s Scheme is used.
-	Scheme *runtime.Scheme
-
-	// ResyncPeriod if non-zero, the period at which resources will be re-synced regardless if anything changed. Default is 0.
-	ResyncPeriod time.Duration
+	Scheme           *runtime.Scheme
+	ResourceConfigs  []ResourceConfig
+	ResyncPeriod     time.Duration
 }
 
 type resourceWatcher struct {

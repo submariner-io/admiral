@@ -76,15 +76,15 @@ func TestSyncer(t *testing.T) {
 }
 
 type testDriver struct {
-	config             syncer.ResourceSyncerConfig
-	initialResources   []runtime.Object
-	savedErrorHandlers []utilruntime.ErrorHandler
 	syncer             syncer.Interface
 	sourceClient       dynamic.ResourceInterface
 	federator          *fake.Federator
 	stopCh             chan struct{}
 	resource           *corev1.Pod
 	handledError       chan error
+	initialResources   []runtime.Object
+	savedErrorHandlers []utilruntime.ErrorHandler
+	config             syncer.ResourceSyncerConfig
 	useSharedInformer  bool
 }
 
