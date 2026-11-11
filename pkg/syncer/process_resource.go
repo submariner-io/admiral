@@ -123,9 +123,7 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 		if err != nil || r.onSuccessfulSync(resource, transformed, op) {
 			namespace := resourceUtil.ExtractMissingNamespaceFromErr(err)
 			if namespace != "" {
-				r.handleMissingNamespace(key, namespace)
-
-				return false, nil
+				return r.handleMissingNamespace(key, namespace), nil
 			}
 
 			return true, errors.Wrapf(err, "error distributing resource %q", key)
