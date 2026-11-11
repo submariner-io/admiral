@@ -19,6 +19,7 @@ limitations under the License.
 package syncer
 
 import (
+	"sync"
 	"time"
 
 	"github.com/submariner-io/admiral/pkg/federate"
@@ -180,16 +181,19 @@ type ResourceSyncerConfig struct {
 }
 
 type resourceSyncer struct {
-	workQueue         workqueue.Interface
-	cachesSynced      []cache.InformerSynced
-	unregHandler      func()
-	informer          cache.Controller
-	store             cache.Store
-	config            ResourceSyncerConfig
-	operationQueues   *operationQueueMap
-	stopped           chan struct{}
-	metrics           *syncerMetrics
-	stopCh            <-chan struct{}
-	log               log.Logger
-	missingNamespaces map[string]set.Set[string]
+	workQueue       workqueue.Interface
+	cachesSynced    []cache.InformerSynced
+	unregHandler    func()
+	informer        cache.Controller
+	store           cache.Store
+	config          ResourceSyncerConfig
+	operationQueues *operationQueueMap
+	stopped         chan struct{}
+	metrics         *syncerMetrics
+	stopCh          <-chan struct{}
+	log             log.Logger
+	// missingNamespaces is accessed by the work queue workers, which may run concurrently, so it's guarded by
+	// missingNamespacesMutex.
+	missingNamespacesMutex sync.Mutex
+	missingNamespaces      map[string]set.Set[string]
 }

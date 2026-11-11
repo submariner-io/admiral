@@ -20,6 +20,7 @@ package syncer_test
 
 import (
 	"context"
+	"strconv"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -28,6 +29,7 @@ import (
 	resourceutils "github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	"github.com/submariner-io/admiral/pkg/syncer/test"
+	"github.com/submariner-io/admiral/pkg/workqueue"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -108,6 +110,40 @@ func testWithMissingNamespace() {
 		It("should not retry", func(ctx context.Context) {
 			test.CreateResource(ctx, t.sourceClient, t.resource)
 			t.federator.VerifyNoDistribute()
+		})
+	})
+
+	Context("with multiple workers", func() {
+		const numResources = 50
+
+		BeforeEach(func() {
+			wqc := workqueue.DefaultConfig()
+			wqc.NumWorkers = 5
+			wqc.ItemRateLimiterBaseDelay = 0
+			t.config.WorkQueueConfig = &wqc
+		})
+
+		It("should eventually distribute all the resources when the namespace is created", func(ctx context.Context) {
+			for i := range numResources {
+				pod := t.resource.DeepCopy()
+				pod.Name = t.resource.Name + "-" + strconv.Itoa(i)
+				test.CreateResource(ctx, t.sourceClient, pod)
+			}
+
+			t.federator.VerifyNoDistribute()
+
+			By("Creating namespace")
+
+			createNamespace(ctx, transformedNamespace)
+
+			targetClient := t.config.SourceClient.Resource(*test.GetGroupVersionResourceFor(t.config.RestMapper, t.resource)).
+				Namespace(transformedNamespace)
+
+			Eventually(func(g Gomega) {
+				list, err := targetClient.List(ctx, metav1.ListOptions{})
+				g.Expect(err).To(Succeed())
+				g.Expect(list.Items).To(HaveLen(numResources))
+			}, 5).Should(Succeed())
 		})
 	})
 
