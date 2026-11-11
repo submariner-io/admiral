@@ -21,6 +21,7 @@ package http_test
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -180,6 +181,26 @@ var _ = Describe("HTTP Trace Metrics", func() {
 		})
 	})
 
+	Context("with another client built from a copy of the REST config", func() {
+		It("should not affect the existing client's transport", func() {
+			otherConfig := rest.CopyConfig(restConfig)
+			otherConfig.Transport = roundTripperFunc(func(_ *http.Request) (*http.Response, error) {
+				return nil, errors.New("other transport used")
+			})
+
+			otherClient, err := rest.HTTPClientFor(otherConfig)
+			Expect(err).NotTo(HaveOccurred())
+
+			doHttpGet(httpServer.URL)
+
+			_, err = otherClient.Get(httpServer.URL + "/test")
+			Expect(err).To(MatchError(ContainSubstring("other transport used")))
+
+			metrics := collectMetrics(compName)
+			Expect(findMetric(metrics, admiralhttp.FirstResponseByteDurationSecondsMetric)).To(Equal(1))
+		})
+	})
+
 	Context("with metrics disabled", func() {
 		BeforeEach(func() {
 			global.Init(&corev1.ConfigMap{
@@ -196,6 +217,12 @@ var _ = Describe("HTTP Trace Metrics", func() {
 		})
 	})
 })
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func collectMetrics(compName string) map[string][]*model.Metric {
 	metricFamilies, err := prometheus.DefaultGatherer.Gather()
