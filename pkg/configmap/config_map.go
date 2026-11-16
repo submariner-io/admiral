@@ -29,6 +29,7 @@ import (
 	"github.com/submariner-io/admiral/pkg/resource"
 	"github.com/submariner-io/admiral/pkg/syncer"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -61,13 +62,14 @@ func Get(ctx context.Context, client resource.Interface[*corev1.ConfigMap], name
 	return nil, errors.Wrapf(err, "error retrieving ConfigMap %q", name)
 }
 
+// WatchAndSignalOnChange watches the ConfigMaps with the given names in the given namespace and sends the given signal
+// to the current process when one of them is created or deleted or when its data is changed.
 func WatchAndSignalOnChange(ctx context.Context, k8sClient kubernetes.Interface, namespace string, signal syscall.Signal,
 	configMapNames ...string,
 ) {
 	cmClient := k8sClient.CoreV1().ConfigMaps(namespace)
 
-	process := func(obj any, op syncer.Operation) {
-		name := resource.MustToMeta(obj).GetName()
+	process := func(name string, op syncer.Operation) {
 		if !slices.Contains(configMapNames, name) {
 			return
 		}
@@ -95,14 +97,32 @@ func WatchAndSignalOnChange(ctx context.Context, k8sClient kubernetes.Interface,
 		Handler: cache.ResourceEventHandlerDetailedFuncs{
 			AddFunc: func(obj any, isInInitialList bool) {
 				if !isInInitialList {
-					process(obj, syncer.Create)
+					process(resource.MustToMeta(obj).GetName(), syncer.Create)
 				}
 			},
-			UpdateFunc: func(_, newObj any) {
-				process(newObj, syncer.Update)
+			UpdateFunc: func(oldObj, newObj any) {
+				oldCM := oldObj.(*corev1.ConfigMap)
+				newCM := newObj.(*corev1.ConfigMap)
+
+				// The informer also notifies updates for unchanged ConfigMaps when it re-lists, eg after its watch
+				// expires, so only signal if the data was actually changed.
+				if equality.Semantic.DeepEqual(oldCM.Data, newCM.Data) &&
+					equality.Semantic.DeepEqual(oldCM.BinaryData, newCM.BinaryData) {
+					return
+				}
+
+				process(newCM.Name, syncer.Update)
 			},
 			DeleteFunc: func(obj any) {
-				process(obj, syncer.Delete)
+				// If the deletion was missed while the watch was down, the informer notifies it on re-list with a
+				// DeletedFinalStateUnknown tombstone.
+				objName, err := cache.DeletionHandlingObjectToName(obj)
+				if err != nil {
+					logger.Error(err, "Error obtaining the name of the deleted ConfigMap")
+					return
+				}
+
+				process(objName.Name, syncer.Delete)
 			},
 		},
 		Transform: resource.TrimManagedFields,

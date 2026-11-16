@@ -22,6 +22,8 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"slices"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -33,8 +35,11 @@ import (
 	"github.com/submariner-io/admiral/pkg/syncer/test"
 	assert "github.com/submariner-io/admiral/pkg/test"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/testing"
 )
 
 var _ = Describe("", func() {
@@ -153,6 +158,22 @@ func testWatchAndSignalOnChange() {
 		})
 	})
 
+	When("only the metadata of an existing target ConfigMap is updated", func() {
+		BeforeEach(func(ctx context.Context) {
+			configMap = createConfigMap(ctx, configMap2, map[string]string{"key": "value"})
+		})
+
+		It("should not send a signal", func(ctx context.Context) {
+			Consistently(signalCh).Within(time.Millisecond * 500).ShouldNot(Receive())
+
+			configMap.Labels = map[string]string{"app": "test"}
+			_, err := k8sClient.CoreV1().ConfigMaps(test.LocalNamespace).Update(ctx, configMap, metav1.UpdateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+
+			Consistently(signalCh).ShouldNot(Receive())
+		})
+	})
+
 	When("an existing target ConfigMap is deleted", func() {
 		BeforeEach(func(ctx context.Context) {
 			configMap = createConfigMap(ctx, configMap1, map[string]string{"foo": "initial"})
@@ -172,6 +193,83 @@ func testWatchAndSignalOnChange() {
 			createConfigMap(ctx, "other", nil)
 
 			Consistently(signalCh).ShouldNot(Receive())
+		})
+	})
+
+	When("the watch expires and the informer re-lists", func() {
+		var initialWatch *watch.RaceFreeFakeWatcher
+
+		BeforeEach(func(ctx context.Context) {
+			configMap = createConfigMap(ctx, configMap1, map[string]string{"key": "value"})
+			createConfigMap(ctx, "other", nil)
+
+			// Serve the informer's initial watch from a fake watcher so changes made via the client after it starts aren't
+			// seen until the informer re-lists. Subsequent watches are handled by the default reactor.
+			initialWatch = watch.NewRaceFreeFake()
+
+			var initialWatchServed atomic.Bool
+
+			k8sClient.PrependWatchReactor("configmaps", func(_ testing.Action) (bool, watch.Interface, error) {
+				if initialWatchServed.CompareAndSwap(false, true) {
+					return true, initialWatch, nil
+				}
+
+				return false, nil, nil
+			})
+		})
+
+		JustBeforeEach(func() {
+			Consistently(signalCh).Within(time.Millisecond * 500).ShouldNot(Receive())
+		})
+
+		expireWatch := func() {
+			initialWatch.Error(&apierrors.NewResourceExpired("watch expired").ErrStatus)
+
+			Eventually(func() int {
+				return len(slices.DeleteFunc(k8sClient.Actions(), func(a testing.Action) bool {
+					return a.GetVerb() != "watch" || a.GetResource().Resource != "configmaps"
+				}))
+			}).Within(time.Second*5).Should(BeNumerically(">=", 2), "The informer did not re-establish its watch")
+		}
+
+		Context("and the target ConfigMaps weren't changed", func() {
+			It("should not send a signal", func() {
+				expireWatch()
+
+				Consistently(signalCh).ShouldNot(Receive())
+			})
+		})
+
+		Context("and the data of a target ConfigMap was changed in the meantime", func() {
+			It("should send a signal", func(ctx context.Context) {
+				configMap.Data["key"] = "changed"
+				_, err := k8sClient.CoreV1().ConfigMaps(test.LocalNamespace).Update(ctx, configMap, metav1.UpdateOptions{})
+				Expect(err).ToNot(HaveOccurred())
+
+				expireWatch()
+
+				Eventually(signalCh).Should(Receive(Equal(signalNum)))
+			})
+		})
+
+		Context("and a target ConfigMap was deleted in the meantime", func() {
+			It("should send a signal", func(ctx context.Context) {
+				Expect(k8sClient.CoreV1().ConfigMaps(test.LocalNamespace).Delete(ctx, configMap1, metav1.DeleteOptions{})).To(Succeed())
+
+				expireWatch()
+
+				Eventually(signalCh).Should(Receive(Equal(signalNum)))
+			})
+		})
+
+		Context("and a non-target ConfigMap was deleted in the meantime", func() {
+			It("should not send a signal", func(ctx context.Context) {
+				Expect(k8sClient.CoreV1().ConfigMaps(test.LocalNamespace).Delete(ctx, "other", metav1.DeleteOptions{})).To(Succeed())
+
+				expireWatch()
+
+				Consistently(signalCh).ShouldNot(Receive())
+			})
 		})
 	})
 }
