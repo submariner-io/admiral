@@ -83,7 +83,7 @@ func testOnSuccessfulSyncFunction() {
 		When("a resource is successfully created in the datastore", func() {
 			BeforeEach(func() {
 				t.expResource = test.NewPodWithImage(t.config.SourceNamespace, "transformed")
-				t.config.Transform = func(_ runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+				t.config.Transform = func(_ context.Context, _ runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 					return t.expResource, false
 				}
 			})
@@ -174,8 +174,11 @@ func newOnSuccessfulSyncFuncTestDriver() *onSuccessfulSyncFuncTestDriver {
 
 		t.onSuccessfulSyncReturn.Store(false)
 
-		t.config.OnSuccessfulSync = func(synced runtime.Object, op syncer.Operation) bool {
+		t.config.OnSuccessfulSync = func(ctx context.Context, synced runtime.Object, op syncer.Operation) bool {
 			defer GinkgoRecover()
+
+			Expect(ctx).NotTo(BeNil())
+			Expect(ctx.Err()).NotTo(HaveOccurred())
 
 			pod, ok := synced.(*corev1.Pod)
 

@@ -71,7 +71,7 @@ func testWithTransformLocalToBroker() {
 
 	BeforeEach(func() {
 		t.brokerResourceType = &testV1.ExportedToaster{}
-		t.transformLocalToBroker = func(from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+		t.transformLocalToBroker = func(_ context.Context, from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 			toaster, ok := from.(*testV1.Toaster)
 			Expect(ok).To(BeTrue())
 
@@ -155,7 +155,7 @@ func testWithFieldSelector() {
 type testDriver struct {
 	framework              *framework.Framework
 	localSourceNamespace   string
-	transformLocalToBroker func(from runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool)
+	transformLocalToBroker syncer.TransformFunc
 	brokerResourceType     runtime.Object
 	labelSelector          string
 	fieldSelector          string

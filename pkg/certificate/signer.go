@@ -136,7 +136,7 @@ func (s *signerImpl) Start(ctx context.Context, namespace string) error {
 		ShouldProcess: func(obj *unstructured.Unstructured, op syncer.Operation) bool {
 			return op != syncer.Delete && obj.GetLabels()[SigningRequestLabelKey] != "" && obj.GetAnnotations()[RequestSignedLabelKey] == ""
 		},
-		Transform: func(from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+		Transform: func(_ context.Context, from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 			secret := from.(*corev1.Secret)
 
 			err := s.signSecret(wait.ContextForChannel(stopCh), secret)

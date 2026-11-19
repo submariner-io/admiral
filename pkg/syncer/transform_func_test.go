@@ -156,7 +156,7 @@ func testTransformFunction() {
 
 	When("the transform function returns nil with no re-queue", func() {
 		BeforeEach(func() {
-			t.config.Transform = func(_ runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
+			t.config.Transform = func(_ context.Context, _ runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 				t.invocationCount.Add(1)
 				t.expOperation <- op
 
@@ -197,7 +197,7 @@ func testTransformFunction() {
 		BeforeEach(func() {
 			returnNil.Store(true)
 
-			t.config.Transform = func(_ runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
+			t.config.Transform = func(_ context.Context, _ runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 				t.expOperation <- op
 
 				if returnNil.Load() {
@@ -260,9 +260,12 @@ func newTransformFunctionTestDriver() *transformFuncTestDriver {
 			},
 		}
 
-		t.config.Transform = func(from runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
+		t.config.Transform = func(ctx context.Context, from runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 			defer GinkgoRecover()
 			t.invocationCount.Add(1)
+
+			Expect(ctx).NotTo(BeNil())
+			Expect(ctx.Err()).NotTo(HaveOccurred())
 
 			pod, ok := from.(*corev1.Pod)
 			Expect(ok).To(BeTrue(), "Expected a Pod object: %#v", from)

@@ -19,6 +19,7 @@ limitations under the License.
 package syncer
 
 import (
+	"context"
 	"reflect"
 	"time"
 
@@ -111,7 +112,7 @@ func (r *resourceSyncer) onDelete(obj any) {
 	r.metrics.observeQueueLength(r.config.Name, r.workQueue.Len())
 }
 
-func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op Operation) bool {
+func (r *resourceSyncer) onSuccessfulSync(ctx context.Context, resource, converted runtime.Object, op Operation) bool {
 	if r.config.OnSuccessfulSync == nil {
 		return false
 	}
@@ -122,10 +123,10 @@ func (r *resourceSyncer) onSuccessfulSync(resource, converted runtime.Object, op
 
 	r.log.V(log.TRACE).Infof("Syncer %q: invoking OnSuccessfulSync function with: %#v", r.config.Name, converted)
 
-	return r.config.OnSuccessfulSync(converted, op)
+	return r.config.OnSuccessfulSync(ctx, converted, op)
 }
 
-func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
+func (r *resourceSyncer) transform(ctx context.Context, from *unstructured.Unstructured, key string,
 	op Operation,
 ) (*unstructured.Unstructured, runtime.Object, bool) {
 	if r.config.Transform == nil {
@@ -138,7 +139,7 @@ func (r *resourceSyncer) transform(from *unstructured.Unstructured, key string,
 
 	transformStart := time.Now()
 
-	transformed, requeue := r.config.Transform(converted, r.workQueue.NumRequeues(key), op)
+	transformed, requeue := r.config.Transform(ctx, converted, r.workQueue.NumRequeues(key), op)
 
 	r.metrics.observeTransformDurationMs(r.config.Direction, op, r.config.Name, time.Since(transformStart))
 

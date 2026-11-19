@@ -207,6 +207,10 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 
 	r.stopCh = stopCh
 
+	// This context is passed to the work queue processing functions, i.e. the Transform and OnSuccessfulSync callbacks and
+	// the Federator operations. It's cancelled if the work queue does not drain in time on shutdown.
+	processCtx, cancelProcessing := context.WithCancel(context.Background())
+
 	go func() {
 		defer func() {
 			r.metrics.unregister()
@@ -217,7 +221,7 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 
 			r.log.V(log.DEBUG).Infof("Syncer %q stopped", r.config.Name)
 		}()
-		defer r.shutDownWorkQueue()
+		defer r.shutDownWorkQueue(cancelProcessing)
 
 		if r.informer != nil {
 			r.informer.Run(stopCh)
@@ -232,14 +236,18 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 		_ = cache.WaitForCacheSync(stopCh, r.cachesSynced...)
 	}
 
-	r.workQueue.Run(r.processNextWorkItem)
+	r.workQueue.Run(func(key, name, namespace string) (bool, error) {
+		return r.processNextWorkItem(processCtx, key, name, namespace)
+	})
 
 	r.log.V(log.DEBUG).Infof("Syncer %q started", r.config.Name)
 
 	return nil
 }
 
-func (r *resourceSyncer) shutDownWorkQueue() {
+func (r *resourceSyncer) shutDownWorkQueue(cancelProcessing context.CancelFunc) {
+	defer cancelProcessing()
+
 	shutDownWithDrain := func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), r.config.DrainWorkQueueTimeout)
 		defer cancel()
@@ -254,6 +262,9 @@ func (r *resourceSyncer) shutDownWorkQueue() {
 		}
 
 		r.log.Warning(err.Error())
+
+		// Cancel the processing context so in-flight operations that honor it don't block the drain indefinitely.
+		cancelProcessing()
 	}
 
 	close(r.stopped)
