@@ -19,6 +19,8 @@ limitations under the License.
 package syncer_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/syncer"
@@ -90,7 +92,7 @@ func newEventOrderingTestDriver() *eventOrderingTestDriver {
 	BeforeEach(func() {
 		t.opChan = make(chan syncer.Operation, 20)
 
-		t.config.Transform = func(from runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
+		t.config.Transform = func(_ context.Context, from runtime.Object, _ int, op syncer.Operation) (runtime.Object, bool) {
 			t.opChan <- op
 			return from, false
 		}

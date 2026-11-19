@@ -21,6 +21,7 @@ limitations under the License.
 package watcher
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"time"
@@ -159,7 +160,7 @@ func New(config *Config) (Interface, error) {
 			RestMapper:          restMapper,
 			Federator:           federate.NewNoopFederator(),
 			ResourceType:        rc.ResourceType,
-			Transform: func(obj runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
+			Transform: func(_ context.Context, obj runtime.Object, numRequeues int, op syncer.Operation) (runtime.Object, bool) {
 				switch op {
 				case syncer.Create:
 					return nil, handler.OnCreate(obj, numRequeues)

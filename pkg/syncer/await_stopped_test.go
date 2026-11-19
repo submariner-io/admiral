@@ -65,6 +65,103 @@ func testAwaitStopped() {
 		Expect(t.syncer.AwaitStopped(timeoutContext)).To(Succeed())
 		Expect(t.syncer.AwaitStopped(timeoutContext)).To(Succeed())
 	})
+
+	When("the Federator is blocked on the processing context", func() {
+		var federator *contextBlockingFederator
+
+		BeforeEach(func() {
+			federator = &contextBlockingFederator{distributeStarted: make(chan any, 1)}
+			t.config.Federator = federator
+		})
+
+		It("should cancel the context if the work queue is delayed stopping", func(ctx SpecContext) {
+			defer func() {
+				t.stopCh = nil
+			}()
+
+			test.CreateResource(ctx, t.sourceClient, t.resource)
+			Eventually(federator.distributeStarted).Should(Receive())
+
+			close(t.stopCh)
+
+			timeoutContext, cancel := context.WithTimeout(ctx, time.Second)
+			defer cancel()
+
+			Expect(t.syncer.AwaitStopped(timeoutContext)).To(Succeed())
+		})
+	})
+
+	When("the Transform function is blocked on the processing context", func() {
+		var (
+			transformStarted  chan any
+			transformContinue chan any
+			transformErr      chan error
+		)
+
+		BeforeEach(func() {
+			transformStarted = make(chan any, 1)
+			transformContinue = make(chan any)
+			transformErr = make(chan error, 1)
+
+			t.config.Federator = t.federator
+
+			t.config.Transform = func(ctx context.Context, from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+				transformStarted <- true
+
+				select {
+				case <-ctx.Done():
+				case <-transformContinue:
+				}
+
+				transformErr <- ctx.Err()
+
+				return from, false
+			}
+		})
+
+		It("should cancel the context if the work queue is delayed stopping", func(ctx SpecContext) {
+			defer func() {
+				t.stopCh = nil
+			}()
+
+			test.CreateResource(ctx, t.sourceClient, t.resource)
+			Eventually(transformStarted).Should(Receive())
+			Consistently(transformErr).ShouldNot(Receive())
+
+			close(t.stopCh)
+
+			timeoutContext, cancel := context.WithTimeout(ctx, time.Second)
+			defer cancel()
+
+			Expect(t.syncer.AwaitStopped(timeoutContext)).To(Succeed())
+			Expect(transformErr).To(Receive(MatchError(context.Canceled)))
+		})
+
+		Context("and the work queue drains in time", func() {
+			BeforeEach(func() {
+				t.config.DrainWorkQueueTimeout = time.Second * 5
+			})
+
+			It("should not cancel the context", func(ctx SpecContext) {
+				defer func() {
+					t.stopCh = nil
+				}()
+
+				test.CreateResource(ctx, t.sourceClient, t.resource)
+				Eventually(transformStarted).Should(Receive())
+
+				close(t.stopCh)
+				close(transformContinue)
+
+				Eventually(transformErr).Should(Receive(Succeed()))
+
+				timeoutContext, cancel := context.WithTimeout(ctx, time.Second)
+				defer cancel()
+
+				Expect(t.syncer.AwaitStopped(timeoutContext)).To(Succeed())
+			})
+		})
+	})
 }
 
 type blockingFederator struct {
@@ -83,5 +180,24 @@ func (f *blockingFederator) Distribute(_ context.Context, _ runtime.Object) erro
 }
 
 func (f *blockingFederator) Delete(_ context.Context, _ runtime.Object) error {
+	return nil
+}
+
+type contextBlockingFederator struct {
+	distributeStarted chan any
+}
+
+func (f *contextBlockingFederator) Distribute(ctx context.Context, _ runtime.Object) error {
+	select {
+	case f.distributeStarted <- true:
+	default:
+	}
+
+	<-ctx.Done()
+
+	return ctx.Err()
+}
+
+func (f *contextBlockingFederator) Delete(_ context.Context, _ runtime.Object) error {
 	return nil
 }
