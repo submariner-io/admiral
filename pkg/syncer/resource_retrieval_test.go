@@ -19,6 +19,7 @@ limitations under the License.
 package syncer_test
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -79,7 +80,7 @@ func testClusterScopedResource() {
 		transformed.Spec.Unschedulable = true
 
 		t.config.ResourceType = &corev1.Node{}
-		t.config.Transform = func(_ runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+		t.config.Transform = func(_ context.Context, _ runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 			return transformed, false
 		}
 

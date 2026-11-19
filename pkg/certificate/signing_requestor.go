@@ -128,7 +128,7 @@ func StartSigningRequestorWithOpts(ctx context.Context, syncerConfig broker.Sync
 				return op == syncer.Delete || obj.GetAnnotations()[RequestSignedLabelKey] == ""
 			},
 			LocalFederator: localFederator,
-			TransformLocalToBroker: func(from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+			TransformLocalToBroker: func(_ context.Context, from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 				// We don't sync the private data key to the broker for security.
 				delete(from.(*corev1.Secret).Data, PrivateKeyDataKey)
 				return from, false

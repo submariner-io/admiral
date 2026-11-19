@@ -32,7 +32,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error) {
+func (r *resourceSyncer) processNextWorkItem(ctx context.Context, key, name, ns string) (bool, error) {
 	r.metrics.recordDequeue(r.config.Name, key)
 
 	resourceOp := r.operationQueues.peek(key)
@@ -40,7 +40,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 	if ns == namespaceKey {
 		switch resourceOp.(type) {
 		case deleteOperation:
-			r.handleNamespaceDeleted(name)
+			r.handleNamespaceDeleted(ctx, name)
 		case createOperation:
 			r.handleNamespaceAdded(name)
 		}
@@ -59,11 +59,11 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 
 	switch t := resourceOp.(type) {
 	case deleteOperation:
-		requeue, err = r.handleDeleted(key, t)
+		requeue, err = r.handleDeleted(ctx, key, t)
 	case createOperation:
-		requeue, err = r.handleCreatedOrUpdated(key, t)
+		requeue, err = r.handleCreatedOrUpdated(ctx, key, t)
 	default:
-		requeue, err = r.handleCreatedOrUpdated(key, nil)
+		requeue, err = r.handleCreatedOrUpdated(ctx, key, nil)
 	}
 
 	// If not re-queueing the current operation then remove it from the operation queue. If there's another operation queued
@@ -76,7 +76,7 @@ func (r *resourceSyncer) processNextWorkItem(key, name, ns string) (bool, error)
 	return requeue, err
 }
 
-func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructured.Unstructured) (bool, error) {
+func (r *resourceSyncer) handleCreatedOrUpdated(ctx context.Context, key string, created *unstructured.Unstructured) (bool, error) {
 	resource := created
 
 	op := Update
@@ -104,7 +104,7 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 		return false, nil
 	}
 
-	resource, transformed, requeue := r.transform(resource, key, op)
+	resource, transformed, requeue := r.transform(ctx, resource, key, op)
 	if resource != nil {
 		if r.config.SourceNamespace == metav1.NamespaceAll && resource.GetNamespace() != "" {
 			resource = resource.DeepCopy()
@@ -116,11 +116,11 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 
 		federateStart := time.Now()
 
-		err = r.config.Federator.Distribute(context.Background(), resource)
+		err = r.config.Federator.Distribute(ctx, resource)
 
 		r.metrics.observeFederationDurationMs(r.config.Direction, op, r.config.Name, time.Since(federateStart))
 
-		if err != nil || r.onSuccessfulSync(resource, transformed, op) {
+		if err != nil || r.onSuccessfulSync(ctx, resource, transformed, op) {
 			namespace := resourceUtil.ExtractMissingNamespaceFromErr(err)
 			if namespace != "" {
 				return r.handleMissingNamespace(key, namespace), nil
@@ -142,14 +142,14 @@ func (r *resourceSyncer) handleCreatedOrUpdated(key string, created *unstructure
 	return requeue, nil
 }
 
-func (r *resourceSyncer) handleDeleted(key string, deletedResource *unstructured.Unstructured) (bool, error) {
+func (r *resourceSyncer) handleDeleted(ctx context.Context, key string, deletedResource *unstructured.Unstructured) (bool, error) {
 	r.log.V(log.DEBUG).Infof("Syncer %q informed of deleted resource %q", r.config.Name, key)
 
 	if !r.shouldSync(deletedResource) {
 		return false, nil
 	}
 
-	resource, transformed, requeue := r.transform(deletedResource, key, Delete)
+	resource, transformed, requeue := r.transform(ctx, deletedResource, key, Delete)
 	if resource != nil {
 		r.log.V(log.DEBUG).Infof("Syncer %q deleting resource %q", r.config.Name, resource.GetName())
 
@@ -157,7 +157,7 @@ func (r *resourceSyncer) handleDeleted(key string, deletedResource *unstructured
 
 		federateStart := time.Now()
 
-		err := r.config.Federator.Delete(context.Background(), resource)
+		err := r.config.Federator.Delete(ctx, resource)
 
 		r.metrics.observeFederationDurationMs(r.config.Direction, Delete, r.config.Name, time.Since(federateStart))
 
@@ -168,7 +168,7 @@ func (r *resourceSyncer) handleDeleted(key string, deletedResource *unstructured
 			err = nil
 		}
 
-		if err != nil || r.onSuccessfulSync(resource, transformed, Delete) {
+		if err != nil || r.onSuccessfulSync(ctx, resource, transformed, Delete) {
 			return true, errors.Wrapf(err, "error deleting resource %q", key)
 		}
 

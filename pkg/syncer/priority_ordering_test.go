@@ -103,7 +103,7 @@ func testPriorityOrdering() {
 				return true
 			}
 
-			d.config.Transform = func(from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+			d.config.Transform = func(_ context.Context, from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 				defer GinkgoRecover()
 
 				if firstTransform.CompareAndSwap(true, false) {
@@ -182,7 +182,7 @@ func testPriorityOrdering() {
 				return true
 			}
 
-			d.config.Transform = func(from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+			d.config.Transform = func(_ context.Context, from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 				defer GinkgoRecover()
 
 				if firstTransform.CompareAndSwap(true, false) {
