@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/submariner-io/admiral/pkg/certificate"
+	"github.com/submariner-io/admiral/pkg/fake"
 	"github.com/submariner-io/admiral/pkg/resource"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
@@ -36,6 +37,10 @@ var _ = Describe("Integration", func() {
 	tS := newSignerTestDriver()
 
 	BeforeEach(func() {
+		// The fake client doesn't apply label selectors to watches, so the requestor's broker syncer would otherwise see
+		// the unlabeled CA Secret and delete it.
+		fake.AddFilteringWatchReactor(&tSR.brokerDynClient.Fake)
+
 		tS.dynClient = tSR.brokerDynClient
 
 		resource.NewDynamicClient = func(_ *rest.Config) (dynamic.Interface, error) {
