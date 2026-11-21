@@ -151,6 +151,7 @@ func testAwaitStopped() {
 				Eventually(transformStarted).Should(Receive())
 
 				close(t.stopCh)
+				Consistently(transformErr, 300*time.Millisecond).ShouldNot(Receive())
 				close(transformContinue)
 
 				Eventually(transformErr).Should(Receive(Succeed()))
@@ -160,6 +161,38 @@ func testAwaitStopped() {
 
 				Expect(t.syncer.AwaitStopped(timeoutContext)).To(Succeed())
 			})
+		})
+	})
+
+	When("items are still queued after the work queue drain times out", func() {
+		var federator *slowFirstFederator
+
+		BeforeEach(func() {
+			federator = &slowFirstFederator{distributeStarted: make(chan any, 1), errs: make(chan error, 10)}
+			t.config.Federator = federator
+		})
+
+		It("should process them with a context that isn't cancelled", func(ctx SpecContext) {
+			defer func() {
+				t.stopCh = nil
+			}()
+
+			test.CreateResource(ctx, t.sourceClient, t.resource)
+			Eventually(federator.distributeStarted).Should(Receive())
+
+			queued := t.resource.DeepCopy()
+			queued.Name = "queued"
+			test.CreateResource(ctx, t.sourceClient, queued)
+			Consistently(federator.errs).ShouldNot(Receive())
+
+			close(t.stopCh)
+
+			timeoutContext, cancel := context.WithTimeout(ctx, time.Second)
+			defer cancel()
+
+			Expect(t.syncer.AwaitStopped(timeoutContext)).To(Succeed())
+			Expect(federator.errs).To(Receive(MatchError(context.Canceled)))
+			Expect(federator.errs).To(Receive(Succeed()))
 		})
 	})
 }
@@ -199,5 +232,29 @@ func (f *contextBlockingFederator) Distribute(ctx context.Context, _ runtime.Obj
 }
 
 func (f *contextBlockingFederator) Delete(_ context.Context, _ runtime.Object) error {
+	return nil
+}
+
+// slowFirstFederator blocks the first Distribute call past the drain timeout, ignoring its context, and reports the
+// context error of each call.
+type slowFirstFederator struct {
+	distributeStarted chan any
+	errs              chan error
+	once              sync.Once
+}
+
+func (f *slowFirstFederator) Distribute(ctx context.Context, _ runtime.Object) error {
+	f.once.Do(func() {
+		f.distributeStarted <- true
+
+		time.Sleep(300 * time.Millisecond)
+	})
+
+	f.errs <- ctx.Err()
+
+	return nil
+}
+
+func (f *slowFirstFederator) Delete(_ context.Context, _ runtime.Object) error {
 	return nil
 }

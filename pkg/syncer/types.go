@@ -94,9 +94,9 @@ func (o Operation) String() string {
 
 // TransformFunc is invoked prior to syncing to transform the resource or evaluate if it should be synced.
 // If nil is returned, the resource is not synced and, if the second return value is true, the resource is re-queued
-// to be retried later. The given context is cancelled if the syncer is stopped and in-flight work queue items do
-// not complete within the DrainWorkQueueTimeout. Long-running or blocking operations should honor it so they don't
-// block the work queue indefinitely.
+// to be retried later. The given context is cancelled for the work queue items in flight if the syncer is stopped and
+// they do not complete within the DrainWorkQueueTimeout, and once the syncer has stopped. Long-running or blocking
+// operations should honor it so they don't block the work queue indefinitely.
 type TransformFunc func(ctx context.Context, from runtime.Object, numRequeues int, op Operation) (runtime.Object, bool)
 
 // OnSuccessfulSyncFunc is invoked after a successful sync operation. The given context has the same semantics as
@@ -177,8 +177,8 @@ type ResourceSyncerConfig struct {
 	ResyncPeriod time.Duration
 
 	// DrainWorkQueueTimeout configures the maximum amount of time to wait for the work queue to drain on shutdown.
-	// If exceeded, the context passed to the Transform and OnSuccessfulSync functions and the Federator operations is
-	// cancelled. Default is 5 seconds.
+	// If exceeded, the context passed to the Transform and OnSuccessfulSync functions and the Federator operations in
+	// flight is cancelled. Default is 5 seconds.
 	DrainWorkQueueTimeout time.Duration
 
 	// MaxLogVerbosity configures the maximum verbosity for debug logging. Default is 0 which disables debug logging.
