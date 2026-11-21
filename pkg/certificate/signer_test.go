@@ -96,6 +96,19 @@ func (t *signerTestDriver) testStart() {
 		})
 	})
 
+	When("a CSR Secret can't be signed", func() {
+		It("should not mark it signed", func(ctx SpecContext) {
+			secret := newCSR()
+			secret.Data[certificate.CSRDataKey] = []byte("invalid")
+			test.CreateResource(ctx, t.secretClient(), secret)
+
+			Consistently(ctx, func(g Gomega, ctx context.Context) {
+				s := resource.MustFromUnstructured(test.AwaitResource(ctx, t.secretClient(), secret.Name), &corev1.Secret{})
+				g.Expect(s.Annotations).NotTo(HaveKey(certificate.RequestSignedLabelKey))
+			}).To(Succeed())
+		})
+	})
+
 	Context("with multiple namespaces", func() {
 		const namespace2 = "broker2"
 

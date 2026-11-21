@@ -139,12 +139,12 @@ func (s *signerImpl) Start(ctx context.Context, namespace string) error {
 		Transform: func(from runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 			secret := from.(*corev1.Secret)
 
-			err := s.signSecret(wait.ContextForChannel(stopCh), secret)
-			if err != nil {
+			if err := s.signSecret(wait.ContextForChannel(stopCh), secret); err != nil {
 				logger.Errorf(err, "error signing Secret %q", secret.Name)
+				return nil, true
 			}
 
-			return secret, err != nil
+			return secret, false
 		},
 		Federator: federate.NewUpdateFederator(s.DynClient, s.RestMapper, namespace,
 			func(oldObj *unstructured.Unstructured, newObj *unstructured.Unstructured) *unstructured.Unstructured {
