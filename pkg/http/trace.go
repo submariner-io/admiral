@@ -186,8 +186,12 @@ func AddTraceMetrics(restConfig *rest.Config, compName string) {
 	prometheus.MustRegister(rt.k8sHTTPProtocol)
 
 	restConfig.Wrap(func(wrapped nethttp.RoundTripper) nethttp.RoundTripper {
-		rt.wrapped = wrapped
-		return rt
+		// This is invoked for each transport built from the config (and copies of it) so return a separate
+		// round tripper, sharing the metrics, for each one.
+		wrapper := *rt
+		wrapper.wrapped = wrapped
+
+		return &wrapper
 	})
 
 	logger.Info("HTTP connection tracing and metrics enabled")
