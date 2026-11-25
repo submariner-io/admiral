@@ -235,8 +235,8 @@ func (f *contextBlockingFederator) Delete(_ context.Context, _ runtime.Object) e
 	return nil
 }
 
-// slowFirstFederator blocks the first Distribute call past the drain timeout, ignoring its context, and reports the
-// context error of each call.
+// slowFirstFederator blocks the first Distribute call until its context is cancelled and reports the context error of
+// each call.
 type slowFirstFederator struct {
 	distributeStarted chan any
 	errs              chan error
@@ -247,7 +247,7 @@ func (f *slowFirstFederator) Distribute(ctx context.Context, _ runtime.Object) e
 	f.once.Do(func() {
 		f.distributeStarted <- true
 
-		time.Sleep(300 * time.Millisecond)
+		<-ctx.Done()
 	})
 
 	f.errs <- ctx.Err()
