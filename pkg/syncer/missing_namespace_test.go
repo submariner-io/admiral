@@ -61,7 +61,7 @@ func testWithMissingNamespace() {
 	}
 
 	BeforeEach(func() {
-		t.config.Transform = func(obj runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+		t.config.Transform = func(_ context.Context, obj runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 			if resourceutils.MustToMeta(obj).GetName() == noTransform {
 				return nil, false
 			} else if resourceutils.MustToMeta(obj).GetNamespace() == test.LocalNamespace {

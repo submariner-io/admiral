@@ -21,6 +21,7 @@ package syncer
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -207,6 +208,10 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 
 	r.stopCh = stopCh
 
+	// This context is passed to the work queue processing functions, i.e. the Transform and OnSuccessfulSync callbacks and
+	// the Federator operations. It's cancelled for the items in flight if the work queue does not drain in time on shutdown.
+	processCtx := newProcessingContext()
+
 	go func() {
 		defer func() {
 			r.metrics.unregister()
@@ -217,7 +222,7 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 
 			r.log.V(log.DEBUG).Infof("Syncer %q stopped", r.config.Name)
 		}()
-		defer r.shutDownWorkQueue()
+		defer r.shutDownWorkQueue(processCtx)
 
 		if r.informer != nil {
 			r.informer.Run(stopCh)
@@ -232,14 +237,55 @@ func (r *resourceSyncer) Start(stopCh <-chan struct{}) error {
 		_ = cache.WaitForCacheSync(stopCh, r.cachesSynced...)
 	}
 
-	r.workQueue.Run(r.processNextWorkItem)
+	r.workQueue.Run(func(key, name, namespace string) (bool, error) {
+		return r.processNextWorkItem(processCtx.get(), key, name, namespace)
+	})
 
 	r.log.V(log.DEBUG).Infof("Syncer %q started", r.config.Name)
 
 	return nil
 }
 
-func (r *resourceSyncer) shutDownWorkQueue() {
+// processingContext holds the context passed to the work queue processing functions. renew cancels the current
+// context, so the items in flight see the cancellation, and gives the items processed after them a new one.
+type processingContext struct {
+	ctx    context.Context //nolint:containedctx // Shared by the work queue processing functions.
+	cancel context.CancelFunc
+	mutex  sync.Mutex
+}
+
+func newProcessingContext() *processingContext {
+	p := &processingContext{}
+	p.ctx, p.cancel = context.WithCancel(context.Background())
+
+	return p
+}
+
+func (p *processingContext) get() context.Context {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	return p.ctx
+}
+
+func (p *processingContext) renew() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	p.cancel()
+	p.ctx, p.cancel = context.WithCancel(context.Background())
+}
+
+func (p *processingContext) stop() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	p.cancel()
+}
+
+func (r *resourceSyncer) shutDownWorkQueue(processCtx *processingContext) {
+	defer processCtx.stop()
+
 	shutDownWithDrain := func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), r.config.DrainWorkQueueTimeout)
 		defer cancel()
@@ -254,6 +300,10 @@ func (r *resourceSyncer) shutDownWorkQueue() {
 		}
 
 		r.log.Warning(err.Error())
+
+		// Cancel the processing context for the items in flight so operations that honor it don't block the drain
+		// indefinitely. Items still queued get a new context.
+		processCtx.renew()
 	}
 
 	close(r.stopped)

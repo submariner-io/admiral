@@ -19,6 +19,8 @@ limitations under the License.
 package syncer
 
 import (
+	"context"
+
 	"github.com/submariner-io/admiral/pkg/log"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/set"
@@ -81,7 +83,7 @@ func (r *resourceSyncer) handleNamespaceAdded(namespace string) {
 	}
 }
 
-func (r *resourceSyncer) handleNamespaceDeleted(namespace string) {
+func (r *resourceSyncer) handleNamespaceDeleted(ctx context.Context, namespace string) {
 	keys := set.New[string]()
 
 	for _, key := range r.store.ListKeys() {
@@ -90,7 +92,7 @@ func (r *resourceSyncer) handleNamespaceDeleted(namespace string) {
 			continue
 		}
 
-		resource, _, _ := r.transform(r.assertUnstructured(obj), key, Create)
+		resource, _, _ := r.transform(ctx, r.assertUnstructured(obj), key, Create)
 		if resource == nil {
 			continue
 		}

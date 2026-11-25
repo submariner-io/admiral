@@ -265,7 +265,7 @@ func testRequeueResource() {
 	BeforeEach(func() {
 		transformed = test.NewPodWithImage(d.config.SourceNamespace, "transformed")
 
-		d.config.Transform = func(_ runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
+		d.config.Transform = func(_ context.Context, _ runtime.Object, _ int, _ syncer.Operation) (runtime.Object, bool) {
 			return transformed, false
 		}
 	})
